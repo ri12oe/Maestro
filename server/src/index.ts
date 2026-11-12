@@ -1,0 +1,45 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import teamsRouter from './routes/teams.js';
+import membersRouter from './routes/members.js';
+import contributionsRouter from './routes/contributions.js';
+import tasksRouter from './routes/tasks.js';
+import risksRouter from './routes/risks.js';
+import suggestionsRouter from './routes/suggestions.js';
+import manualRouter from './routes/manual.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = process.env.PORT ?? 3001;
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+// API routes
+app.use('/api/teams', teamsRouter);
+app.use('/api/teams/:teamId/members', membersRouter);
+app.use('/api/teams/:teamId/contributions', contributionsRouter);
+app.use('/api/teams/:teamId/tasks', tasksRouter);
+app.use('/api/teams/:teamId/risks', risksRouter);
+app.use('/api/teams/:teamId/suggestions', suggestionsRouter);
+app.use('/api/teams/:teamId/manual', manualRouter);
+
+// Serve built client in production
+const clientDist = path.join(__dirname, '..', '..', '..', 'client', 'dist');
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+
+export { app };

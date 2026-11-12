@@ -1,0 +1,164 @@
+/**
+ * sync.ts — orchestrates a full GitHub sync for a team.
+ *
+ * 1. Fetch all commits + Issues from GitHub.
+ * 2. Upsert members for unknown contributors.
+ * 3. Persist contributions (skipping already-stored SHAs).
+ * 4. Persist tasks (upsert by github_issue_number).
+ */
+
+import db from '../db/client.js';
+import { fetchCommits, fetchIssues, authorKey } from './github.js';
+
+export interface SyncResult {
+  newContributions: number;
+  updatedTasks: number;
+  newMembers: number;
+}
+
+export async function syncTeam(teamId: number): Promise<SyncResult> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) throw new Error('GITHUB_TOKEN env var is required for sync');
+
+  const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId) as
+    | { id: number; repo_owner: string; repo_name: string }
+    | undefined;
+
+  if (!team) throw new Error(`Team ${teamId} not found`);
+
+  const { repo_owner: owner, repo_name: repo } = team;
+
+  // ── 1. Fetch from GitHub ─────────────────────────────────────────────────
+  const [commits, issues] = await Promise.all([
+    fetchCommits(owner, repo, token),
+    fetchIssues(owner, repo, token),
+  ]);
+
+  let newContributions = 0;
+  let newMembers = 0;
+
+  // ── 2. Upsert members and persist contributions ───────────────────────────
+  const insertMember = db.prepare(`
+    INSERT INTO members (team_id, github_login, email, display_name)
+    VALUES (@team_id, @github_login, @email, @display_name)
+    ON CONFLICT DO NOTHING
+  `);
+
+  const getMemberByLogin = db.prepare(
+    'SELECT id FROM members WHERE team_id = ? AND github_login = ?',
+  );
+
+  const getMemberByEmail = db.prepare(
+    'SELECT id FROM members WHERE team_id = ? AND email = ?',
+  );
+
+  const insertContribution = db.prepare(`
+    INSERT INTO contributions
+      (team_id, member_id, source, github_sha, github_pr_number, title,
+       diff_summary, url, authored_at)
+    VALUES
+      (@team_id, @member_id, 'commit', @github_sha, @github_pr_number, @title,
+       @diff_summary, @url, @authored_at)
+    ON CONFLICT (github_sha) DO NOTHING
+  `);
+
+  const syncTx = db.transaction(() => {
+    for (const commit of commits) {
+      const { author } = commit;
+      const key = authorKey(author);
+
+      // Find or create member
+      let member = author.login
+        ? (getMemberByLogin.get(teamId, author.login) as { id: number } | undefined)
+        : null;
+
+      if (!member && author.email) {
+        member = getMemberByEmail.get(teamId, author.email) as { id: number } | undefined;
+      }
+
+      if (!member) {
+        const info = insertMember.run({
+          team_id: teamId,
+          github_login: author.login ?? null,
+          email: author.email || null,
+          display_name: author.name || key,
+        });
+
+        if (info.changes > 0) {
+          newMembers++;
+          // Fetch the newly inserted member's id
+          member = (author.login
+            ? getMemberByLogin.get(teamId, author.login)
+            : getMemberByEmail.get(teamId, author.email)) as { id: number };
+        } else {
+          // Rare: concurrent insert; try both lookups again
+          member = (author.login
+            ? getMemberByLogin.get(teamId, author.login)
+            : getMemberByEmail.get(teamId, author.email)) as { id: number } | undefined;
+        }
+      }
+
+      if (!member) {
+        // Last resort: unknown contributor with no login or email — still record with a placeholder
+        const info = insertMember.run({
+          team_id: teamId,
+          github_login: null,
+          email: null,
+          display_name: 'Unknown Contributor',
+        });
+        const newId = info.lastInsertRowid as number;
+        if (info.changes > 0) newMembers++;
+        member = { id: newId };
+      }
+
+      const result = insertContribution.run({
+        team_id: teamId,
+        member_id: member.id,
+        github_sha: commit.sha,
+        github_pr_number: commit.prNumber ?? null,
+        title: commit.title,
+        diff_summary: commit.diffSummary || null,
+        url: commit.url,
+        authored_at: commit.author.date,
+      });
+
+      if (result.changes > 0) newContributions++;
+    }
+  });
+
+  syncTx();
+
+  // ── 3. Upsert tasks from Issues ──────────────────────────────────────────
+  const upsertTask = db.prepare(`
+    INSERT INTO tasks
+      (team_id, github_issue_number, title, body, assignee_login, status, due_date, synced_at)
+    VALUES
+      (@team_id, @github_issue_number, @title, @body, @assignee_login, @status, @due_date,
+       strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    ON CONFLICT (team_id, github_issue_number) DO UPDATE SET
+      title          = excluded.title,
+      body           = excluded.body,
+      assignee_login = excluded.assignee_login,
+      status         = excluded.status,
+      due_date       = excluded.due_date,
+      synced_at      = excluded.synced_at
+  `);
+
+  const taskTx = db.transaction(() => {
+    for (const issue of issues) {
+      upsertTask.run({
+        team_id: teamId,
+        github_issue_number: issue.number,
+        title: issue.title,
+        body: issue.body ?? null,
+        assignee_login: issue.assigneeLogin ?? null,
+        status: issue.state,
+        due_date: issue.dueDate ?? null,
+      });
+    }
+  });
+
+  taskTx();
+
+  return { newContributions, updatedTasks: issues.length, newMembers };
+}

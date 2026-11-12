@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import Database from 'better-sqlite3';
-import { runMigration } from '../db/migrate.ts';
+import { runMigration } from '../db/migrate.js';
 
 const EXPECTED_TABLES = [
   'teams',

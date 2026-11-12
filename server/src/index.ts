@@ -30,7 +30,10 @@ app.use('/api/teams/:teamId/suggestions', suggestionsRouter);
 app.use('/api/teams/:teamId/manual', manualRouter);
 
 // Serve built client in production
-const clientDist = path.join(__dirname, '..', '..', '..', 'client', 'dist');
+// Works from both src/ (dev/tsx) and dist/ (compiled):
+// src/ → server/src/../../client/dist = <repo>/client/dist
+// dist/ → server/dist/../../client/dist = <repo>/client/dist
+const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(clientDist));
   app.get('*', (_req, res) => {

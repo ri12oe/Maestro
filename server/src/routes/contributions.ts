@@ -1,10 +1,12 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
+
+type TeamParams = { teamId: string };
 
 const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/contributions?memberId=&source=&taskId=
-router.get('/', (req, res) => {
+router.get('/', (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
   const { memberId, source, taskId } = req.query as Record<string, string | undefined>;
 
@@ -29,7 +31,7 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/teams/:teamId/contributions/:contributionId
-router.get('/:contributionId', (req, res) => {
+router.get('/:contributionId', (req: Request<TeamParams & { contributionId: string }>, res: Response) => {
   const row = db.prepare(`
     SELECT c.*, cl.work_type, cl.substance, cl.summary, cl.disputed, cl.dispute_note,
            tm.task_id, tm.similarity_score
@@ -44,7 +46,7 @@ router.get('/:contributionId', (req, res) => {
 });
 
 // POST /api/teams/:teamId/contributions/:contributionId/dispute
-router.post('/:contributionId/dispute', (req, res) => {
+router.post('/:contributionId/dispute', (req: Request<TeamParams & { contributionId: string }>, res: Response) => {
   const { note } = req.body as { note?: string };
   const result = db.prepare(`
     UPDATE classifications

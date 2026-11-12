@@ -1,10 +1,12 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
+
+type TeamParams = { teamId: string };
 
 const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/suggestions
-router.get('/', (req, res) => {
+router.get('/', (req: Request<TeamParams>, res: Response) => {
   const suggestions = db.prepare(`
     SELECT * FROM suggestions
     WHERE team_id = ? AND status = 'pending'
@@ -14,7 +16,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/teams/:teamId/suggestions/:suggestionId/respond
-router.post('/:suggestionId/respond', (req, res) => {
+router.post('/:suggestionId/respond', (req: Request<TeamParams & { suggestionId: string }>, res: Response) => {
   const { status } = req.body as { status?: string };
   const allowed = ['accepted', 'dismissed', 'discuss'];
 

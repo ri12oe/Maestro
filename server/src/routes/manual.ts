@@ -1,10 +1,14 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
+
+type TeamParams = { teamId: string };
+
+const VALID_KINDS = ['design', 'research', 'meeting', 'coordination', 'other'] as const;
 
 const router = Router({ mergeParams: true });
 
 // POST /api/teams/:teamId/manual
-router.post('/', (req, res) => {
+router.post('/', (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
   const { member_id, title, body, kind, link, task_id } = req.body as Record<string, unknown>;
 
@@ -16,10 +20,21 @@ router.post('/', (req, res) => {
     res.status(400).json({ error: 'title is required' });
     return;
   }
+  if (kind !== undefined && kind !== null && !VALID_KINDS.includes(kind as typeof VALID_KINDS[number])) {
+    res.status(400).json({ error: `kind must be one of: ${VALID_KINDS.join(', ')}` });
+    return;
+  }
 
   const member = db.prepare('SELECT id FROM members WHERE id = ? AND team_id = ?')
     .get(Number(member_id), teamId);
   if (!member) { res.status(404).json({ error: 'Member not found' }); return; }
+
+  // Validate task_id belongs to this team if provided
+  if (task_id !== undefined && task_id !== null) {
+    const task = db.prepare('SELECT id FROM tasks WHERE id = ? AND team_id = ?')
+      .get(Number(task_id), teamId);
+    if (!task) { res.status(404).json({ error: 'Task not found in this team' }); return; }
+  }
 
   const result = db.prepare(`
     INSERT INTO contributions
@@ -29,7 +44,7 @@ router.post('/', (req, res) => {
   `).run(teamId, Number(member_id), title.trim(), body ?? null, kind ?? null, link ?? null);
 
   // Optionally record task association via task_matches (manual — no embedding)
-  if (task_id) {
+  if (task_id !== undefined && task_id !== null) {
     db.prepare(`
       INSERT INTO task_matches (contribution_id, task_id, similarity_score)
       VALUES (?, ?, 1.0)
@@ -44,7 +59,7 @@ router.post('/', (req, res) => {
 });
 
 // GET /api/teams/:teamId/manual
-router.get('/', (req, res) => {
+router.get('/', (req: Request<TeamParams>, res: Response) => {
   const entries = db.prepare(`
     SELECT c.*, m.github_login, m.display_name
     FROM contributions c

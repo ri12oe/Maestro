@@ -1,10 +1,12 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
+
+type TeamParams = { teamId: string };
 
 const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/risks
-router.get('/', (req, res) => {
+router.get('/', (req: Request<TeamParams>, res: Response) => {
   const risks = db.prepare(`
     SELECT * FROM risks
     WHERE team_id = ? AND dismissed = 0
@@ -14,7 +16,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/teams/:teamId/risks/:riskId/dismiss
-router.post('/:riskId/dismiss', (req, res) => {
+router.post('/:riskId/dismiss', (req: Request<TeamParams & { riskId: string }>, res: Response) => {
   const result = db.prepare(
     'UPDATE risks SET dismissed = 1 WHERE id = ? AND team_id = ?',
   ).run(Number(req.params.riskId), Number(req.params.teamId));

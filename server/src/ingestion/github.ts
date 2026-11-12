@@ -101,7 +101,7 @@ async function fetchCommitDetail(
 
 /**
  * Fetch all commits for a repo, paginated.
- * Skips merge commits.
+ * Skips merge commits and any SHAs already present in knownShas.
  * Never throws on commits with no GitHub login.
  */
 export async function fetchCommits(
@@ -109,6 +109,7 @@ export async function fetchCommits(
   repo: string,
   token: string,
   fetchFn: FetchFn = globalThis.fetch,
+  knownShas: ReadonlySet<string> = new Set(),
 ): Promise<GitHubCommitSummary[]> {
   const results: GitHubCommitSummary[] = [];
   let page = 1;
@@ -140,6 +141,7 @@ export async function fetchCommits(
       const parentCount = c.parents?.length ?? 1;
 
       if (isMergeCommit(message, parentCount)) continue;
+      if (knownShas.has(c.sha)) continue;  // already stored — skip detail fetch
 
       const detail = await fetchCommitDetail(owner, repo, c.sha, token, fetchFn);
 
@@ -155,7 +157,7 @@ export async function fetchCommits(
         title: message.split('\n')[0].trim(),
         url: c.html_url,
         isMerge: false,
-        prNumber: null,  // PR association is resolved separately in sync
+        prNumber: null,
         files: detail?.files ?? [],
         diffSummary: detail?.diffSummary ?? '',
       });

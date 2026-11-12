@@ -83,3 +83,60 @@ Required by the hackathon brief (docs/BRIEF.md §Constraints).
 - [x] TypeScript compiles in both workspaces
 - [x] Vitest tests for migration and GitHub mapping logic
 - [x] BOB_LOG.md entries for both sessions
+
+---
+
+## 2026-11-12 — Session 3: Milestone 1 Bug Fixes
+
+**Issues fixed:**
+
+1. **`github.test.ts` regex** — changed both `/page=(\d+)/` occurrences to `/[?&]page=(\d+)/` so `per_page=100` is not falsely matched.
+2. **`server/package.json`** — added `"type": "module"` for proper ESM resolution.
+3. **TS2339 `req.params.teamId`** — added explicit `Request<TeamParams>` typing to every handler in all five `mergeParams: true` routers (`members`, `contributions`, `tasks`, `risks`, `suggestions`, `manual`).
+4. **Test imports** — changed `.ts` extension imports to `.js` in `github.test.ts` and `migration.test.ts`.
+5. **Postbuild script** — added `postbuild` to `server/package.json` that copies `src/db/schema.sql` → `dist/db/schema.sql` using ESM-safe `node --input-type=module`.
+6. **Client dist path** — changed `path.join(__dirname, '..', '..', '..', 'client', 'dist')` to `path.join(__dirname, '..', '..', 'client', 'dist')` so it resolves correctly from both `src/` (tsx dev) and `dist/` (compiled).
+7. **Skip known SHAs** — `fetchCommits` now accepts a `knownShas: ReadonlySet<string>` parameter; `syncTeam` loads all stored SHAs first and passes them in, skipping the per-commit detail fetch for already-stored commits.
+8. **Single "Unknown Contributor"** — `syncTeam` now reuses one shared `Unknown Contributor` member per team (via `getUnknownMember` lookup before inserting) instead of inserting a new row each time.
+9. **`prNumber` comment** — removed the misleading `// PR association is resolved separately in sync` comment in `github.ts`; `prNumber` is simply `null`.
+10. **Manual route validation** — `kind` is now validated against `design|research|meeting|coordination|other`; `task_id` (when provided) is checked to belong to the team before the contribution is inserted.
+11. **Sync test** — added `src/tests/sync.test.ts`: two commits from the same email (one with a GitHub login, one without) produce exactly one member row.
+
+**`npm run build` output (server workspace):**
+
+```
+> server@1.0.0 build
+> tsc
+
+> server@1.0.0 postbuild
+> node --input-type=module -e "import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');"
+```
+
+**`npm run build` output (client workspace):**
+
+```
+> client@1.0.0 build
+> tsc && vite build
+
+vite v5.4.21 building for production...
+✓ 35 modules transformed.
+dist/index.html                  0.41 kB │ gzip:  0.28 kB
+dist/assets/index-BIh1ZDKW.css   0.54 kB │ gzip:  0.34 kB
+dist/assets/index-DZACdz-M.js  158.76 kB │ gzip: 51.72 kB
+✓ built in 887ms
+```
+
+**`npm test` output (server workspace — 20 tests, 3 files):**
+
+```
+ RUN  v2.1.9 C:/Users/maesp/FA26/Maestro/server
+
+ ✓ src/tests/github.test.ts (15 tests) 6ms
+ ✓ src/tests/sync.test.ts (1 test) 64ms
+ ✓ src/tests/migration.test.ts (4 tests) 86ms
+
+ Test Files  3 passed (3)
+       Tests  20 passed (20)
+    Start at  11:35:27
+    Duration  448ms (transform 108ms, setup 0ms, collect 163ms, tests 156ms, environment 0ms, prepare 195ms)
+```

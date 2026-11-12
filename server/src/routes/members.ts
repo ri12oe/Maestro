@@ -1,10 +1,12 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
+
+type TeamParams = { teamId: string };
 
 const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/members
-router.get('/', (req, res) => {
+router.get('/', (req: Request<TeamParams>, res: Response) => {
   const members = db
     .prepare('SELECT * FROM members WHERE team_id = ? ORDER BY added_at ASC')
     .all(Number(req.params.teamId));
@@ -12,7 +14,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/teams/:teamId/members — add a member by GitHub login
-router.post('/', (req, res) => {
+router.post('/', (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
   const { github_login, display_name } = req.body as Record<string, unknown>;
 
@@ -43,7 +45,7 @@ router.post('/', (req, res) => {
 });
 
 // DELETE /api/teams/:teamId/members/:memberId
-router.delete('/:memberId', (req, res) => {
+router.delete('/:memberId', (req: Request<TeamParams & { memberId: string }>, res: Response) => {
   const result = db
     .prepare('DELETE FROM members WHERE id = ? AND team_id = ?')
     .run(Number(req.params.memberId), Number(req.params.teamId));

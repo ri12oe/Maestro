@@ -28,9 +28,15 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
 
   const { repo_owner: owner, repo_name: repo } = team;
 
+  // ── Load SHAs already stored for this team ───────────────────────────────
+  const storedRows = db.prepare(
+    'SELECT github_sha FROM contributions WHERE team_id = ? AND github_sha IS NOT NULL',
+  ).all(teamId) as Array<{ github_sha: string }>;
+  const knownShas = new Set(storedRows.map(r => r.github_sha));
+
   // ── 1. Fetch from GitHub ─────────────────────────────────────────────────
   const [commits, issues] = await Promise.all([
-    fetchCommits(owner, repo, token),
+    fetchCommits(owner, repo, token, undefined, knownShas),
     fetchIssues(owner, repo, token),
   ]);
 
@@ -52,6 +58,10 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
     'SELECT id FROM members WHERE team_id = ? AND email = ?',
   );
 
+  const getUnknownMember = db.prepare(
+    "SELECT id FROM members WHERE team_id = ? AND github_login IS NULL AND email IS NULL AND display_name = 'Unknown Contributor'",
+  );
+
   const insertContribution = db.prepare(`
     INSERT INTO contributions
       (team_id, member_id, source, github_sha, github_pr_number, title,
@@ -65,9 +75,8 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   const syncTx = db.transaction(() => {
     for (const commit of commits) {
       const { author } = commit;
-      const key = authorKey(author);
 
-      // Find or create member
+      // Find or create member — prefer login lookup, then email lookup
       let member = author.login
         ? (getMemberByLogin.get(teamId, author.login) as { id: number } | undefined)
         : null;
@@ -77,45 +86,39 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
       }
 
       if (!member) {
-        const info = insertMember.run({
-          team_id: teamId,
-          github_login: author.login ?? null,
-          email: author.email || null,
-          display_name: author.name || key,
-        });
-
-        if (info.changes > 0) {
+        if (author.login || author.email) {
+          // New contributor with an identity — insert them
+          insertMember.run({
+            team_id: teamId,
+            github_login: author.login ?? null,
+            email: author.email || null,
+            display_name: author.name || authorKey(author),
+          });
           newMembers++;
-          // Fetch the newly inserted member's id
           member = (author.login
             ? getMemberByLogin.get(teamId, author.login)
             : getMemberByEmail.get(teamId, author.email)) as { id: number };
         } else {
-          // Rare: concurrent insert; try both lookups again
-          member = (author.login
-            ? getMemberByLogin.get(teamId, author.login)
-            : getMemberByEmail.get(teamId, author.email)) as { id: number } | undefined;
+          // No login or email — reuse the single shared "Unknown Contributor" for this team
+          member = getUnknownMember.get(teamId) as { id: number } | undefined;
+          if (!member) {
+            insertMember.run({
+              team_id: teamId,
+              github_login: null,
+              email: null,
+              display_name: 'Unknown Contributor',
+            });
+            newMembers++;
+            member = getUnknownMember.get(teamId) as { id: number };
+          }
         }
-      }
-
-      if (!member) {
-        // Last resort: unknown contributor with no login or email — still record with a placeholder
-        const info = insertMember.run({
-          team_id: teamId,
-          github_login: null,
-          email: null,
-          display_name: 'Unknown Contributor',
-        });
-        const newId = info.lastInsertRowid as number;
-        if (info.changes > 0) newMembers++;
-        member = { id: newId };
       }
 
       const result = insertContribution.run({
         team_id: teamId,
         member_id: member.id,
         github_sha: commit.sha,
-        github_pr_number: commit.prNumber ?? null,
+        github_pr_number: null,
         title: commit.title,
         diff_summary: commit.diffSummary || null,
         url: commit.url,

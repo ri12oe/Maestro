@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { authorKey, fetchCommits, fetchIssues, PATCH_LINE_LIMIT } from '../ingestion/github.ts';
+import { authorKey, fetchCommits, fetchIssues, PATCH_LINE_LIMIT } from '../ingestion/github.js';
 
 // ── authorKey ────────────────────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ function makeCombinedFetch(
       });
     }
     // List URL: has per_page= and page=N
-    const match = /page=(\d+)/.exec(url);
+    const match = /[?&]page=(\d+)/.exec(url);
     const pageIndex = match ? Number(match[1]) - 1 : 0;
     const data = listPages[pageIndex] ?? [];
     return mockResponse(data);
@@ -109,7 +109,7 @@ function makeCombinedFetch(
 /** Issue list mock — all requests return the given pages */
 function makeIssueFetch(pages: unknown[][]): (url: string) => Promise<Response> {
   return async (url: string) => {
-    const match = /page=(\d+)/.exec(url);
+    const match = /[?&]page=(\d+)/.exec(url);
     const pageIndex = match ? Number(match[1]) - 1 : 0;
     const data = pages[pageIndex] ?? [];
     return mockResponse(data);

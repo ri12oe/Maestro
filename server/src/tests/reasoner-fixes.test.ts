@@ -27,7 +27,7 @@ process.env.DB_PATH = dbPath;
 process.env.AI_PROVIDER = 'mock';
 
 const { runMigration } = await import('../db/migrate.js');
-const { runReasoner } = await import('../ai/reasoner.js');
+const { runReasoner, loginsToNames } = await import('../ai/reasoner.js');
 const { default: summaryRouter } = await import('../routes/summary.js');
 const { default: singletonDb } = await import('../db/client.js');
 const { zodToJsonSchema } = await import('../ai/provider.js');
@@ -307,5 +307,27 @@ describe('rule-based fallback when every AI swap is rejected', () => {
       SELECT m.github_login AS to_login FROM suggestions s JOIN members m ON m.id = s.to_member_id
       WHERE s.team_id = ? AND s.status = 'pending'`).all(t3) as Array<{ to_login: string }>;
     expect(rows.map(r => r.to_login)).toEqual(['hank']);
+  });
+});
+
+describe('names instead of logins in suggestion text', () => {
+  const profiles = [
+    { login: 'jordan-qa', displayName: 'Jordan Lee' },
+    { login: 'sam-builds', displayName: 'Sam Rivera' },
+    { login: 'sam', displayName: 'Sammy Other' },
+  ] as unknown as Parameters<typeof loginsToNames>[1];
+
+  it('replaces logins with first names', () => {
+    expect(loginsToNames('jordan-qa currently has 0 open tasks while sam-builds has 2', profiles))
+      .toBe('Jordan currently has 0 open tasks while Sam has 2');
+  });
+
+  it('handles @mentions and does not touch words that merely contain a login', () => {
+    expect(loginsToNames('@jordan-qa can help; sample-builds and sam-builds2 stay', profiles))
+      .toBe('Jordan can help; sample-builds and sam-builds2 stay');
+  });
+
+  it('replaces a longer login whole before a shorter one inside it', () => {
+    expect(loginsToNames('sam-builds and sam', profiles)).toBe('Sam and Sammy');
   });
 });

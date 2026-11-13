@@ -482,3 +482,12 @@ suggestions, with no way to tell why.
 | `server/src/tests/reasoner-fixes.test.ts` | Test: an AI that only proposes an unbalancing swap gets it rejected (and logged), and the rule-based swap to the member with no open tasks is stored. |
 
 `npm test`: 68 passed (68).
+
+## 2026-11-13 — Session 11: First names in suggestion text (written with Claude, not IBM Bob)
+
+| File | Change |
+|---|---|
+| `server/src/ai/reasoner.ts` | Prompt asks for first names (not logins) in rationale and check-in messages. Safety net: `loginsToNames()` replaces any login that still appears (including `@login`) with the member's first name before saving; longer logins are replaced first, and words that merely contain a login are left alone. |
+| `server/src/tests/reasoner-fixes.test.ts` | 3 tests for `loginsToNames()`. |
+
+`npm test`: 71 passed (71).

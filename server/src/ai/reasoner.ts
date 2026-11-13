@@ -514,6 +514,8 @@ Rules:
   has room for more work instead of claiming a skill match.
 - Never target "Unknown Contributor".
 - Never rank or compare people's total output.
+- In rationale and checkin_message, refer to people by first name (e.g. "Sam"), never by login.
+  Logins belong only in the from_login and to_login fields.
 - Keep the tone supportive and project-focused.
 
 Respond with a JSON object matching the schema exactly.`;
@@ -537,6 +539,21 @@ function suggestionExists(
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
+
+/**
+ * Replace any member login that slipped into human-facing text with that
+ * member's first name (e.g. "jordan-qa" → "Jordan"). Longest logins first so
+ * one login that contains another is replaced whole.
+ */
+export function loginsToNames(text: string, profiles: MemberProfile[]): string {
+  let out = text;
+  for (const p of [...profiles].sort((a, b) => b.login.length - a.login.length)) {
+    const first = p.displayName?.split(' ')[0] || p.login;
+    const escaped = p.login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`(?<![\\w-])@?${escaped}(?![\\w-])`, 'g'), first);
+  }
+  return out;
+}
 
 type SwapSuggestion = ReasonerResponse['suggestions'][number];
 
@@ -605,8 +622,8 @@ function insertSuggestions(
       fromId,
       toId,
       taskId,
-      JSON.stringify(sug.rationale),
-      sug.checkin_message,
+      JSON.stringify(sug.rationale.map(r => loginsToNames(r, profiles))),
+      loginsToNames(sug.checkin_message, profiles),
     );
     inserted++;
     openCount.set(sug.from_login, fromOpen - 1);

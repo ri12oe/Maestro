@@ -189,8 +189,84 @@ dist/assets/index-DZACdz-M.js  158.76 kB │ gzip: 51.72 kB
 > node --input-type=module -e "import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');"
 ```
 
-### Mock classifier accuracy (via `npm run eval` — not pasted here but representative)
+### Mock classifier accuracy (via `npm run eval`)
 
-The mock classifier uses deterministic keyword matching for `work_type` and diff-line-count heuristics for `substance`. On the 30 hand-labeled commits the mock achieves approximately **80% work_type accuracy** and **67% substance accuracy**; misses are intentional (the mock is for offline testing, not production accuracy).
+```
+=== Classifier Eval ===
+Provider: mock  Model: mock:prompt-v1
+Total commits evaluated: 30
+work_type  accuracy: 73.3%  (22/30)
+substance  accuracy: 40.0%  (12/30)
+```
+
+Misses are intentional — the mock is for offline testing, not production accuracy.
+
+---
+
+## 2026-11-13 — Session 5: Milestone 2a Fixes
+
+### Changes
+
+| File | Change |
+|---|---|
+| `server/src/ai/classifier.ts` | Exported `classifyOne(title, diffSummary, tasks)` pure function (no DB); exported `buildPrompt` and `modelVersion`; `buildPrompt` now wraps commit in `<commit>`/`</commit>` tags with untrusted-data warning; all tasks (open + closed) sent as `#N [open|closed]: title`; `classifyTeam` returns `{ classified, failed }` with per-contribution try/catch; concurrency limiter (max 4 at a time, no new dependency); manual entries classified without AI work_type (kind→design or other, substance=medium, AI summary only); `design` and `other` added to `work_type` enum |
+| `server/src/ai/provider.ts` | Throws if `GROK_MODEL` unset when `AI_PROVIDER=grok`; `AbortSignal.timeout(30000)` on every fetch; timeouts treated as retryable |
+| `server/src/db/schema.sql` | `work_type` CHECK extended to include `'design'` and `'other'` |
+| `server/src/db/migrate.ts` | Incremental migration system (`schema_migrations` table); `migration_001` safely recreates `classifications` with new CHECK constraint for existing databases |
+| `server/src/ai/eval/run.ts` | Deleted inline mock copy; imports `classifyOne` and `modelVersion` from `classifier.ts`; prints provider + model at top; `--limit N` flag |
+| `server/src/routes/manual.ts` | POST now classifies immediately on insert (no AI work_type, kind→design/other, substance=medium, AI for summary only) |
+| `server/src/ingestion/sync.ts` | `SyncResult` now includes `classifyFailed`; destructures `{ classified, failed }` from `classifyTeam` |
+| `server/src/routes/teams.ts` | Classify route returns `{ ok, classified, failed }` |
+| `server/src/tests/ai.test.ts` | Added prompt injection tests (`buildPrompt` warning present, commit inside tags, injection title not outside tags); updated `work_type` enum in schema; updated all `classifyOne` / `buildPrompt` usages |
+| `server/src/tests/migration.test.ts` | Added `schema_migrations` to expected tables; added test that `design` and `other` are accepted by the constraint |
+| `BOB_LOG.md` | Corrected Session 4 eval numbers (73.3% / 40.0%); added this Session 5 entry |
+
+### `npm test` output (4 files, 36 tests)
+
+```
+ RUN  v2.1.9 C:/Users/maesp/FA26/Maestro/server
+
+ ✓ src/tests/github.test.ts (15 tests) 6ms
+ ✓ src/tests/sync.test.ts (1 test) 23ms
+ ✓ src/tests/migration.test.ts (5 tests) 34ms
+ ✓ src/tests/ai.test.ts (15 tests) 88ms
+
+ Test Files  4 passed (4)
+       Tests  36 passed (36)
+    Start at  12:02:04
+    Duration  509ms (transform 146ms, setup 0ms, collect 334ms, tests 151ms, environment 0ms, prepare 201ms)
+```
+
+### `npm run build` output (server workspace)
+
+```
+> server@1.0.0 build
+> tsc
+
+> server@1.0.0 postbuild
+> node --input-type=module -e "import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');"
+```
+
+### `npm run eval -- --limit 5` output (`AI_PROVIDER=mock`)
+
+```
+> server@1.0.0 eval
+> tsx src/ai/eval/run.ts --limit 5
+
+Migration complete: C:\Users\maesp\FA26\Maestro\dev.db
+=== Classifier Eval ===
+Provider: mock  Model: mock:prompt-v1
+Total commits evaluated: 5
+work_type  accuracy: 100.0%  (5/5)
+substance  accuracy: 40.0%  (2/5)
+
+Misses (3):
+  [substance] "Add user registration endpoint"
+    expected: high  got: low
+  [substance] "Add unit tests for password validation"
+    expected: medium  got: low
+  [substance] "Refactor user service to use dependency injection"
+    expected: medium  got: low
+```
 
 ---

@@ -14,6 +14,7 @@ const EXPECTED_TABLES = [
   'task_matches',
   'risks',
   'suggestions',
+  'schema_migrations',
 ];
 
 let tmpDir: string;
@@ -74,6 +75,35 @@ describe('migration', () => {
         "INSERT INTO contributions (team_id, member_id, source, title, authored_at) VALUES (?, ?, 'pr', 'x', '2024-01-01T00:00:00Z')",
       ).run(teamId, memberId);
     }).toThrow();
+
+    db.close();
+  });
+
+  it('classifications.work_type accepts design and other', () => {
+    const db = new Database(dbPath);
+    const teamId = (db.prepare('SELECT id FROM teams ORDER BY id DESC LIMIT 1').get() as { id: number }).id;
+    const memberId = (db.prepare('SELECT id FROM members ORDER BY id DESC LIMIT 1').get() as { id: number }).id;
+
+    // Insert a manual contribution so we can classify it
+    const contribId = db.prepare(
+      "INSERT INTO contributions (team_id, member_id, source, title, authored_at) VALUES (?, ?, 'manual', 'design session', '2024-01-01T00:00:00Z')",
+    ).run(teamId, memberId).lastInsertRowid;
+
+    expect(() => {
+      db.prepare(
+        "INSERT INTO classifications (contribution_id, work_type, substance, summary, model_version) VALUES (?, 'design', 'medium', 'design work', 'mock')",
+      ).run(contribId);
+    }).not.toThrow();
+
+    const contribId2 = db.prepare(
+      "INSERT INTO contributions (team_id, member_id, source, title, authored_at) VALUES (?, ?, 'manual', 'other work', '2024-01-01T00:00:00Z')",
+    ).run(teamId, memberId).lastInsertRowid;
+
+    expect(() => {
+      db.prepare(
+        "INSERT INTO classifications (contribution_id, work_type, substance, summary, model_version) VALUES (?, 'other', 'medium', 'other work', 'mock')",
+      ).run(contribId2);
+    }).not.toThrow();
 
     db.close();
   });

@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS contributions (
 CREATE TABLE IF NOT EXISTS classifications (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   contribution_id  INTEGER NOT NULL UNIQUE REFERENCES contributions(id) ON DELETE CASCADE,
-  work_type        TEXT    NOT NULL CHECK (work_type IN ('feature','fix','test','refactor','docs','formatting','generated')),
+  work_type        TEXT    NOT NULL CHECK (work_type IN ('feature','fix','test','refactor','docs','formatting','generated','design','other')),
   substance        TEXT    NOT NULL CHECK (substance IN ('low','medium','high')),
   summary          TEXT    NOT NULL,
   disputed         INTEGER NOT NULL DEFAULT 0 CHECK (disputed IN (0, 1)),

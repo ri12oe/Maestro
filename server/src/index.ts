@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -13,6 +13,8 @@ import suggestionsRouter from './routes/suggestions.js';
 import manualRouter from './routes/manual.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 const PORT = process.env.PORT ?? 3001;
 
 const app = express();

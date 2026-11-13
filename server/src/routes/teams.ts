@@ -76,8 +76,8 @@ router.post('/:teamId/classify', async (req, res) => {
   }
 
   try {
-    const classified = await classifyTeam(teamId);
-    res.json({ ok: true, classified });
+    const { classified, failed } = await classifyTeam(teamId);
+    res.json({ ok: true, classified, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: message });

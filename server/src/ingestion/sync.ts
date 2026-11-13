@@ -19,6 +19,7 @@ export interface SyncResult {
   updatedTasks: number;
   newMembers: number;
   classified: number;
+  classifyFailed: number;
 }
 
 export async function syncTeam(teamId: number): Promise<SyncResult> {
@@ -183,7 +184,7 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   taskTx();
 
   // ── 4. Classify any unclassified contributions ───────────────────────────
-  const classified = await classifyTeam(teamId);
+  const { classified, failed: classifyFailed } = await classifyTeam(teamId);
 
-  return { newContributions, updatedTasks: issues.length, newMembers, classified };
+  return { newContributions, updatedTasks: issues.length, newMembers, classified, classifyFailed };
 }

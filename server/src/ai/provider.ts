@@ -95,7 +95,9 @@ async function callGrok(
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) throw new Error('XAI_API_KEY env var is required when AI_PROVIDER=grok');
 
-  const model = process.env.GROK_MODEL ?? 'grok-3-mini';
+  const model = process.env.GROK_MODEL;
+  if (!model) throw new Error('GROK_MODEL env var is required when AI_PROVIDER=grok');
+
 
   const body = {
     model,
@@ -119,6 +121,7 @@ async function callGrok(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!res.ok) {
@@ -202,19 +205,25 @@ export async function completeJSON<T extends z.ZodType<unknown>>(
     return mockComplete(zodSchema);
   }
 
+  function isRetryable(err: unknown): boolean {
+    if (err instanceof SyntaxError) return true;
+    if (err instanceof DOMException && err.name === 'TimeoutError') return true;
+    if (err instanceof Error && err.name === 'TimeoutError') return true;
+    if (
+      err instanceof Error &&
+      'status' in err &&
+      typeof (err as { status?: number }).status === 'number' &&
+      ((err as { status: number }).status >= 500 ||
+        (err as { status: number }).status === 429)
+    ) return true;
+    return false;
+  }
+
   let raw: unknown;
   try {
     raw = await attempt();
   } catch (err) {
-    const isRetryable =
-      err instanceof SyntaxError ||
-      (err instanceof Error &&
-        'status' in err &&
-        typeof (err as { status?: number }).status === 'number' &&
-        ((err as { status: number }).status >= 500 ||
-          (err as { status: number }).status === 429));
-
-    if (!isRetryable) throw err;
+    if (!isRetryable(err)) throw err;
 
     await sleep(2000);
     raw = await attempt(); // second attempt — let it throw if it fails again

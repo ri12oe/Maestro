@@ -1,20 +1,46 @@
 /**
- * eval/run.ts — measure mock classifier accuracy against the hand-labeled CSV.
+ * eval/run.ts — measure mock/Grok classifier accuracy against the hand-labeled CSV.
  *
  * Run with: npm run eval
+ *           npm run eval -- --limit 10
  *
  * Prints:
+ *   - Provider and model
  *   - work_type accuracy (% correct)
  *   - substance accuracy (% correct)
  *   - List of misses (title, expected, got)
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { classifyOne, modelVersion } from '../classifier.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
+dotenv.config({ path: join(__dirname, '..', '..', '..', '..', '.env') });
+
+// ── CLI flags ─────────────────────────────────────────────────────────────────
+
+function parseArgs(): { limit: number | null } {
+  const args = process.argv.slice(2);
+  const limitIdx = args.indexOf('--limit');
+  if (limitIdx !== -1 && args[limitIdx + 1] !== undefined) {
+    const n = Number(args[limitIdx + 1]);
+    if (Number.isInteger(n) && n > 0) return { limit: n };
+  }
+  return { limit: null };
+}
+
+const { limit } = parseArgs();
+
+// ── Provider / model banner ───────────────────────────────────────────────────
+
+const provider = process.env.AI_PROVIDER ?? 'mock';
+const mv = modelVersion();
+console.log(`=== Classifier Eval ===`);
+console.log(`Provider: ${provider}  Model: ${mv}`);
 
 // ── Load CSV ──────────────────────────────────────────────────────────────────
 
@@ -54,33 +80,9 @@ function parseCsv(content: string): LabeledCommit[] {
 }
 
 const csvPath = join(__dirname, 'commits.csv');
-const rows = parseCsv(readFileSync(csvPath, 'utf-8'));
-
-// ── Inline mock classifier (no DB dependency) ─────────────────────────────────
-
-const WORK_TYPE_KEYWORDS: Record<string, string[]> = {
-  test:       ['test', 'spec', 'jest', 'vitest', 'coverage', 'assert'],
-  fix:        ['fix', 'bug', 'patch', 'hotfix', 'repair', 'resolve', 'revert'],
-  refactor:   ['refactor', 'rename', 'restructure', 'reorganize', 'cleanup', 'extract', 'move'],
-  docs:       ['doc', 'readme', 'comment', 'changelog', 'docs', 'licence', 'license'],
-  formatting: ['format', 'lint', 'style', 'indent', 'whitespace', 'prettier', 'eslint'],
-  generated:  ['generated', 'auto-generated', 'scaffold', 'boilerplate', 'codegen', 'lock', 'package-lock'],
-  feature:    ['add', 'implement', 'create', 'build', 'feature', 'new', 'introduce', 'support'],
-};
-
-function mockWorkType(title: string, diff: string): string {
-  const text = `${title} ${diff}`.toLowerCase();
-  for (const [type, keywords] of Object.entries(WORK_TYPE_KEYWORDS)) {
-    if (keywords.some(k => text.includes(k))) return type;
-  }
-  return 'feature';
-}
-
-function mockSubstance(diff: string): string {
-  const lines = diff.split('\\n').filter(l => l.startsWith('+') || l.startsWith('-')).length;
-  if (lines >= 50) return 'high';
-  if (lines >= 10) return 'medium';
-  return 'low';
+let rows = parseCsv(readFileSync(csvPath, 'utf-8'));
+if (limit !== null) {
+  rows = rows.slice(0, limit);
 }
 
 // ── Run evaluation ────────────────────────────────────────────────────────────
@@ -98,19 +100,19 @@ const misses: Miss[] = [];
 
 for (const row of rows) {
   const diff = row.diff_summary.replace(/\\n/g, '\n');
-  const gotWt = mockWorkType(row.title, diff);
-  const gotSub = mockSubstance(diff);
+  // classifyOne is pure — no DB access; pass empty task list for the eval
+  const result = await classifyOne(row.title, diff, []);
 
-  if (gotWt === row.expected_work_type) {
+  if (result.work_type === row.expected_work_type) {
     wtCorrect++;
   } else {
-    misses.push({ title: row.title, field: 'work_type', expected: row.expected_work_type, got: gotWt });
+    misses.push({ title: row.title, field: 'work_type', expected: row.expected_work_type, got: result.work_type });
   }
 
-  if (gotSub === row.expected_substance) {
+  if (result.substance === row.expected_substance) {
     subCorrect++;
   } else {
-    misses.push({ title: row.title, field: 'substance', expected: row.expected_substance, got: gotSub });
+    misses.push({ title: row.title, field: 'substance', expected: row.expected_substance, got: result.substance });
   }
 }
 
@@ -118,7 +120,6 @@ const total = rows.length;
 const wtAcc  = ((wtCorrect  / total) * 100).toFixed(1);
 const subAcc = ((subCorrect / total) * 100).toFixed(1);
 
-console.log('=== Classifier Eval ===');
 console.log(`Total commits evaluated: ${total}`);
 console.log(`work_type  accuracy: ${wtAcc}%  (${wtCorrect}/${total})`);
 console.log(`substance  accuracy: ${subAcc}%  (${subCorrect}/${total})`);

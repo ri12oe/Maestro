@@ -17,7 +17,7 @@
  * Safe to re-run: skips if the "StudyBuddy" team already exists.
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import Database from 'better-sqlite3';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,6 +25,8 @@ import { runMigration } from './migrate.js';
 import { classifyTeam } from '../ai/classifier.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
+dotenv.config({ path: join(__dirname, '..', '..', '..', '.env') });
 
 // ── Database setup ────────────────────────────────────────────────────────────
 

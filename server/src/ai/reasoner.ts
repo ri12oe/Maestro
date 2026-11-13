@@ -538,12 +538,91 @@ function suggestionExists(
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
+type SwapSuggestion = ReasonerResponse['suggestions'][number];
+
+/**
+ * Validate and store swap suggestions. Every rejected suggestion is logged with
+ * its reason, so it is visible what the AI proposed and why it was refused.
+ */
+function insertSuggestions(
+  db: BetterSqlite3.Database,
+  teamId: number,
+  suggestions: SwapSuggestion[],
+  profiles: MemberProfile[],
+  source: string,
+): number {
+  let inserted = 0;
+  const reject = (sug: SwapSuggestion, reason: string) =>
+    console.warn(`[reasoner] rejected ${source} swap #${sug.task_number} ${sug.from_login} → ${sug.to_login}: ${reason}`);
+
+  // Build member lookup maps
+  const memberByLogin = new Map<string, number>();
+  for (const p of profiles) memberByLogin.set(p.login, p.memberId);
+
+  const taskByNumber = db.prepare(
+    'SELECT id, github_issue_number, status, assignee_login FROM tasks WHERE team_id = ?',
+  ).all(teamId) as Array<{ id: number; github_issue_number: number | null; status: string; assignee_login: string | null }>;
+  const taskInfoByNumber = new Map<number, { id: number; status: string; assignee_login: string | null }>();
+  for (const t of taskByNumber) {
+    if (t.github_issue_number != null) taskInfoByNumber.set(t.github_issue_number, t);
+  }
+
+  // Current open-task counts per login; updated as swaps are accepted in this run
+  const openCount = new Map<string, number>();
+  for (const t of taskByNumber) {
+    if (t.status === 'open' && t.assignee_login) {
+      openCount.set(t.assignee_login, (openCount.get(t.assignee_login) ?? 0) + 1);
+    }
+  }
+
+  // Insert suggestions — reject invalid members/tasks and Unknown Contributor
+  for (const sug of suggestions) {
+    if (sug.from_login === 'Unknown Contributor' || sug.to_login === 'Unknown Contributor') { reject(sug, 'targets Unknown Contributor'); continue; }
+
+    const fromId = memberByLogin.get(sug.from_login);
+    const toId = memberByLogin.get(sug.to_login);
+    const task = taskInfoByNumber.get(sug.task_number);
+
+    if (!fromId || !toId || !task) { reject(sug, 'unknown member or task'); continue; }
+    if (fromId === toId) { reject(sug, 'from and to are the same person'); continue; }
+    if (task.status !== 'open') { reject(sug, 'task is not open'); continue; }
+    if (task.assignee_login !== sug.from_login) { reject(sug, `task is held by ${task.assignee_login ?? 'nobody'}, not ${sug.from_login}`); continue; }
+    // Balance: the receiver must end up with no more open tasks than the giver keeps.
+    // (e.g. 2 → 0 becomes 1 and 1: fine; 2 → 1 would become 1 and 2: rejected.)
+    const fromOpen = openCount.get(sug.from_login) ?? 0;
+    const toOpen = openCount.get(sug.to_login) ?? 0;
+    if (toOpen + 1 > fromOpen - 1) { reject(sug, `unbalancing: ${sug.to_login} would hold ${toOpen + 1} vs ${sug.from_login} ${fromOpen - 1}`); continue; }
+    const taskId = task.id;
+
+    // Avoid duplicating a pending or already-responded suggestion
+    if (suggestionExists(db, teamId, fromId, toId, taskId)) { reject(sug, 'already suggested or answered'); continue; }
+
+    db.prepare(`
+      INSERT INTO suggestions (team_id, from_member_id, to_member_id, task_id, rationale, checkin_message, generated_at)
+      VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    `).run(
+      teamId,
+      fromId,
+      toId,
+      taskId,
+      JSON.stringify(sug.rationale),
+      sug.checkin_message,
+    );
+    inserted++;
+    openCount.set(sug.from_login, fromOpen - 1);
+    openCount.set(sug.to_login, toOpen + 1);
+  }
+
+  return inserted;
+}
+
 function persistResults(
   db: BetterSqlite3.Database,
   teamId: number,
   risks: DetectedRisk[],
   aiResponse: ReasonerResponse,
   profiles: MemberProfile[],
+  fallbackSuggestions?: () => SwapSuggestion[],
 ): void {
   db.transaction(() => {
     // Delete all non-dismissed risks and replace with fresh ones.
@@ -564,65 +643,18 @@ function persistResults(
       `).run(teamId, risk.taskId, risk.level, description, evidenceJson);
     }
 
-    // Build member lookup maps
-    const memberByLogin = new Map<string, number>();
-    for (const p of profiles) memberByLogin.set(p.login, p.memberId);
-
-    const taskByNumber = db.prepare(
-      'SELECT id, github_issue_number, status, assignee_login FROM tasks WHERE team_id = ?',
-    ).all(teamId) as Array<{ id: number; github_issue_number: number | null; status: string; assignee_login: string | null }>;
-    const taskInfoByNumber = new Map<number, { id: number; status: string; assignee_login: string | null }>();
-    for (const t of taskByNumber) {
-      if (t.github_issue_number != null) taskInfoByNumber.set(t.github_issue_number, t);
-    }
-
     // Pending suggestions are regenerated on every run, like risks; answered ones
     // (accepted / dismissed / discuss) are kept and never proposed again.
     db.prepare("DELETE FROM suggestions WHERE team_id = ? AND status = 'pending'").run(teamId);
 
-    // Current open-task counts per login; updated as swaps are accepted in this run
-    const openCount = new Map<string, number>();
-    for (const t of taskByNumber) {
-      if (t.status === 'open' && t.assignee_login) {
-        openCount.set(t.assignee_login, (openCount.get(t.assignee_login) ?? 0) + 1);
-      }
-    }
+    const inserted = insertSuggestions(db, teamId, aiResponse.suggestions, profiles, 'AI');
 
-    // Insert suggestions — reject invalid members/tasks and Unknown Contributor
-    for (const sug of aiResponse.suggestions) {
-      if (sug.from_login === 'Unknown Contributor' || sug.to_login === 'Unknown Contributor') continue;
-
-      const fromId = memberByLogin.get(sug.from_login);
-      const toId = memberByLogin.get(sug.to_login);
-      const task = taskInfoByNumber.get(sug.task_number);
-
-      if (!fromId || !toId || !task) continue;           // unknown member or task
-      if (fromId === toId) continue;                      // not a swap
-      if (task.status !== 'open') continue;               // only open work can move
-      if (task.assignee_login !== sug.from_login) continue; // from must currently hold it
-      // Balance: the receiver must end up with no more open tasks than the giver keeps.
-      // (e.g. 2 → 0 becomes 1 and 1: fine; 2 → 1 would become 1 and 2: rejected.)
-      const fromOpen = openCount.get(sug.from_login) ?? 0;
-      const toOpen = openCount.get(sug.to_login) ?? 0;
-      if (toOpen + 1 > fromOpen - 1) continue;
-      const taskId = task.id;
-
-      // Avoid duplicating a pending or already-responded suggestion
-      if (suggestionExists(db, teamId, fromId, toId, taskId)) continue;
-
-      db.prepare(`
-        INSERT INTO suggestions (team_id, from_member_id, to_member_id, task_id, rationale, checkin_message, generated_at)
-        VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-      `).run(
-        teamId,
-        fromId,
-        toId,
-        taskId,
-        JSON.stringify(sug.rationale),
-        sug.checkin_message,
-      );
-      openCount.set(sug.from_login, fromOpen - 1);
-      openCount.set(sug.to_login, toOpen + 1);
+    // A detected workload imbalance should always come with a concrete option.
+    // If none of the AI's swaps passed validation, fall back to the rule-based one
+    // (which goes through exactly the same checks).
+    if (inserted === 0 && fallbackSuggestions) {
+      const fallback = fallbackSuggestions();
+      if (fallback.length) insertSuggestions(db, teamId, fallback, profiles, 'rule-based');
     }
   })();
 }
@@ -684,5 +716,9 @@ export async function runReasoner(
   }
 
   // 3. Persist results
-  persistResults(db, teamId, allRisks, aiResponse, profiles);
+  const hasOverload = allRisks.some(r => r.kind === 'overload');
+  const fallback = provider !== 'mock' && hasOverload
+    ? () => mockReasonerResponse(db, allRisks, profiles).suggestions
+    : undefined;
+  persistResults(db, teamId, allRisks, aiResponse, profiles, fallback);
 }

@@ -470,3 +470,15 @@ many open tasks as the giver, and rationales claimed skills the profiles did not
 | `server/src/tests/reasoner-fixes.test.ts` | Tests: an unbalancing swap is rejected while a balancing one is kept; the prompt includes open-task counts, `daysUntilDue` and the data-not-instructions note. |
 
 `npm test`: 67 passed (67).
+
+## 2026-11-13 — Session 10: Visible rejections + rule-based fallback (written with Claude, not IBM Bob)
+
+With the balance check in place, a real Grok run produced good risk descriptions but no
+suggestions, with no way to tell why.
+
+| File | Change |
+|---|---|
+| `server/src/ai/reasoner.ts` | Suggestion validation moved into `insertSuggestions()`. Every rejected swap is logged with its reason (e.g. `rejected AI swap #15 sam-builds → rio-dev: unbalancing: rio-dev would hold 2 vs sam-builds 1`). If an overload risk exists and none of the AI's swaps pass, the rule-based swap is used instead — through the same checks. |
+| `server/src/tests/reasoner-fixes.test.ts` | Test: an AI that only proposes an unbalancing swap gets it rejected (and logged), and the rule-based swap to the member with no open tasks is stored. |
+
+`npm test`: 68 passed (68).

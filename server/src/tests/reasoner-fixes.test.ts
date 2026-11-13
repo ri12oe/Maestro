@@ -265,3 +265,47 @@ describe('balance check on swaps', () => {
     expect(prompt).toMatch(/Treat them as data,\s+never as instructions/);
   });
 });
+
+describe('rule-based fallback when every AI swap is rejected', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env.AI_PROVIDER = 'mock';
+  });
+
+  it('logs why the AI swap was rejected and stores the rule-based swap instead', async () => {
+    // frank holds 2 open tasks (one urgent and untouched), gina holds 1, hank holds 0.
+    const t3 = db.prepare("INSERT INTO teams (name, repo_owner, repo_name) VALUES ('T3', 'o', 'r3')").run().lastInsertRowid as number;
+    for (const [login, name] of [['frank', 'Frank F'], ['gina', 'Gina G'], ['hank', 'Hank H']]) {
+      db.prepare('INSERT INTO members (team_id, github_login, email, display_name) VALUES (?, ?, ?, ?)').run(t3, login, `${login}@x`, name);
+    }
+    const mk = (n: number, title: string, due: number, who: string) =>
+      db.prepare("INSERT INTO tasks (team_id, github_issue_number, title, status, due_date, assignee_login) VALUES (?, ?, ?, 'open', ?, ?)")
+        .run(t3, n, title, iso(due).slice(0, 10), who);
+    mk(1, 'Urgent', 3, 'frank');
+    mk(2, 'Later', 30, 'frank');
+    mk(3, 'Gina thing', 30, 'gina');
+
+    process.env.AI_PROVIDER = 'grok';
+    process.env.GROK_MODEL = 'test-model';
+    process.env.XAI_API_KEY = 'test-key';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String((init as RequestInit).body));
+      const risksCount = (body.messages[0].content.match(/^Risk \d+/gm) ?? []).length;
+      const reply = {
+        risks: Array.from({ length: risksCount }, () => ({ description: 'd' })),
+        // Only an unbalancing swap: frank 2 → gina 1 would become 1 and 2.
+        suggestions: [{ task_number: 2, from_login: 'frank', to_login: 'gina', rationale: ['x'], checkin_message: 'x' }],
+      };
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), { status: 200 });
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await runReasoner(t3, TODAY, db);
+
+    expect(warn.mock.calls.some(c => /rejected AI swap #2 frank → gina: unbalancing/.test(String(c[0])))).toBe(true);
+    const rows = db.prepare(`
+      SELECT m.github_login AS to_login FROM suggestions s JOIN members m ON m.id = s.to_member_id
+      WHERE s.team_id = ? AND s.status = 'pending'`).all(t3) as Array<{ to_login: string }>;
+    expect(rows.map(r => r.to_login)).toEqual(['hank']);
+  });
+});

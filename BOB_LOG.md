@@ -509,3 +509,21 @@ suggestions, with no way to tell why.
 **Checked in a real browser** (headless Chrome, desktop 1280px and phone 390px) against the seeded demo: no console errors; flagging a label saves `disputed = 1` with the note in the database and updates the row.
 
 `npm test`: 71 passed (71). `npm run build`: client and server build cleanly.
+
+## 2026-11-13 — Session 13: Milestone 3c — Risk radar, Rebalance, Log work, Connect (written with Claude, not IBM Bob)
+
+| Area | Change |
+|---|---|
+| `client/src/pages/RiskRadar/` | Risk cards (level, task, due label, plain-language description, what the risk is based on), Dismiss, "See suggested swaps" only where a swap can help; task progress table (owner, last activity, matched changes, due, status). |
+| `client/src/pages/Rebalance/` | Each pending swap: task and due date, From → To with open-task counts before → after, "Why this swap", Accept / Discuss / Dismiss with a confirmation, and an editable check-in message with Copy. |
+| `client/src/pages/LogWork/` | Form (who, type, title, details, related task, link) with validation; recently logged list. |
+| `client/src/pages/Connect/` | Team setup: accepts `owner/repo` or a GitHub URL, creates the team and runs the first sync with progress; on failure shows the reason with Retry sync (no duplicate team). Fairness promise; list of existing teams. |
+| `client/src/` (shared) | API client additions, `dates.ts` (due / ago labels), form-field styles moved to `ui.scss`, phone fixes (compact nav keeps its natural height; stacked swap boxes with a down arrow), Vite uses the modern Sass compiler (no deprecation warnings). |
+| `server/src/routes/teams.ts` | `GET /api/teams`; sync explains a missing token and GitHub 404 / 401 / 403 errors in plain words (`explainSyncError`). |
+| `server/src/routes/tasks.ts` | Tasks include owner name, matched-work count and last activity, ordered by due date. |
+| `server/src/routes/manual.ts` | Logging work re-runs risk detection in the background. |
+| `server/src/tests/routes-3c.test.ts` | **New.** 7 tests for the endpoints above. |
+
+**Checked in a real browser** (headless Chrome, 1280px and 390px) against the seeded demo: dismissing a risk removes it; accepting a swap reassigns #14 to Jordan in the database; Copy puts the check-in message on the clipboard; logging work saves it, and the background risk refresh cleared #12's stalled risk because the entry was linked to it; Connect rejects a malformed repo and shows the missing-token message with Retry sync. No console errors besides the intentional failed sync.
+
+`npm test`: 78 passed (78). `npm run build`: client and server build cleanly.

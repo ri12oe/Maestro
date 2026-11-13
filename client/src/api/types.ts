@@ -85,3 +85,54 @@ export interface Contribution {
   task_number: number | null;
   task_title: string | null;
 }
+
+export interface Task {
+  id: number;
+  github_issue_number: number | null;
+  title: string;
+  assignee_login: string | null;
+  assignee_name: string | null;
+  status: 'open' | 'closed';
+  due_date: string | null;
+  contribution_count: number;
+  last_activity_at: string | null;
+}
+
+export interface TeamListItem {
+  id: number;
+  name: string;
+  repo_owner: string;
+  repo_name: string;
+  created_at: string;
+  member_count: number;
+  contribution_count: number;
+}
+
+export interface Member {
+  id: number;
+  github_login: string | null;
+  display_name: string | null;
+}
+
+export type ManualKind = 'design' | 'research' | 'meeting' | 'coordination' | 'other';
+
+export interface ManualEntry {
+  id: number;
+  member_id: number;
+  title: string;
+  body: string | null;
+  kind: ManualKind | null;
+  link: string | null;
+  authored_at: string;
+  github_login: string | null;
+  display_name: string | null;
+}
+
+export interface SyncResult {
+  ok: true;
+  newContributions: number;
+  updatedTasks: number;
+  newMembers: number;
+  classified: number;
+  classifyFailed: number;
+}

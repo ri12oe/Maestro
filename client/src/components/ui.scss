@@ -68,12 +68,14 @@
 .state {
   color: $color-muted;
   font-size: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: $space-sm;
-  align-items: flex-start;
 
-  &--error { color: $color-risk-strong; }
+  &--error {
+    color: $color-risk-strong;
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+    align-items: flex-start;
+  }
 }
 
 .btn {
@@ -112,4 +114,27 @@
 
   &__main { flex: 999 1 520px; min-width: 0; }
   &__side { flex: 1 1 300px; display: flex; flex-direction: column; gap: $space-md; }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label { font-size: 14px; font-weight: 500; }
+  .optional { color: $color-muted; font-weight: 400; }
+
+  input, select, textarea {
+    font: inherit;
+    font-size: 15px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid $color-border-strong;
+    border-radius: $radius-sm;
+    background: #fff;
+    color: $color-text;
+    &:focus-visible { outline: 2px solid $color-accent; outline-offset: 1px; }
+  }
+
+  textarea { padding: 10px 12px; line-height: 1.5; resize: vertical; }
 }

@@ -1,4 +1,6 @@
-import type { Contribution, Risk, Suggestion, TeamSummary } from './types.ts';
+import type {
+  Contribution, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, TeamListItem, TeamSummary,
+} from './types.ts';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -36,6 +38,38 @@ export const api = {
     const qs = q.toString();
     return request<Contribution[]>(`/teams/${teamId}/contributions${qs ? `?${qs}` : ''}`);
   },
+
+  tasks: (teamId: number) =>
+    request<Task[]>(`/teams/${teamId}/tasks`),
+
+  members: (teamId: number) =>
+    request<Member[]>(`/teams/${teamId}/members`),
+
+  teams: () =>
+    request<TeamListItem[]>('/teams'),
+
+  createTeam: (input: { name: string; repo_owner: string; repo_name: string }) =>
+    request<{ id: number }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
+
+  sync: (teamId: number) =>
+    request<SyncResult>(`/teams/${teamId}/sync`, { method: 'POST' }),
+
+  dismissRisk: (teamId: number, riskId: number) =>
+    request<{ ok: true }>(`/teams/${teamId}/risks/${riskId}/dismiss`, { method: 'POST' }),
+
+  respond: (teamId: number, suggestionId: number, status: 'accepted' | 'discuss' | 'dismissed') =>
+    request<{ ok: true }>(`/teams/${teamId}/suggestions/${suggestionId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
+
+  manualEntries: (teamId: number) =>
+    request<ManualEntry[]>(`/teams/${teamId}/manual`),
+
+  logWork: (teamId: number, input: {
+    member_id: number; title: string; body?: string; kind: ManualKind; link?: string; task_id?: number;
+  }) =>
+    request<ManualEntry>(`/teams/${teamId}/manual`, { method: 'POST', body: JSON.stringify(input) }),
 
   dispute: (teamId: number, contributionId: number, note: string) =>
     request<{ ok: true }>(`/teams/${teamId}/contributions/${contributionId}/dispute`, {

@@ -5,6 +5,10 @@
   display: flex;
   flex-wrap: wrap;
 
+  // Phones: nav and content wrap onto two lines; keep the nav its natural
+  // height instead of sharing the leftover page height with the content.
+  @media (max-width: 640px) { align-content: flex-start; }
+
   &__nav {
     flex: 1 1 200px;
     background: $color-sidebar;
@@ -20,6 +24,7 @@
       flex-wrap: wrap;
       padding: $space-md;
       gap: 4px;
+      align-items: center;
     }
   }
 

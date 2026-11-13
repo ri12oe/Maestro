@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
 import { completeJSON } from '../ai/provider.js';
+import { runReasoner } from '../ai/reasoner.js';
 import * as z from 'zod';
 
 type TeamParams = { teamId: string };
@@ -95,6 +96,11 @@ router.post('/', async (req: Request<TeamParams>, res: Response) => {
     .get(contribId);
 
   res.status(201).json(contribution);
+
+  // Logged work can change a task's activity, so refresh risks in the background.
+  // The response is already sent; a failure here is logged, never surfaced.
+  runReasoner(teamId).catch(err =>
+    console.error('[manual] risk refresh failed:', err instanceof Error ? err.message : err));
 });
 
 // GET /api/teams/:teamId/manual

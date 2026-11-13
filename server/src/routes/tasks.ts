@@ -7,9 +7,18 @@ const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/tasks
 router.get('/', (req: Request<TeamParams>, res: Response) => {
-  const tasks = db
-    .prepare('SELECT id, team_id, github_issue_number, title, body, assignee_login, status, due_date, synced_at FROM tasks WHERE team_id = ? ORDER BY github_issue_number ASC')
-    .all(Number(req.params.teamId));
+  // Includes each task's matched work, so the Risk radar can show progress at a glance.
+  const tasks = db.prepare(`
+    SELECT t.id, t.team_id, t.github_issue_number, t.title, t.assignee_login, t.status, t.due_date, t.synced_at,
+           m.display_name AS assignee_name,
+           (SELECT COUNT(*) FROM task_matches tm WHERE tm.task_id = t.id) AS contribution_count,
+           (SELECT MAX(c.authored_at) FROM task_matches tm JOIN contributions c ON c.id = tm.contribution_id
+             WHERE tm.task_id = t.id) AS last_activity_at
+    FROM tasks t
+    LEFT JOIN members m ON m.team_id = t.team_id AND m.github_login = t.assignee_login
+    WHERE t.team_id = ?
+    ORDER BY t.status = 'closed', t.due_date IS NULL, t.due_date, t.github_issue_number
+  `).all(Number(req.params.teamId));
   res.json(tasks);
 });
 

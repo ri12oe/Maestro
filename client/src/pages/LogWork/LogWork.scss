@@ -1,0 +1,38 @@
+@use '../../styles/variables' as *;
+
+.lead { color: $color-muted; font-size: 15px; max-width: 720px; }
+
+.logform {
+  display: flex;
+  flex-direction: column;
+  gap: $space-md;
+
+  &__row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: $space-md;
+    @media (max-width: 640px) { grid-template-columns: 1fr; }
+  }
+
+  &__error { color: $color-risk-strong; font-size: 14px; }
+  &__saved { color: $color-accent-dark; background: $color-accent-soft; padding: 12px 14px; border-radius: $radius-sm; font-size: 14px; }
+}
+
+.logged {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+
+  li {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 0;
+    border-top: 1px solid #EEEEE8;
+    &:first-child { border-top: 0; padding-top: 0; }
+  }
+
+  &__title { font-weight: 500; font-size: 15px; }
+  &__meta { font-size: 13px; color: $color-muted; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    .pill { padding: 2px 8px; font-size: 12px; } }
+}

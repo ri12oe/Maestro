@@ -3,7 +3,9 @@ import Connect from './pages/Connect/Connect.tsx';
 import Layout from './components/Layout.tsx';
 import Overview from './pages/Overview/Overview.tsx';
 import MemberEvidence from './pages/MemberEvidence/MemberEvidence.tsx';
-import ComingSoon from './pages/ComingSoon/ComingSoon.tsx';
+import RiskRadar from './pages/RiskRadar/RiskRadar.tsx';
+import Rebalance from './pages/Rebalance/Rebalance.tsx';
+import LogWork from './pages/LogWork/LogWork.tsx';
 
 export default function App() {
   return (
@@ -13,9 +15,9 @@ export default function App() {
         <Route path="/teams/:teamId" element={<Layout />}>
           <Route index element={<Overview />} />
           <Route path="members/:memberId" element={<MemberEvidence />} />
-          <Route path="risks" element={<ComingSoon title="Risk radar" />} />
-          <Route path="rebalance" element={<ComingSoon title="Rebalance suggestions" />} />
-          <Route path="log" element={<ComingSoon title="Log work" />} />
+          <Route path="risks" element={<RiskRadar />} />
+          <Route path="rebalance" element={<Rebalance />} />
+          <Route path="log" element={<LogWork />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

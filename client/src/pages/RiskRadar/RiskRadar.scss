@@ -1,0 +1,35 @@
+@use '../../styles/variables' as *;
+
+.lead { color: $color-muted; font-size: 15px; max-width: 720px; }
+.muted { color: $color-muted; }
+
+.risk-list { list-style: none; display: flex; flex-direction: column; gap: $space-md; }
+
+.risk {
+  @include card;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &--high { background: $color-risk-bg; border-color: #F3D9C0; }
+
+  &__top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; .pill { padding: 4px 10px; font-size: 13px; } }
+  &__text { font-size: 16px; line-height: 1.55; }
+  &__evidence { font-size: 13px; color: $color-muted; }
+  &__error { font-size: 14px; color: $color-risk-strong; }
+  &__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+}
+
+.task-table {
+  overflow-x: auto;
+
+  table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-weight: 500; font-size: 13px; color: $color-muted; padding: 10px 8px; border-bottom: 1px solid $color-border; }
+  td { padding: 12px 8px; border-bottom: 1px solid #EEEEE8; vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { padding: 4px 10px; font-size: 13px; }
+
+  &__title { font-weight: 500; }
+  &__num { color: $color-muted; font-weight: 400; }
+  &__urgent { color: $color-risk-text; font-weight: 500; }
+}

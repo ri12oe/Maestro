@@ -1,0 +1,94 @@
+@use '../../styles/variables' as *;
+
+.lead { color: $color-muted; font-size: 15px; max-width: 720px; }
+
+.answered {
+  border-radius: $radius-sm;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 500;
+
+  &--accepted { background: $color-accent-soft; color: $color-accent-dark; }
+  &--discuss, &--dismissed { background: $color-neutral-bg; color: #4A4F58; }
+}
+
+.swap {
+  gap: 20px;
+
+  &__eyebrow { font-size: 13px; color: $color-muted; }
+
+  &__task {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    .swap__eyebrow { flex-basis: 100%; }
+    h2 { font-family: $font-body; font-size: 20px; font-weight: 600; }
+    .pill { padding: 4px 10px; font-size: 13px; }
+  }
+
+  &__flow { display: flex; flex-wrap: wrap; align-items: center; gap: $space-md; }
+
+  &__person {
+    flex: 1 1 180px;
+    border: 1px solid $color-border;
+    border-radius: 10px;
+    padding: $space-md;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    strong { font-size: 17px; }
+    span:last-child { font-size: 14px; color: $color-muted; }
+
+    &--to {
+      border: 2px solid $color-accent;
+      background: $color-accent-soft;
+      .swap__eyebrow, span:last-child { color: $color-accent-dark; }
+    }
+  }
+
+  &__arrow { color: $color-accent; flex: none; }
+
+  // Phones: stack From / To and point the arrow down between them
+  @media (max-width: 640px) {
+    &__flow { flex-direction: column; align-items: stretch; gap: 8px; }
+    &__person { flex-basis: auto; }
+    &__arrow { align-self: center; transform: rotate(90deg); }
+  }
+
+  &__why {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    h3 { font-family: $font-body; font-size: 16px; font-weight: 600; }
+    ul { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.5; }
+  }
+
+  &__error { color: $color-risk-strong; font-size: 14px; }
+  &__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+}
+
+.btn--ghost { background: transparent; border-color: transparent; color: $color-muted; font-weight: 500; }
+
+.checkin {
+  border-top: 1px solid $color-border;
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &__label { font-weight: 600; font-size: 16px; }
+  &__hint { font-size: 14px; color: $color-muted; }
+  &__status { margin-left: 10px; font-size: 13px; color: $color-muted; }
+
+  textarea {
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 12px 14px;
+    border: 1px solid $color-border-strong;
+    border-radius: $radius-sm;
+    resize: vertical;
+    &:focus-visible { outline: 2px solid $color-accent; outline-offset: 1px; }
+  }
+}

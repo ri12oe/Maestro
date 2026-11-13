@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS contributions (
   kind              TEXT,                  -- manual: design | research | meeting | coordination | other
   link              TEXT,                  -- manual: optional external URL
   diff_summary      TEXT,                  -- patch truncated to 200 lines
+  files_changed     INTEGER,               -- number of files touched (from GitHub API)
+  additions         INTEGER,               -- total lines added
+  deletions         INTEGER,               -- total lines deleted
   url               TEXT,                  -- link to GitHub commit
   embedding         BLOB,                  -- Float32 vector for task-matching
   authored_at       TEXT    NOT NULL,

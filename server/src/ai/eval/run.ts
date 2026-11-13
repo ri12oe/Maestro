@@ -1,10 +1,12 @@
 /**
- * eval/run.ts — measure mock/Grok classifier accuracy against the hand-labeled CSV.
+ * eval/run.ts — measure mock/Grok classifier accuracy against labeled CSV sets.
  *
  * Run with: npm run eval
  *           npm run eval -- --limit 10
+ *           npm run eval -- --set holdout
+ *           npm run eval -- --set all
  *
- * Prints:
+ * Prints per-set:
  *   - Provider and model
  *   - work_type accuracy (% correct)
  *   - substance accuracy (% correct)
@@ -23,17 +25,27 @@ dotenv.config({ path: join(__dirname, '..', '..', '..', '..', '.env') });
 
 // ── CLI flags ─────────────────────────────────────────────────────────────────
 
-function parseArgs(): { limit: number | null } {
+function parseArgs(): { limit: number | null; set: 'main' | 'holdout' | 'all' } {
   const args = process.argv.slice(2);
+
   const limitIdx = args.indexOf('--limit');
+  let limit: number | null = null;
   if (limitIdx !== -1 && args[limitIdx + 1] !== undefined) {
     const n = Number(args[limitIdx + 1]);
-    if (Number.isInteger(n) && n > 0) return { limit: n };
+    if (Number.isInteger(n) && n > 0) limit = n;
   }
-  return { limit: null };
+
+  const setIdx = args.indexOf('--set');
+  let set: 'main' | 'holdout' | 'all' = 'main';
+  if (setIdx !== -1) {
+    const val = args[setIdx + 1];
+    if (val === 'holdout' || val === 'all' || val === 'main') set = val;
+  }
+
+  return { limit, set };
 }
 
-const { limit } = parseArgs();
+const { limit, set: evalSet } = parseArgs();
 
 // ── Provider / model banner ───────────────────────────────────────────────────
 
@@ -42,11 +54,14 @@ const mv = modelVersion();
 console.log(`=== Classifier Eval ===`);
 console.log(`Provider: ${provider}  Model: ${mv}`);
 
-// ── Load CSV ──────────────────────────────────────────────────────────────────
+// ── CSV parsing ───────────────────────────────────────────────────────────────
 
 interface LabeledCommit {
   title: string;
   diff_summary: string;
+  files_changed: string;
+  additions: string;
+  deletions: string;
   expected_work_type: string;
   expected_substance: string;
 }
@@ -56,7 +71,6 @@ function parseCsv(content: string): LabeledCommit[] {
   const header = lines[0].split(',');
 
   return lines.slice(1).map(line => {
-    // Parse CSV respecting quoted fields
     const fields: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -79,13 +93,12 @@ function parseCsv(content: string): LabeledCommit[] {
   });
 }
 
-const csvPath = join(__dirname, 'commits.csv');
-let rows = parseCsv(readFileSync(csvPath, 'utf-8'));
-if (limit !== null) {
-  rows = rows.slice(0, limit);
+function loadSet(filename: string): LabeledCommit[] {
+  const csvPath = join(__dirname, filename);
+  return parseCsv(readFileSync(csvPath, 'utf-8'));
 }
 
-// ── Run evaluation ────────────────────────────────────────────────────────────
+// ── Evaluation runner ─────────────────────────────────────────────────────────
 
 interface Miss {
   title: string;
@@ -94,42 +107,62 @@ interface Miss {
   got: string;
 }
 
-let wtCorrect = 0;
-let subCorrect = 0;
-const misses: Miss[] = [];
+async function runEval(label: string, rows: LabeledCommit[]): Promise<void> {
+  let wtCorrect = 0;
+  let subCorrect = 0;
+  const misses: Miss[] = [];
 
-for (const row of rows) {
-  const diff = row.diff_summary.replace(/\\n/g, '\n');
-  // classifyOne is pure — no DB access; pass empty task list for the eval
-  const result = await classifyOne(row.title, diff, []);
+  for (const row of rows) {
+    const diff = row.diff_summary.replace(/\\n/g, '\n');
+    const stats = {
+      filesChanged: Number(row.files_changed) || null,
+      additions:    Number(row.additions)    || null,
+      deletions:    Number(row.deletions)    || null,
+    };
+    const result = await classifyOne(row.title, diff, [], stats);
 
-  if (result.work_type === row.expected_work_type) {
-    wtCorrect++;
-  } else {
-    misses.push({ title: row.title, field: 'work_type', expected: row.expected_work_type, got: result.work_type });
+    if (result.work_type === row.expected_work_type) {
+      wtCorrect++;
+    } else {
+      misses.push({ title: row.title, field: 'work_type', expected: row.expected_work_type, got: result.work_type });
+    }
+
+    if (result.substance === row.expected_substance) {
+      subCorrect++;
+    } else {
+      misses.push({ title: row.title, field: 'substance', expected: row.expected_substance, got: result.substance });
+    }
   }
 
-  if (result.substance === row.expected_substance) {
-    subCorrect++;
+  const total  = rows.length;
+  const wtAcc  = ((wtCorrect  / total) * 100).toFixed(1);
+  const subAcc = ((subCorrect / total) * 100).toFixed(1);
+
+  console.log(`\n--- ${label} (${total} commits) ---`);
+  console.log(`work_type  accuracy: ${wtAcc}%  (${wtCorrect}/${total})`);
+  console.log(`substance  accuracy: ${subAcc}%  (${subCorrect}/${total})`);
+
+  if (misses.length === 0) {
+    console.log('✅ No misses!');
   } else {
-    misses.push({ title: row.title, field: 'substance', expected: row.expected_substance, got: result.substance });
+    console.log(`Misses (${misses.length}):`);
+    for (const m of misses) {
+      console.log(`  [${m.field}] "${m.title.slice(0, 60)}"`);
+      console.log(`    expected: ${m.expected}  got: ${m.got}`);
+    }
   }
 }
 
-const total = rows.length;
-const wtAcc  = ((wtCorrect  / total) * 100).toFixed(1);
-const subAcc = ((subCorrect / total) * 100).toFixed(1);
+// ── Main ──────────────────────────────────────────────────────────────────────
 
-console.log(`Total commits evaluated: ${total}`);
-console.log(`work_type  accuracy: ${wtAcc}%  (${wtCorrect}/${total})`);
-console.log(`substance  accuracy: ${subAcc}%  (${subCorrect}/${total})`);
+if (evalSet === 'main' || evalSet === 'all') {
+  let mainRows = loadSet('commits.csv');
+  if (limit !== null) mainRows = mainRows.slice(0, limit);
+  await runEval('main set (commits.csv)', mainRows);
+}
 
-if (misses.length === 0) {
-  console.log('\n✅ No misses!');
-} else {
-  console.log(`\nMisses (${misses.length}):`);
-  for (const m of misses) {
-    console.log(`  [${m.field}] "${m.title.slice(0, 60)}"`);
-    console.log(`    expected: ${m.expected}  got: ${m.got}`);
-  }
+if (evalSet === 'holdout' || evalSet === 'all') {
+  let holdoutRows = loadSet('holdout.csv');
+  if (limit !== null) holdoutRows = holdoutRows.slice(0, limit);
+  await runEval('holdout set (holdout.csv)', holdoutRows);
 }

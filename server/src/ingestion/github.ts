@@ -26,6 +26,9 @@ export interface GitHubCommitSummary {
   prNumber: number | null;
   files: Array<{ filename: string; additions: number; deletions: number }>;
   diffSummary: string;     // patch truncated to PATCH_LINE_LIMIT lines
+  filesChanged: number;    // total files touched
+  additions: number;       // total lines added
+  deletions: number;       // total lines deleted
 }
 
 export interface GitHubIssue {
@@ -69,7 +72,7 @@ async function fetchCommitDetail(
   sha: string,
   token: string,
   fetchFn: FetchFn,
-): Promise<{ files: GitHubCommitSummary['files']; diffSummary: string } | null> {
+): Promise<{ files: GitHubCommitSummary['files']; diffSummary: string; filesChanged: number; additions: number; deletions: number } | null> {
   const url = `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`;
   const res = await fetchFn(url, { headers: buildHeaders(token) });
   if (!res.ok) return null;
@@ -83,20 +86,25 @@ async function fetchCommitDetail(
     }>;
   };
 
-  const files = (data.files ?? []).map(f => ({
+  const rawFiles = data.files ?? [];
+  const files = rawFiles.map(f => ({
     filename: f.filename,
     additions: f.additions,
     deletions: f.deletions,
   }));
 
-  const diffSummary = (data.files ?? [])
+  const diffSummary = rawFiles
     .map(f => {
       const header = `--- ${f.filename} (+${f.additions}/-${f.deletions})`;
       return f.patch ? `${header}\n${f.patch}` : header;
     })
     .join('\n\n');
 
-  return { files, diffSummary: truncatePatch(diffSummary) };
+  const filesChanged = rawFiles.length;
+  const additions = rawFiles.reduce((s, f) => s + (f.additions ?? 0), 0);
+  const deletions = rawFiles.reduce((s, f) => s + (f.deletions ?? 0), 0);
+
+  return { files, diffSummary: truncatePatch(diffSummary), filesChanged, additions, deletions };
 }
 
 /**
@@ -160,6 +168,9 @@ export async function fetchCommits(
         prNumber: null,
         files: detail?.files ?? [],
         diffSummary: detail?.diffSummary ?? '',
+        filesChanged: detail?.filesChanged ?? 0,
+        additions: detail?.additions ?? 0,
+        deletions: detail?.deletions ?? 0,
       });
     }
 

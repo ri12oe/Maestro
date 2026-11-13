@@ -82,6 +82,28 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_002: Add files_changed, additions, deletions to contributions.
+   *
+   * ALTER TABLE … ADD COLUMN is safe on SQLite — the new columns default to NULL
+   * and do not rewrite existing rows.  We run each statement separately and
+   * ignore "duplicate column" errors so the migration is idempotent.
+   */
+  if (!appliedSet.has('migration_002_contributions_diff_stats')) {
+    db.transaction(() => {
+      for (const col of [
+        'ALTER TABLE contributions ADD COLUMN files_changed INTEGER',
+        'ALTER TABLE contributions ADD COLUMN additions INTEGER',
+        'ALTER TABLE contributions ADD COLUMN deletions INTEGER',
+      ]) {
+        try { db.exec(col); } catch { /* column already exists — idempotent */ }
+      }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
+        'migration_002_contributions_diff_stats',
+      );
+    })();
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);

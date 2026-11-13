@@ -75,10 +75,10 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   const insertContribution = db.prepare(`
     INSERT INTO contributions
       (team_id, member_id, source, github_sha, github_pr_number, title,
-       diff_summary, url, authored_at)
+       diff_summary, files_changed, additions, deletions, url, authored_at)
     VALUES
       (@team_id, @member_id, 'commit', @github_sha, @github_pr_number, @title,
-       @diff_summary, @url, @authored_at)
+       @diff_summary, @files_changed, @additions, @deletions, @url, @authored_at)
     ON CONFLICT (github_sha) DO NOTHING
   `);
 
@@ -141,6 +141,9 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
         github_pr_number: null,
         title: commit.title,
         diff_summary: commit.diffSummary || null,
+        files_changed: commit.filesChanged || null,
+        additions: commit.additions || null,
+        deletions: commit.deletions || null,
         url: commit.url,
         authored_at: commit.author.date,
       });

@@ -270,3 +270,136 @@ Misses (3):
 ```
 
 ---
+
+## 2026-11-13 — Session 6: Milestone 2b — Substance improvements, diff stats, eval sets
+
+### Changes
+
+| File | Change |
+|---|---|
+| `server/src/db/schema.sql` | Added `files_changed`, `additions`, `deletions` columns to `contributions` |
+| `server/src/db/migrate.ts` | `migration_002`: safe `ALTER TABLE ADD COLUMN` for all three new columns |
+| `server/src/ingestion/github.ts` | `fetchCommitDetail` now returns and sums `filesChanged`/`additions`/`deletions`; `GitHubCommitSummary` includes the three new fields |
+| `server/src/ingestion/sync.ts` | `insertContribution` persists `files_changed`, `additions`, `deletions` |
+| `server/src/db/seed.ts` | All `insertCommit` calls include realistic `filesChanged`/`additions`/`deletions` |
+| `server/src/ai/classifier.ts` | `buildPrompt` adds `Size: N files changed, +A / -D lines` inside `<commit>`; expanded substance scale definition (typo/formatting→low, contained fix/small feature→medium, new module/algorithm/suite→high, short diff can still be high); full work_type definitions (esp. `generated` = machine-generated, NOT hand-written config); `sanitizeCommitTag` exported, applied to title and diff before interpolation; `buildPrompt` accepts optional `stats`; `classifyOne` accepts and passes stats; `modelVersion` bumped to `prompt-v2` |
+| `server/src/ai/eval/commits.csv` | Added `files_changed`, `additions`, `deletions` columns with realistic values; corrected `expected_substance` for several rows (e.g. single-endpoint additions now `medium`, multi-file features `high`) |
+| `server/src/ai/eval/holdout.csv` | **New** — 10 hand-labeled commits in different styles (dark mode toggle, Playwright suite, WebSocket push, Anki export, etc.) |
+| `server/src/ai/eval/run.ts` | Loads `files_changed`/`additions`/`deletions` from CSV and passes to `classifyOne`; `--set main\|holdout\|all` flag; reports each set separately with label and commit count |
+| `server/src/tests/ai.test.ts` | Added `sanitizeCommitTag` unit tests; added `buildPrompt` sanitization tests for title and diff injection; imports `sanitizeCommitTag` |
+| `check-watsonx.mjs` | Already staged as `git rm` (deleted) |
+
+### `npm test` output (4 files, 39 tests)
+
+```
+ RUN  v2.1.9 C:/Users/maesp/FA26/Maestro/server
+
+ ✓ src/tests/github.test.ts (15 tests) 6ms
+ ✓ src/tests/sync.test.ts (1 test) 24ms
+ ✓ src/tests/migration.test.ts (5 tests) 33ms
+ ✓ src/tests/ai.test.ts (18 tests) 54ms
+
+ Test Files  4 passed (4)
+       Tests  39 passed (39)
+    Start at  14:10:50
+    Duration  500ms (transform 211ms, setup 0ms, collect 365ms, tests 117ms, environment 0ms, prepare 253ms)
+```
+
+### `npm run build` output (server workspace)
+
+```
+> server@1.0.0 build
+> tsc
+
+> server@1.0.0 postbuild
+> node --input-type=module -e "import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');"
+```
+
+### `npm run eval` output (`AI_PROVIDER=mock`)
+
+```
+> server@1.0.0 eval
+> tsx src/ai/eval/run.ts
+
+Migration complete: C:\Users\maesp\FA26\Maestro\dev.db
+=== Classifier Eval ===
+Provider: mock  Model: mock:prompt-v2
+
+--- main set (commits.csv) (30 commits) ---
+work_type  accuracy: 73.3%  (22/30)
+substance  accuracy: 50.0%  (15/30)
+Misses (23):
+  [substance] "Add user registration endpoint"
+    expected: medium  got: low
+  [substance] "Add unit tests for password validation"
+    expected: medium  got: low
+  [substance] "Refactor user service to use dependency injection"
+    expected: medium  got: low
+  [substance] "Build flashcard deck CRUD API"
+    expected: high  got: low
+  [substance] "Add integration tests for deck API"
+    expected: high  got: low
+  [substance] "Implement JWT token refresh endpoint"
+    expected: high  got: low
+  [substance] "Implement spaced repetition algorithm"
+    expected: high  got: low
+  [substance] "Add end-to-end tests for login flow"
+    expected: medium  got: low
+  [work_type] "Extract email validation into shared utility"
+    expected: refactor  got: test
+  [work_type] "Run ESLint auto-fix on route files"
+    expected: formatting  got: fix
+  [work_type] "Build study session timer component"
+    expected: feature  got: formatting
+  [substance] "Build study session timer component"
+    expected: high  got: low
+  [substance] "Fix memory leak in WebSocket handler"
+    expected: medium  got: low
+  [work_type] "Add Vitest configuration to server package"
+    expected: generated  got: test
+  [substance] "Implement progress tracking for study sessions"
+    expected: high  got: low
+  [substance] "Refactor authentication to separate concerns"
+    expected: high  got: low
+  [work_type] "Add CHANGELOG entry for v0.3.0"
+    expected: docs  got: fix
+  [substance] "Build notification system for due cards"
+    expected: high  got: low
+  [work_type] "Fix CSS specificity conflict in card component"
+    expected: fix  got: test
+  [work_type] "Generate TypeScript types from OpenAPI spec"
+    expected: generated  got: test
+  [substance] "Implement bulk card import from CSV"
+    expected: high  got: low
+  [work_type] "Add rate limit error handling in client fetch wrapper"
+    expected: fix  got: feature
+  [substance] "Add rate limit error handling in client fetch wrapper"
+    expected: medium  got: low
+
+--- holdout set (holdout.csv) (10 commits) ---
+work_type  accuracy: 50.0%  (5/10)
+substance  accuracy: 50.0%  (5/10)
+Misses (10):
+  [work_type] "Add dark mode toggle to settings page"
+    expected: feature  got: docs
+  [substance] "Add dark mode toggle to settings page"
+    expected: medium  got: low
+  [work_type] "Bump dependency versions in package.json"
+    expected: fix  got: feature
+  [substance] "Add Playwright end-to-end test suite for dashboard"
+    expected: high  got: low
+  [work_type] "Inline helper function that was only called once"
+    expected: refactor  got: formatting
+  [substance] "Implement WebSocket push for real-time card updates"
+    expected: high  got: low
+  [work_type] "Add contributing guide and code of conduct"
+    expected: docs  got: test
+  [substance] "Add contributing guide and code of conduct"
+    expected: medium  got: low
+  [work_type] "Normalise button padding across all pages"
+    expected: formatting  got: feature
+  [substance] "Implement export-to-Anki feature for decks"
+    expected: high  got: low
+```
+
+---

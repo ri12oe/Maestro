@@ -403,3 +403,35 @@ Misses (10):
 ```
 
 ---
+
+## 2026-11-13 — Session 7: Review fixes to Milestone 3a (written with Claude, not IBM Bob)
+
+IBM Bob's trial Bobcoins ran out after Session 6, so these review fixes to Bob's
+Milestone 3a code were written by Claude (Anthropic) and applied as a patch.
+
+| File | Change |
+|---|---|
+| `server/src/ai/reasoner.ts` | Stalled-task levels now depend on the deadline: high if due within 7 days or overdue, medium within 14, low if there is no due date and it has been idle 14+ days; tasks further out are no longer flagged (before: 5 of 6 demo tasks were flagged). Mock/fallback descriptions are built from each risk's facts and name the task, directory and numbers. A failed AI call now falls back to that wording instead of failing the whole sync. More specific mock check-in message. |
+| `server/src/routes/summary.ts` | `tasksAtRisk` counts distinct tasks with an active risk (before: it counted risk cards and showed 8 of 6 tasks). |
+| `server/src/tests/reasoner-fixes.test.ts` | **New.** 9 regression tests for the fixes above, including the summary route via supertest. |
+
+### `npm test` output
+
+```
+ ✓ src/tests/ai.test.ts (18 tests)
+ ✓ src/tests/reasoner.test.ts (14 tests)
+ ✓ src/tests/github.test.ts (15 tests)
+ ✓ src/tests/sync.test.ts (1 test)
+ ✓ src/tests/reasoner-fixes.test.ts (9 tests)
+ ✓ src/tests/migration.test.ts (5 tests)
+      Tests  62 passed (62)
+```
+
+### `npm run seed` risks after the fixes (`AI_PROVIDER=mock`)
+
+```
+[HIGH]   #12 Auth flow has had no matched activity for 7 days, and it is due in 7 days.
+[MEDIUM] #14 Backend API endpoints has had no matched activity for 12 days, and it is due in 10 days.
+[MEDIUM] Only one person has changed server/ recently (100% of the last 11 changes). ...
+[MEDIUM] Open work is unevenly spread: one teammate holds 2 open tasks, including at least one that is behind, ...
+```

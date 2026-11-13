@@ -5,7 +5,7 @@
  *   statCards:
  *     tasksDone      — count of closed tasks
  *     tasksTotal     — count of all tasks
- *     tasksAtRisk    — count of non-dismissed risks
+ *     tasksAtRisk    — number of distinct tasks with an active (non-dismissed) risk
  *     pendingSuggestions — count of pending suggestions
  *   members: (alphabetical order, never sorted by work amount)
  *     memberId, login, displayName
@@ -63,7 +63,7 @@ router.get('/', (req: Request<TeamParams>, res: Response) => {
   `).get(teamId) as { tasks_done: number; tasks_total: number };
 
   const { n: tasksAtRisk } = db.prepare(
-    'SELECT COUNT(*) AS n FROM risks WHERE team_id = ? AND dismissed = 0',
+    'SELECT COUNT(DISTINCT task_id) AS n FROM risks WHERE team_id = ? AND dismissed = 0 AND task_id IS NOT NULL',
   ).get(teamId) as { n: number };
 
   const { n: pendingSuggestions } = db.prepare(

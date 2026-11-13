@@ -123,13 +123,23 @@ function detectStalledTasks(
     const isStalled = !recent || daysDiff(new Date(recent.authored_at), today) > 5;
     if (!isStalled) continue;
 
-    // Determine level by due date
-    let level: 'high' | 'medium';
+    // Determine level by due date. A quiet task that is weeks from its deadline
+    // is normal, not a risk — flagging it would bury the real problems.
+    //   due within 7 days (or overdue) → high
+    //   due within 14 days             → medium
+    //   no due date, idle 14+ days     → low
+    //   otherwise                      → not a risk
+    const idleDays = recent ? daysDiff(new Date(recent.authored_at), today) : Infinity;
+    let level: 'high' | 'medium' | 'low';
     if (task.due_date) {
       const daysUntilDue = daysDiff(today, new Date(task.due_date));
-      level = daysUntilDue <= 7 ? 'high' : 'medium';
+      if (daysUntilDue <= 7) level = 'high';
+      else if (daysUntilDue <= 14) level = 'medium';
+      else continue;
+    } else if (idleDays >= 14) {
+      level = 'low';
     } else {
-      level = 'medium';
+      continue;
     }
 
     const evidence: DetectedRisk['evidence'] = [{ type: 'task', id: task.id }];
@@ -374,6 +384,31 @@ function buildMemberProfiles(
   });
 }
 
+// ── Template wording (mock mode and AI fallback) ─────────────────────────────
+
+/** Plain-language description built from a risk's own facts. Never names a person. */
+export function templateDescription(risk: DetectedRisk): string {
+  const s = risk.signal as Record<string, unknown>;
+  if (risk.kind === 'stalled_task') {
+    const label = `#${s.taskNumber ?? '?'} ${s.taskTitle}`;
+    const idle = s.daysSinceLastActivity == null
+      ? 'has no matched work yet'
+      : `has had no matched activity for ${s.daysSinceLastActivity} days`;
+    let due = '';
+    if (typeof s.dueDate === 'string') {
+      const days = Math.ceil((new Date(s.dueDate).getTime() - Date.now()) / 86_400_000);
+      due = days < 0 ? `, and it is ${-days} days overdue` : `, and it is due in ${days} day${days === 1 ? '' : 's'}`;
+    }
+    return `${label} ${idle}${due}.`;
+  }
+  if (risk.kind === 'single_point_of_failure') {
+    const dir = s.directory ? `${s.directory}/` : 'one area of the code';
+    const share = s.commitShare != null ? ` (${s.commitShare}% of the last ${s.totalCommits} changes)` : '';
+    return `Only one person has changed ${dir} recently${share}. If they are unavailable near the deadline, nobody else knows this part of the project.`;
+  }
+  return `Open work is unevenly spread: one teammate holds ${s.taskCount} open tasks, including at least one that is behind, while others have room for more.`;
+}
+
 // ── Mock AI response ──────────────────────────────────────────────────────────
 
 function mockReasonerResponse(
@@ -381,13 +416,7 @@ function mockReasonerResponse(
   risks: DetectedRisk[],
   profiles: MemberProfile[],
 ): ReasonerResponse {
-  const descriptions: Record<DetectedRisk['kind'], string> = {
-    stalled_task: 'This task has had no recorded activity for more than 5 days and may need attention to stay on track.',
-    single_point_of_failure: 'One person has been the primary contributor to this area of the codebase, which could create a bottleneck if they become unavailable.',
-    overload: 'One team member is currently responsible for multiple open tasks, including at least one that is running behind schedule, while another member has capacity available.',
-  };
-
-  const riskOutputs = risks.map(r => ({ description: descriptions[r.kind] }));
+  const riskOutputs = risks.map(r => ({ description: templateDescription(r) }));
 
   // Generate at most 3 suggestions for overload risks
   const suggestions: ReasonerResponse['suggestions'] = [];
@@ -425,7 +454,7 @@ function mockReasonerResponse(
         `${toProfile.displayName} has capacity and relevant experience: ${toProfile.topDirectories.join(', ') || 'general contributions'}.`,
         'Redistributing this task would help the project maintain momentum.',
       ],
-      checkin_message: `Hey team — just a quick note that we're exploring rebalancing some tasks to keep things moving. No changes are final yet, just opening the conversation!`,
+      checkin_message: `Hey team, a few of our tasks have gone quiet as the deadline gets closer. Referee suggested ${toProfile.displayName.split(' ')[0]} picks up #${taskRow.github_issue_number} "${taskRow.title}" so ${fromProfile.displayName.split(' ')[0]} has room for the rest. Does that work for everyone?`,
     });
   }
 
@@ -509,7 +538,7 @@ function persistResults(
     // Insert new risks with AI descriptions
     for (let i = 0; i < risks.length; i++) {
       const risk = risks[i];
-      const description = aiResponse.risks[i]?.description ?? 'Risk detected.';
+      const description = aiResponse.risks[i]?.description ?? templateDescription(risk);
       const evidenceJson = JSON.stringify(risk.evidence.map(e => ({ type: e.type, id: e.id })));
 
       db.prepare(`
@@ -598,10 +627,19 @@ export async function runReasoner(
       : mockReasonerResponse(db, allRisks, profiles);
   } else {
     const prompt = buildReasonerPrompt(allRisks, profiles);
-    aiResponse = await completeJSON(prompt, ReasonerResponseSchema, 'ReasonerResponse');
-    // Safety: pad missing risk descriptions
-    while (aiResponse.risks.length < allRisks.length) {
-      aiResponse.risks.push({ description: 'Risk detected.' });
+    try {
+      aiResponse = await completeJSON(prompt, ReasonerResponseSchema, 'ReasonerResponse');
+    } catch (err) {
+      // The detected risks are real either way: keep them with template wording
+      // instead of failing the whole sync because one AI call failed.
+      console.error('[reasoner] AI call failed, using template text:', err instanceof Error ? err.message : err);
+      aiResponse = { risks: [], suggestions: [] };
+    }
+    // Safety: fill any missing descriptions from the risk's own facts
+    for (let i = 0; i < allRisks.length; i++) {
+      if (!aiResponse.risks[i]?.description?.trim()) {
+        aiResponse.risks[i] = { description: templateDescription(allRisks[i]) };
+      }
     }
   }
 

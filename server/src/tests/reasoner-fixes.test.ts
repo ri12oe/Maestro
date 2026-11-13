@@ -25,6 +25,7 @@ process.env.AI_PROVIDER = 'mock';
 const { runMigration } = await import('../db/migrate.js');
 const { runReasoner } = await import('../ai/reasoner.js');
 const { default: summaryRouter } = await import('../routes/summary.js');
+const { default: singletonDb } = await import('../db/client.js');
 
 runMigration(dbPath);
 const db = new Database(dbPath);
@@ -66,8 +67,14 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
+  // Close BOTH connections to the test file — Windows refuses to delete open files.
   db.close();
-  rmSync(tmpDir, { recursive: true, force: true });
+  singletonDb.close();
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    // Temp-dir cleanup is best-effort; the OS clears it eventually.
+  }
 });
 
 describe('stalled-task levels', () => {

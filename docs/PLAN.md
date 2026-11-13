@@ -7,7 +7,7 @@
 
 ## Top-Level Overview
 
-Build a monorepo web app that ingests a team's GitHub repo (commits and Issues), classifies each contribution with an LLM, matches work to tasks, surfaces risk, and proposes rebalance suggestions — all surfaced in a React dashboard. The backend is a Node/Express REST API backed by SQLite; the AI layer is behind a single provider interface using IBM Granite via watsonx.ai.
+Build a monorepo web app that ingests a team's GitHub repo (commits and Issues), classifies each contribution with an LLM, matches work to tasks, surfaces risk, and proposes rebalance suggestions — all surfaced in a React dashboard. The backend is a Node/Express REST API backed by SQLite; the AI layer is behind a single provider interface using xAI's Grok API.
 
 **Non-goals (MVP):** user auth beyond team setup, webhooks, Google Docs/Slack, weekly digest, instructor report, multi-team classrooms.
 
@@ -47,9 +47,11 @@ Maestro/
 │   │   │   ├── github.ts            # GitHub REST API calls (commits + Issues)
 │   │   │   └── sync.ts              # Orchestrates a full sync
 │   │   ├── ai/
-│   │   │   ├── provider.ts          # completeJSON + embed; implementation chosen by AI_PROVIDER env var
-│   │   │   ├── classifier.ts        # Commit → structured label
-│   │   │   ├── matcher.ts           # Contribution → Issue embedding match (threshold 0.5)
+│   │   │   ├── provider.ts          # completeJSON; implementation chosen by AI_PROVIDER env var (mock | grok)
+│   │   │   ├── classifier.ts        # Commit → structured label; runs after sync
+│   │   │   ├── eval/
+│   │   │   │   ├── commits.csv      # 30 hand-labeled commits for accuracy measurement
+│   │   │   │   └── run.ts           # npm run eval — prints accuracy and misses
 │   │   │   └── reasoner.ts          # Deterministic risk signals; LLM writes explanations + swaps
 │   │   ├── routes/
 │   │   │   ├── teams.ts
@@ -309,20 +311,18 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 - `work_type` is one of the seven defined values; `substance` is low/medium/high; `summary` is a non-empty string.
 - Each contribution has at most one `task_matches` row pointing to the highest-similarity Issue with score ≥ 0.5; contributions below the threshold have no match row.
 - Accuracy on the hand-labeled test set (≥30 commits) is recorded in `BOB_LOG.md`.
-- `provider.ts` exports `completeJSON(prompt, zodSchema)` and `embed(text)`; the implementation is selected by `AI_PROVIDER` env var (`watsonx` or `mock`); the mock returns valid fixture data for testing. Invalid JSON from the LLM triggers one retry before throwing.
+- `provider.ts` exports `completeJSON(prompt, zodSchema, schemaName)`; the implementation is selected by `AI_PROVIDER` env var (`mock` or `grok`); the mock is deterministic and offline. Invalid JSON from the LLM triggers one retry (after 2 s for 5xx/429) before throwing.
 - Zod validates all LLM JSON responses; a validation failure triggers one retry.
-- `seed.ts` in `server/src/db/` inserts a demo team with 4 members, ≥20 contributions with realistic messages and diffs, and two Issues (one stalled, one active) directly into the database, then runs the AI pipeline.
+- `seed.ts` in `server/src/db/` inserts the demo team "StudyBuddy" with Rio, Sam, Priya and Jordan, 6 Issues with due dates, and ≥25 commits directly into the database; Sam is overloaded with backend work; Issue #12 "Auth flow" has had no activity for 6+ days and is due within 8 days of today; Jordan has only a few test commits; Priya has 3 manual log entries. Then runs the classifier.
 
 **Todo:**
-1. Write `server/src/ai/provider.ts` with `completeJSON(prompt, zodSchema)` and `embed(text)`; select implementation via `AI_PROVIDER` env var; implement `mock` provider; implement `watsonx` provider targeting IBM Granite via watsonx.ai.
-2. Write `server/src/ai/classifier.ts` — builds prompt from commit title + diff_summary, calls `completeJSON`, validates with Zod, writes to `classifications`.
-3. Wire classifier into the sync pipeline.
-4. Write `server/src/ai/matcher.ts` — embed task title+body and contribution title+diff_summary, cosine similarity, write top match only if score ≥ 0.5.
-5. Add embedding column population to the sync pipeline.
-6. Assemble a hand-labeled test CSV of ≥30 commits with expected `work_type` and `substance`.
-7. Write a test script that runs the classifier against the test set and prints accuracy.
-8. Write `server/src/db/seed.ts` — insert demo team, 4 members, ≥20 contributions, two Issues, then run classifier and matcher.
-9. Record accuracy results in `BOB_LOG.md`.
+1. Write `server/src/ai/provider.ts` with `completeJSON(prompt, zodSchema, schemaName)`; select implementation via `AI_PROVIDER` env var (`mock` or `grok`); implement `mock` provider (deterministic, offline); implement `grok` provider (POST to `https://api.x.ai/v1/chat/completions` with structured output JSON schema). Retry once on invalid JSON or 5xx/429 (wait 2 s). Never log the API key.
+2. Write `server/src/ai/classifier.ts` — one call per contribution; input: commit title, diff_summary, team's open tasks as `#number: title`; output schema: `work_type` (7 enum values), `substance` (low/medium/high), `summary` (one sentence), `task_number` (integer from list or null), `match_confidence` (low/medium/high). Write a `classifications` row. Write a `task_matches` row only if `task_number` is a real open task and confidence isn't low; store `high=0.9, medium=0.7`. Skip already-classified contributions; never overwrite a human-set task match. `model_version = grok:<model>:prompt-v1`.
+3. Wire classifier into the sync pipeline at the end of `syncTeam`; add `POST /api/teams/:teamId/classify` for on-demand classification.
+4. Write `server/src/ai/eval/commits.csv` with 30 hand-labeled commits; `npm run eval` prints accuracy and lists misses.
+5. Write `server/src/db/seed.ts` — insert "StudyBuddy" team, Rio/Sam/Priya/Jordan, 6 Issues with due dates, ≥25 commits; Sam overloaded; Issue #12 "Auth flow" stalled and due soon; Priya has 3 manual entries; then run classifier.
+6. In `sync.ts`: when a member found by email has no `github_login` and the commit has one, fill it in.
+7. Record results in `BOB_LOG.md`.
 
 **Relevant context:** `docs/BRIEF.md` §AI approach; `server/src/ingestion/sync.ts`; `server/src/db/schema.sql`.
 
@@ -421,6 +421,5 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 | # | Question | Default if not decided |
 |---|---|---|
-| 1 | watsonx.ai region and project ID for Granite? | Required before Milestone 2; store in `.env` as `WATSONX_URL` and `WATSONX_PROJECT_ID` |
-| 2 | Embedding model — Granite embedding or a separate model? | `ibm/granite-embedding-107m-multilingual` via watsonx.ai |
-| 3 | Sync frequency in production — manual trigger only, or periodic? | Manual trigger only for MVP |
+| 1 | xAI Grok model name? | `grok-3-mini` (set via `GROK_MODEL` env var) |
+| 2 | Sync frequency in production — manual trigger only, or periodic? | Manual trigger only for MVP |

@@ -3,17 +3,22 @@
  *
  * 1. Fetch all commits + Issues from GitHub.
  * 2. Upsert members for unknown contributors.
+ *    - When a member is found by email but has no github_login and the commit
+ *      has one, fill it in.
  * 3. Persist contributions (skipping already-stored SHAs).
  * 4. Persist tasks (upsert by github_issue_number).
+ * 5. Run the AI classifier on any unclassified contributions.
  */
 
 import db from '../db/client.js';
 import { fetchCommits, fetchIssues, authorKey } from './github.js';
+import { classifyTeam } from '../ai/classifier.js';
 
 export interface SyncResult {
   newContributions: number;
   updatedTasks: number;
   newMembers: number;
+  classified: number;
 }
 
 export async function syncTeam(teamId: number): Promise<SyncResult> {
@@ -55,11 +60,15 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   );
 
   const getMemberByEmail = db.prepare(
-    'SELECT id FROM members WHERE team_id = ? AND email = ?',
+    'SELECT id, github_login FROM members WHERE team_id = ? AND email = ?',
   );
 
   const getUnknownMember = db.prepare(
     "SELECT id FROM members WHERE team_id = ? AND github_login IS NULL AND email IS NULL AND display_name = 'Unknown Contributor'",
+  );
+
+  const updateLogin = db.prepare(
+    'UPDATE members SET github_login = ? WHERE id = ?',
   );
 
   const insertContribution = db.prepare(`
@@ -82,7 +91,17 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
         : null;
 
       if (!member && author.email) {
-        member = getMemberByEmail.get(teamId, author.email) as { id: number } | undefined;
+        const byEmail = getMemberByEmail.get(teamId, author.email) as
+          | { id: number; github_login: string | null }
+          | undefined;
+
+        if (byEmail) {
+          // Fill in github_login if the commit has one and the row doesn't
+          if (author.login && !byEmail.github_login) {
+            updateLogin.run(author.login, byEmail.id);
+          }
+          member = byEmail;
+        }
       }
 
       if (!member) {
@@ -163,5 +182,8 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
 
   taskTx();
 
-  return { newContributions, updatedTasks: issues.length, newMembers };
+  // ── 4. Classify any unclassified contributions ───────────────────────────
+  const classified = await classifyTeam(teamId);
+
+  return { newContributions, updatedTasks: issues.length, newMembers, classified };
 }

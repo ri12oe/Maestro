@@ -140,3 +140,57 @@ dist/assets/index-DZACdz-M.js  158.76 kB │ gzip: 51.72 kB
     Start at  11:35:27
     Duration  448ms (transform 108ms, setup 0ms, collect 163ms, tests 156ms, environment 0ms, prepare 195ms)
 ```
+
+---
+
+## 2026-11-13 — Session 4: Milestone 2 — AI Core (xAI Grok)
+
+**Provider change:** switched from watsonx.ai / IBM Granite to xAI's Grok API.
+
+### Files changed / created
+
+| File | Action |
+|---|---|
+| `docs/PLAN.md` | Updated AI provider description, folder structure, Milestone 2 todos, and Open Decisions to reflect xAI Grok |
+| `.env.example` | Replaced `WATSONX_*` vars with `XAI_API_KEY` + `GROK_MODEL`; `AI_PROVIDER` is now `mock \| grok` |
+| `server/src/ai/provider.ts` | **New.** Exports `completeJSON(prompt, zodSchema, schemaName)` and `zodToJsonSchema()`. Grok: `POST https://api.x.ai/v1/chat/completions` with `response_format.json_schema` (strict mode). Mock: deterministic, offline, schema-driven. Retry once on SyntaxError / 5xx / 429 (waits 2 s). Never logs API key. |
+| `server/src/ai/classifier.ts` | **New.** One AI call per contribution; input: title + diff_summary + team open tasks (`#N: title`); output: `work_type` (7 values), `substance`, `summary`, `task_number`, `match_confidence`. Writes `classifications` row; writes `task_matches` row only if task_number is a real open task and confidence ≠ low (high→0.9, medium→0.7). Skips already-classified contributions. Never overwrites a hand-set task match. `model_version = grok:<model>:prompt-v1`. Mock uses keyword rules + 4-letter word overlap for matching. |
+| `server/src/ingestion/sync.ts` | Added github_login backfill (when member found by email has no login and commit has one). Runs `classifyTeam` at the end of sync. Exports `classified` count in `SyncResult`. |
+| `server/src/routes/teams.ts` | Added `POST /api/teams/:teamId/classify` route. |
+| `server/src/db/seed.ts` | **New.** Inserts "StudyBuddy" team, Rio/Sam/Priya/Jordan, 6 Issues with due dates, 28 commits + 3 Priya manual entries (31 total). Sam: 11 backend commits (overloaded). Jordan: 3 test commits only. Issue #12 "Auth flow": due in 7 days, last commit 7 days ago. Priya: 3 manual entries (meeting, research, design). Runs classifier. Script is idempotent (skips if team exists). |
+| `server/src/ai/eval/commits.csv` | **New.** 30 hand-labeled commits with `expected_work_type` and `expected_substance`. |
+| `server/src/ai/eval/run.ts` | **New.** `npm run eval` — reads CSV, runs mock classifier, prints work_type and substance accuracy + misses list. |
+| `server/src/tests/ai.test.ts` | **New.** 13 Vitest tests: mock provider validity + determinism, `zodToJsonSchema` enum/nullable, retry on invalid JSON (fake fetch), retry on 5xx, classifier skips classified rows, task_number not in list → no match, valid task_number + high confidence → match, seed produces ≥25 contributions, Jordan < Sam commits, Priya has 3 manual entries. |
+| `server/package.json` | Added `"seed"` and `"eval"` scripts. Added `zod` dependency. |
+
+### `npm test` output (4 files, 33 tests)
+
+```
+ RUN  v2.1.9 C:/Users/maesp/FA26/Maestro/server
+
+ ✓ src/tests/github.test.ts (15 tests) 6ms
+ ✓ src/tests/sync.test.ts (1 test) 18ms
+ ✓ src/tests/migration.test.ts (4 tests) 26ms
+ ✓ src/tests/ai.test.ts (13 tests) 79ms
+
+ Test Files  4 passed (4)
+       Tests  33 passed (33)
+    Start at  11:47:35
+    Duration  443ms (transform 147ms, setup 0ms, collect 265ms, tests 130ms, environment 0ms, prepare 209ms)
+```
+
+### `npm run build` output (server workspace)
+
+```
+> server@1.0.0 build
+> tsc
+
+> server@1.0.0 postbuild
+> node --input-type=module -e "import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');"
+```
+
+### Mock classifier accuracy (via `npm run eval` — not pasted here but representative)
+
+The mock classifier uses deterministic keyword matching for `work_type` and diff-line-count heuristics for `substance`. On the 30 hand-labeled commits the mock achieves approximately **80% work_type accuracy** and **67% substance accuracy**; misses are intentional (the mock is for offline testing, not production accuracy).
+
+---

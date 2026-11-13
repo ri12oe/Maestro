@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/client.js';
 import { syncTeam } from '../ingestion/sync.js';
+import { classifyTeam } from '../ai/classifier.js';
 
 const router = Router();
 
@@ -58,6 +59,25 @@ router.post('/:teamId/sync', async (req, res) => {
   try {
     const result = await syncTeam(teamId);
     res.json({ ok: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/teams/:teamId/classify — classify any still-unclassified contributions
+router.post('/:teamId/classify', async (req, res) => {
+  const teamId = Number(req.params.teamId);
+
+  const team = db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId);
+  if (!team) {
+    res.status(404).json({ error: 'Team not found' });
+    return;
+  }
+
+  try {
+    const classified = await classifyTeam(teamId);
+    res.json({ ok: true, classified });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: message });

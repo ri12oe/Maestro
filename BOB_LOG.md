@@ -527,3 +527,15 @@ suggestions, with no way to tell why.
 **Checked in a real browser** (headless Chrome, 1280px and 390px) against the seeded demo: dismissing a risk removes it; accepting a swap reassigns #14 to Jordan in the database; Copy puts the check-in message on the clipboard; logging work saves it, and the background risk refresh cleared #12's stalled risk because the entry was linked to it; Connect rejects a malformed repo and shows the missing-token message with Retry sync. No console errors besides the intentional failed sync.
 
 `npm test`: 78 passed (78). `npm run build`: client and server build cleanly.
+
+## 2026-11-13 — Session 14: First real GitHub sync (written with Claude, not IBM Bob)
+
+Synced the real `ri12oe/Maestro` repository end to end through the API (16 commits,
+2 authors, ~6 s, no errors). Two problems found and fixed:
+
+| File | Change |
+|---|---|
+| `server/src/ingestion/sync.ts` | `files_changed`, `additions`, `deletions` used `|| null`, so a commit that only deletes lines stored "unknown" instead of 0. Now `?? null`. |
+| `server/src/ai/classifier.ts` | Offline mock labeled every real commit "test" because it keyword-searched the diff text. Now the title decides first (keywords at word starts, so "latest" ≠ "test"), then the changed file paths (all test files → test, all docs → docs), else feature. Mock eval work_type: 73.3% → 83.3% on the main set. |
+
+Not yet tested against real data: GitHub Issues and milestone due dates (the Maestro repo has none).

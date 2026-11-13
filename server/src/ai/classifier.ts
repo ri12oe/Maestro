@@ -77,13 +77,33 @@ const WORK_TYPE_KEYWORDS: Record<string, string[]> = {
   feature:    ['add', 'implement', 'create', 'build', 'feature', 'new', 'introduce', 'support'],
 };
 
+const TEST_PATH = /(^|\/)(tests?|__tests__|spec|e2e)(\/|$)|\.(test|spec)\.[a-z]+$/i;
+const DOC_PATH = /\.(md|mdx|txt|rst)$|(^|\/)docs?\//i;
+
+/** File paths from a diff summary ("--- path (+a/-d)" or "+++ b/path" headers). */
+function diffPaths(diffSummary: string | null): string[] {
+  if (!diffSummary) return [];
+  const paths = new Set<string>();
+  for (const m of diffSummary.matchAll(/^(?:--- (\S+) \(|\+\+\+ b\/(\S+))/gm)) paths.add(m[1] ?? m[2]);
+  return [...paths];
+}
+
+/**
+ * Offline stand-in for the AI label. The commit title decides first, matching
+ * keywords at word starts ("tests" counts, "latest" doesn't); only if the title
+ * says nothing do the changed file paths decide. The diff text itself is never
+ * keyword-searched: almost every diff mentions "test" or "add" somewhere.
+ */
 function mockWorkType(title: string, diffSummary: string | null): Classification['work_type'] {
-  const text = `${title} ${diffSummary ?? ''}`.toLowerCase();
+  const t = title.toLowerCase();
   for (const [type, keywords] of Object.entries(WORK_TYPE_KEYWORDS)) {
-    if (keywords.some(k => text.includes(k))) {
+    if (keywords.some(k => new RegExp(`\\b${k.replace(/[-]/g, '\\-')}`).test(t))) {
       return type as Classification['work_type'];
     }
   }
+  const paths = diffPaths(diffSummary);
+  if (paths.length && paths.every(p => TEST_PATH.test(p))) return 'test';
+  if (paths.length && paths.every(p => DOC_PATH.test(p))) return 'docs';
   return 'feature';
 }
 

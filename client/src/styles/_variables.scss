@@ -1,14 +1,23 @@
 // Brand tokens — Group Project Referee
-// Reference: docs/BRIEF.md §Screens
+// Reference: docs/BRIEF.md §Screens and the UI draft canvas
 
 // Colours
 $color-bg:          #F6F6F3;
+$color-surface:     #FFFFFF;
+$color-border:      #E2E2DC;
+$color-border-strong: #C9CBC3;
 $color-sidebar:     #16181D;
+$color-sidebar-active: #2A2E36;
+$color-sidebar-text: #C9CDD4;
 $color-accent:      #1F5FBF;
+$color-accent-dark: #174A94;
+$color-accent-soft: #E8EFFA;
 $color-risk-text:   #A34A06;
+$color-risk-strong: #8A3D05;
 $color-risk-bg:     #FDF0E4;
+$color-neutral-bg:  #F1F2EE;
 $color-text:        #16181D;
-$color-muted:       #6B7280;
+$color-muted:       #5A606B;   // 6.2:1 on white — passes WCAG AA for small text
 
 // Typography
 $font-heading:      'Space Grotesk', sans-serif;
@@ -20,3 +29,22 @@ $space-sm:  8px;
 $space-md:  16px;
 $space-lg:  24px;
 $space-xl:  40px;
+
+$radius:    12px;
+$radius-sm: 8px;
+
+@mixin card {
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-radius: $radius;
+  padding: $space-lg;
+}
+
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

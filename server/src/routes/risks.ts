@@ -7,12 +7,20 @@ const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/risks
 router.get('/', (req: Request<TeamParams>, res: Response) => {
-  const risks = db.prepare(`
-    SELECT * FROM risks
-    WHERE team_id = ? AND dismissed = 0
-    ORDER BY CASE level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, generated_at DESC
-  `).all(Number(req.params.teamId));
-  res.json(risks);
+  const rows = db.prepare(`
+    SELECT r.*, t.github_issue_number AS task_number, t.title AS task_title,
+           t.due_date AS task_due_date, t.assignee_login AS task_assignee
+    FROM risks r
+    LEFT JOIN tasks t ON t.id = r.task_id
+    WHERE r.team_id = ? AND r.dismissed = 0
+    ORDER BY CASE r.level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, r.id ASC
+  `).all(Number(req.params.teamId)) as Array<Record<string, unknown> & { evidence: string | null }>;
+
+  res.json(rows.map(r => {
+    let evidence: Array<{ type: string; id: number }> = [];
+    try { evidence = JSON.parse(r.evidence ?? '[]'); } catch { /* keep empty */ }
+    return { ...r, evidence };
+  }));
 });
 
 // POST /api/teams/:teamId/risks/:riskId/dismiss

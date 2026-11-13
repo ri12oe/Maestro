@@ -1,0 +1,27 @@
+@use '../../styles/variables' as *;
+
+.risk-preview {
+  border-radius: $radius-sm;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 14px;
+
+  &--high { background: $color-risk-bg; }
+  &--medium, &--low { background: $color-neutral-bg; }
+}
+
+.overview__more { font-size: 14px; font-weight: 500; }
+
+.overview__swap {
+  background: $color-accent-soft;
+  border-color: #C7D7F2;
+  font-size: 15px;
+  line-height: 1.5;
+
+  .btn { align-self: flex-start; }
+}
+
+.overview__why { font-size: 14px; color: $color-muted; }

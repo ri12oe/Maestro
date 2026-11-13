@@ -7,12 +7,26 @@ const router = Router({ mergeParams: true });
 
 // GET /api/teams/:teamId/suggestions
 router.get('/', (req: Request<TeamParams>, res: Response) => {
-  const suggestions = db.prepare(`
-    SELECT * FROM suggestions
-    WHERE team_id = ? AND status = 'pending'
-    ORDER BY generated_at DESC
-  `).all(Number(req.params.teamId));
-  res.json(suggestions);
+  const rows = db.prepare(`
+    SELECT s.id, s.status, s.rationale, s.checkin_message, s.generated_at,
+           s.task_id, t.github_issue_number AS task_number, t.title AS task_title, t.due_date AS task_due_date,
+           s.from_member_id, fm.github_login AS from_login, fm.display_name AS from_name,
+           s.to_member_id,   tm.github_login AS to_login,   tm.display_name AS to_name,
+           (SELECT COUNT(*) FROM tasks x WHERE x.team_id = s.team_id AND x.status = 'open' AND x.assignee_login = fm.github_login) AS from_open_tasks,
+           (SELECT COUNT(*) FROM tasks x WHERE x.team_id = s.team_id AND x.status = 'open' AND x.assignee_login = tm.github_login) AS to_open_tasks
+    FROM suggestions s
+    JOIN tasks t    ON t.id = s.task_id
+    JOIN members fm ON fm.id = s.from_member_id
+    JOIN members tm ON tm.id = s.to_member_id
+    WHERE s.team_id = ? AND s.status = 'pending'
+    ORDER BY s.id ASC
+  `).all(Number(req.params.teamId)) as Array<Record<string, unknown> & { rationale: string | null }>;
+
+  res.json(rows.map(r => {
+    let rationale: string[] = [];
+    try { rationale = JSON.parse(r.rationale ?? '[]'); } catch { rationale = r.rationale ? [r.rationale] : []; }
+    return { ...r, rationale };
+  }));
 });
 
 // POST /api/teams/:teamId/suggestions/:suggestionId/respond

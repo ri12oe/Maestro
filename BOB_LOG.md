@@ -491,3 +491,21 @@ suggestions, with no way to tell why.
 | `server/src/tests/reasoner-fixes.test.ts` | 3 tests for `loginsToNames()`. |
 
 `npm test`: 71 passed (71).
+
+## 2026-11-13 — Session 12: Milestone 3b — React foundations, Overview, Member evidence (written with Claude, not IBM Bob)
+
+| Area | Change |
+|---|---|
+| `client/src/api/` | Typed API client (`client.ts`) and response types (`types.ts`). |
+| `client/src/hooks/useApi.ts` | Small data-loading hook with loading / error / reload. |
+| `client/src/components/` | `Layout` (dark sidebar from the UI draft; compact row on phones; Overview stays highlighted on member pages), shared UI pieces (`ui.tsx`: page header, cards, stat cards, pills, risk-level badges, loading / error / empty states, buttons), `ContributionMap` (one stacked bar per member on a shared substance-weighted scale, alphabetical, with a text equivalent for screen readers). |
+| `client/src/pages/Overview/` | Stat cards, contribution map, top two risks, first pending swap suggestion. |
+| `client/src/pages/MemberEvidence/` | Work mix, every contribution with its AI label, substance, matched task, size and GitHub link; "Wrong label?" opens a dispute form (optional note) and the row then shows "Label disputed". |
+| `client/src/pages/ComingSoon/`, `Connect/` | Placeholders for Risk radar, Rebalance, Log work and team setup (Milestone 3c). |
+| `client/src/workTypes.ts`, `styles/_variables.scss` | Work-type categories and colours (distinct in lightness, not hue alone); design tokens from the UI draft. |
+| `server/src/routes/summary.ts` | Adds `team`, and per member `totalWeight`, `contributionCount`, `openTasks`. |
+| `server/src/routes/risks.ts`, `suggestions.ts`, `contributions.ts` | Risks include the task and parsed evidence; suggestions include names, task details, parsed rationale and open-task counts; contributions include the matched task and dispute note. |
+
+**Checked in a real browser** (headless Chrome, desktop 1280px and phone 390px) against the seeded demo: no console errors; flagging a label saves `disputed = 1` with the note in the database and updates the row.
+
+`npm test`: 71 passed (71). `npm run build`: client and server build cleanly.

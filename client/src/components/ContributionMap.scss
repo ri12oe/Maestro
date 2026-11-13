@@ -1,0 +1,52 @@
+@use '../styles/variables' as *;
+
+.cmap {
+  display: flex;
+  flex-direction: column;
+  gap: $space-md;
+
+  &__legend {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space-md;
+    font-size: 13px;
+    color: $color-muted;
+
+    li { display: flex; align-items: center; gap: 6px; }
+  }
+
+  &__swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  &__rows { list-style: none; display: flex; flex-direction: column; gap: $space-sm; }
+
+  &__row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    margin: 0 -12px;
+    border-radius: 10px;
+    color: $color-text;
+    text-decoration: none;
+
+    &:hover { background: $color-bg; text-decoration: none; }
+    &:focus-visible { outline: 2px solid $color-accent; outline-offset: 0; }
+  }
+
+  &__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  &__name { font-weight: 600; }
+  &__focus { font-size: 13px; color: $color-muted; }
+
+  &__track { display: block; height: 16px; }
+
+  &__bar {
+    display: flex;
+    height: 16px;
+    border-radius: 4px;
+    overflow: hidden;
+    span { display: block; height: 100%; }
+  }
+
+  &__meta { font-size: 13px; color: $color-muted; }
+}

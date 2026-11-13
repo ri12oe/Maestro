@@ -11,9 +11,14 @@ router.get('/', (req: Request<TeamParams>, res: Response) => {
   const { memberId, source, taskId } = req.query as Record<string, string | undefined>;
 
   let sql = `
-    SELECT c.*, cl.work_type, cl.substance, cl.summary, cl.disputed
+    SELECT c.id, c.member_id, c.source, c.github_sha, c.title, c.body, c.kind, c.link, c.url,
+           c.files_changed, c.additions, c.deletions, c.authored_at,
+           cl.work_type, cl.substance, cl.summary, cl.disputed, cl.dispute_note,
+           t.id AS task_id, t.github_issue_number AS task_number, t.title AS task_title
     FROM contributions c
     LEFT JOIN classifications cl ON cl.contribution_id = c.id
+    LEFT JOIN task_matches tm ON tm.contribution_id = c.id
+    LEFT JOIN tasks t ON t.id = tm.task_id
     WHERE c.team_id = ?
   `;
   const params: unknown[] = [teamId];

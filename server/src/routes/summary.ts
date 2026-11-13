@@ -51,7 +51,9 @@ function focusSummary(
 router.get('/', (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
 
-  const team = db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId);
+  const team = db.prepare('SELECT id, name, repo_owner, repo_name FROM teams WHERE id = ?').get(teamId) as
+    | { id: number; name: string; repo_owner: string; repo_name: string }
+    | undefined;
   if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
 
   // ── Stat cards ──────────────────────────────────────────────────────────
@@ -126,17 +128,28 @@ router.get('/', (req: Request<TeamParams>, res: Response) => {
       .slice(0, 2)
       .map(([d]) => d);
 
+    const { n: openTasks } = db.prepare(
+      "SELECT COUNT(*) AS n FROM tasks WHERE team_id = ? AND status = 'open' AND assignee_login = ?",
+    ).get(teamId, m.github_login) as { n: number };
+    const contributionCount = Object.values(workCounts).reduce((a, b) => a + b, 0);
+
     return {
       memberId: m.id,
       login: m.github_login,
       displayName: m.display_name,
       workCounts,
       substanceShares,
+      // Substance-weighted total (low=1, medium=2, high=3). Lets the UI draw bars
+      // on one scale; members stay in alphabetical order and are never ranked.
+      totalWeight,
+      contributionCount,
+      openTasks,
       focusSummary: focusSummary(workCounts, topDirs),
     };
   });
 
   res.json({
+    team: { id: team.id, name: team.name, repo: `${team.repo_owner}/${team.repo_name}` },
     statCards: {
       tasksDone: tasksDone ?? 0,
       tasksTotal: tasksTotal ?? 0,

@@ -8,11 +8,13 @@
  * 3. Persist contributions (skipping already-stored SHAs).
  * 4. Persist tasks (upsert by github_issue_number).
  * 5. Run the AI classifier on any unclassified contributions.
+ * 6. Run the risk reasoner.
  */
 
 import db from '../db/client.js';
 import { fetchCommits, fetchIssues, authorKey } from './github.js';
 import { classifyTeam } from '../ai/classifier.js';
+import { runReasoner } from '../ai/reasoner.js';
 
 export interface SyncResult {
   newContributions: number;
@@ -20,6 +22,7 @@ export interface SyncResult {
   newMembers: number;
   classified: number;
   classifyFailed: number;
+  risksDetected: number;
 }
 
 export async function syncTeam(teamId: number): Promise<SyncResult> {
@@ -75,10 +78,10 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   const insertContribution = db.prepare(`
     INSERT INTO contributions
       (team_id, member_id, source, github_sha, github_pr_number, title,
-       diff_summary, files_changed, additions, deletions, url, authored_at)
+       diff_summary, files_changed, additions, deletions, url, paths, authored_at)
     VALUES
       (@team_id, @member_id, 'commit', @github_sha, @github_pr_number, @title,
-       @diff_summary, @files_changed, @additions, @deletions, @url, @authored_at)
+       @diff_summary, @files_changed, @additions, @deletions, @url, @paths, @authored_at)
     ON CONFLICT (github_sha) DO NOTHING
   `);
 
@@ -145,6 +148,7 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
         additions: commit.additions || null,
         deletions: commit.deletions || null,
         url: commit.url,
+        paths: commit.paths.length > 0 ? JSON.stringify(commit.paths) : null,
         authored_at: commit.author.date,
       });
 
@@ -189,5 +193,11 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   // ── 4. Classify any unclassified contributions ───────────────────────────
   const { classified, failed: classifyFailed } = await classifyTeam(teamId);
 
-  return { newContributions, updatedTasks: issues.length, newMembers, classified, classifyFailed };
+  // ── 5. Run risk reasoner ─────────────────────────────────────────────────
+  await runReasoner(teamId);
+  const risksDetected = (db.prepare(
+    'SELECT COUNT(*) AS n FROM risks WHERE team_id = ? AND dismissed = 0',
+  ).get(teamId) as { n: number }).n;
+
+  return { newContributions, updatedTasks: issues.length, newMembers, classified, classifyFailed, risksDetected };
 }

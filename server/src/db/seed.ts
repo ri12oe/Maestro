@@ -23,6 +23,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runMigration } from './migrate.js';
 import { classifyTeam } from '../ai/classifier.js';
+import { runReasoner } from '../ai/reasoner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
@@ -103,7 +104,8 @@ const task12Id = insertTask(12, 'Auth flow',               daysFromNow(7),  'rio
 const task13Id = insertTask(13, 'User dashboard UI',       daysFromNow(14), 'priya-code');
 const task14Id = insertTask(14, 'Backend API endpoints',   daysFromNow(10), 'sam-builds');
 const task15Id = insertTask(15, 'Database schema design',  daysFromNow(20), 'sam-builds');
-const task16Id = insertTask(16, 'End-to-end test suite',   daysFromNow(18), 'jordan-qa');
+// task16 is unassigned — Jordan has 0 open tasks, enabling overload detection
+const task16Id = insertTask(16, 'End-to-end test suite',   daysFromNow(18), null);
 const task17Id = insertTask(17, 'Documentation and README', daysFromNow(25), 'priya-code');
 
 // Suppress unused variable warnings — IDs only matter to verify insert succeeded
@@ -123,37 +125,39 @@ type ContribArgs = {
   deletions: number;
   daysAgoN: number;
   url?: string;
+  paths?: string[];
 };
 
-function insertCommit({ memberId, sha, title, diff, filesChanged, additions, deletions, daysAgoN, url }: ContribArgs): number {
+function insertCommit({ memberId, sha, title, diff, filesChanged, additions, deletions, daysAgoN, url, paths }: ContribArgs): number {
   return db
     .prepare(
       `INSERT INTO contributions
          (team_id, member_id, source, github_sha, title, diff_summary,
-          files_changed, additions, deletions, url, authored_at)
-       VALUES (?, ?, 'commit', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          files_changed, additions, deletions, url, paths, authored_at)
+       VALUES (?, ?, 'commit', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       teamId, memberId, sha, title, diff,
       filesChanged, additions, deletions,
       url ?? `https://github.com/studybuddy-org/studybuddy-app/commit/${sha}`,
+      paths ? JSON.stringify(paths) : null,
       daysAgo(daysAgoN),
     ).lastInsertRowid as number;
 }
 
-// ── Sam — overloaded with backend work (11 commits) ─────────────────────────
+// ── Sam — overloaded with backend work (11 commits, all under server/) ───────
 
-insertCommit({ memberId: samId, sha: 'sam0001aaaa', title: 'Add REST API endpoint for user registration', diff: `+++ b/server/routes/users.ts\n+router.post('/register', async (req, res) => {\n+  const { email, password } = req.body;\n+  const user = await User.create({ email, password });\n+  res.json({ user });\n+});\n`.repeat(10), filesChanged: 2, additions: 65, deletions: 0, daysAgoN: 30 });
-insertCommit({ memberId: samId, sha: 'sam0002bbbb', title: 'Implement JWT authentication middleware', diff: `+++ b/server/middleware/auth.ts\n+export function authMiddleware(req, res, next) {\n+  const token = req.headers.authorization?.split(' ')[1];\n+  if (!token) return res.status(401).json({ error: 'Unauthorized' });\n+  next();\n+}\n`.repeat(12), filesChanged: 2, additions: 78, deletions: 3, daysAgoN: 28 });
-insertCommit({ memberId: samId, sha: 'sam0003cccc', title: 'Build database connection pool for PostgreSQL', diff: `+++ b/server/db/pool.ts\n+import { Pool } from 'pg';\n+const pool = new Pool({ connectionString: process.env.DATABASE_URL });\n+export default pool;\n`.repeat(15), filesChanged: 3, additions: 95, deletions: 10, daysAgoN: 26 });
-insertCommit({ memberId: samId, sha: 'sam0004dddd', title: 'Add session management endpoints', diff: `+++ b/server/routes/sessions.ts\n+router.post('/login', sessionController.login);\n+router.delete('/logout', sessionController.logout);\n`.repeat(8), filesChanged: 2, additions: 48, deletions: 2, daysAgoN: 24 });
-insertCommit({ memberId: samId, sha: 'sam0005eeee', title: 'Implement backend API endpoint for flashcard CRUD', diff: `+++ b/server/routes/flashcards.ts\n+router.get('/', flashcardController.list);\n+router.post('/', flashcardController.create);\n+router.put('/:id', flashcardController.update);\n+router.delete('/:id', flashcardController.delete);\n`.repeat(14), filesChanged: 4, additions: 112, deletions: 5, daysAgoN: 22 });
-insertCommit({ memberId: samId, sha: 'sam0006ffff', title: 'Add rate limiting middleware to API routes', diff: `+++ b/server/middleware/rateLimit.ts\n+import rateLimit from 'express-rate-limit';\n+export const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });\n`.repeat(6), filesChanged: 3, additions: 32, deletions: 1, daysAgoN: 20 });
-insertCommit({ memberId: samId, sha: 'sam0007gggg', title: 'Implement backend search API for study sessions', diff: `+++ b/server/routes/search.ts\n+router.get('/', async (req, res) => {\n+  const { q } = req.query;\n+  const results = await SearchService.query(q);\n+  res.json({ results });\n+});\n`.repeat(11), filesChanged: 3, additions: 72, deletions: 4, daysAgoN: 18 });
-insertCommit({ memberId: samId, sha: 'sam0008hhhh', title: 'Add database migrations for user preferences table', diff: `+++ b/migrations/004_user_preferences.sql\n+CREATE TABLE user_preferences (\n+  user_id INTEGER PRIMARY KEY,\n+  theme TEXT DEFAULT 'light',\n+  notifications BOOLEAN DEFAULT true\n+);\n`.repeat(9), filesChanged: 2, additions: 55, deletions: 0, daysAgoN: 16 });
-insertCommit({ memberId: samId, sha: 'sam0009iiii', title: 'Build caching layer for API responses using Redis', diff: `+++ b/server/cache/redis.ts\n+import Redis from 'ioredis';\n+const client = new Redis(process.env.REDIS_URL);\n+export async function getCached(key: string) { return client.get(key); }\n`.repeat(13), filesChanged: 3, additions: 85, deletions: 6, daysAgoN: 14 });
-insertCommit({ memberId: samId, sha: 'sam0010jjjj', title: 'Implement backend API for quiz generation', diff: `+++ b/server/routes/quizzes.ts\n+router.post('/generate', async (req, res) => {\n+  const { deckId, count } = req.body;\n+  const quiz = await QuizService.generate(deckId, count);\n+  res.json({ quiz });\n+});\n`.repeat(16), filesChanged: 4, additions: 128, deletions: 8, daysAgoN: 12 });
-insertCommit({ memberId: samId, sha: 'sam0011kkkk', title: 'Fix backend error handling for database schema queries', diff: `+++ b/server/db/schema.ts\n+try {\n+  const result = await db.query(sql);\n+  return result.rows;\n+} catch (err) {\n+  logger.error('DB query failed', err);\n+  throw err;\n+}\n`.repeat(7), filesChanged: 2, additions: 42, deletions: 8, daysAgoN: 10 });
+insertCommit({ memberId: samId, sha: 'sam0001aaaa', title: 'Add REST API endpoint for user registration', diff: `+++ b/server/routes/users.ts\n+router.post('/register', async (req, res) => {\n+  const { email, password } = req.body;\n+  const user = await User.create({ email, password });\n+  res.json({ user });\n+});\n`.repeat(10), filesChanged: 2, additions: 65, deletions: 0, daysAgoN: 30, paths: ['server/routes/users.ts', 'server/routes/index.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0002bbbb', title: 'Implement JWT authentication middleware', diff: `+++ b/server/middleware/auth.ts\n+export function authMiddleware(req, res, next) {\n+  const token = req.headers.authorization?.split(' ')[1];\n+  if (!token) return res.status(401).json({ error: 'Unauthorized' });\n+  next();\n+}\n`.repeat(12), filesChanged: 2, additions: 78, deletions: 3, daysAgoN: 28, paths: ['server/middleware/auth.ts', 'server/index.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0003cccc', title: 'Build database connection pool for PostgreSQL', diff: `+++ b/server/db/pool.ts\n+import { Pool } from 'pg';\n+const pool = new Pool({ connectionString: process.env.DATABASE_URL });\n+export default pool;\n`.repeat(15), filesChanged: 3, additions: 95, deletions: 10, daysAgoN: 26, paths: ['server/db/pool.ts', 'server/db/client.ts', 'server/db/migrate.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0004dddd', title: 'Add session management endpoints', diff: `+++ b/server/routes/sessions.ts\n+router.post('/login', sessionController.login);\n+router.delete('/logout', sessionController.logout);\n`.repeat(8), filesChanged: 2, additions: 48, deletions: 2, daysAgoN: 24, paths: ['server/routes/sessions.ts', 'server/controllers/sessionController.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0005eeee', title: 'Implement backend API endpoint for flashcard CRUD', diff: `+++ b/server/routes/flashcards.ts\n+router.get('/', flashcardController.list);\n+router.post('/', flashcardController.create);\n+router.put('/:id', flashcardController.update);\n+router.delete('/:id', flashcardController.delete);\n`.repeat(14), filesChanged: 4, additions: 112, deletions: 5, daysAgoN: 22, paths: ['server/routes/flashcards.ts', 'server/controllers/flashcardController.ts', 'server/models/flashcard.ts', 'server/validators/flashcard.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0006ffff', title: 'Add rate limiting middleware to API routes', diff: `+++ b/server/middleware/rateLimit.ts\n+import rateLimit from 'express-rate-limit';\n+export const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });\n`.repeat(6), filesChanged: 3, additions: 32, deletions: 1, daysAgoN: 20, paths: ['server/middleware/rateLimit.ts', 'server/middleware/index.ts', 'server/index.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0007gggg', title: 'Implement backend search API for study sessions', diff: `+++ b/server/routes/search.ts\n+router.get('/', async (req, res) => {\n+  const { q } = req.query;\n+  const results = await SearchService.query(q);\n+  res.json({ results });\n+});\n`.repeat(11), filesChanged: 3, additions: 72, deletions: 4, daysAgoN: 18, paths: ['server/routes/search.ts', 'server/services/SearchService.ts', 'server/routes/index.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0008hhhh', title: 'Add database migrations for user preferences table', diff: `+++ b/server/db/migrations/004_user_preferences.sql\n+CREATE TABLE user_preferences (\n+  user_id INTEGER PRIMARY KEY,\n+  theme TEXT DEFAULT 'light',\n+  notifications BOOLEAN DEFAULT true\n+);\n`.repeat(9), filesChanged: 2, additions: 55, deletions: 0, daysAgoN: 16, paths: ['server/db/migrations/004_user_preferences.sql', 'server/db/migrate.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0009iiii', title: 'Build caching layer for API responses using Redis', diff: `+++ b/server/cache/redis.ts\n+import Redis from 'ioredis';\n+const client = new Redis(process.env.REDIS_URL);\n+export async function getCached(key: string) { return client.get(key); }\n`.repeat(13), filesChanged: 3, additions: 85, deletions: 6, daysAgoN: 14, paths: ['server/cache/redis.ts', 'server/cache/index.ts', 'server/middleware/cache.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0010jjjj', title: 'Implement backend API for quiz generation', diff: `+++ b/server/routes/quizzes.ts\n+router.post('/generate', async (req, res) => {\n+  const { deckId, count } = req.body;\n+  const quiz = await QuizService.generate(deckId, count);\n+  res.json({ quiz });\n+});\n`.repeat(16), filesChanged: 4, additions: 128, deletions: 8, daysAgoN: 12, paths: ['server/routes/quizzes.ts', 'server/services/QuizService.ts', 'server/models/quiz.ts', 'server/validators/quiz.ts'] });
+insertCommit({ memberId: samId, sha: 'sam0011kkkk', title: 'Fix backend error handling for database schema queries', diff: `+++ b/server/db/schema.ts\n+try {\n+  const result = await db.query(sql);\n+  return result.rows;\n+} catch (err) {\n+  logger.error('DB query failed', err);\n+  throw err;\n+}\n`.repeat(7), filesChanged: 2, additions: 42, deletions: 8, daysAgoN: 10, paths: ['server/db/schema.ts', 'server/db/client.ts'] });
 
 // ── Rio — feature work on auth (8 commits, but no recent auth commits matching issue 12) ──
 
@@ -214,6 +218,59 @@ console.log(`Inserted contributions and manual entries`);
 console.log('Running classifier...');
 const { classified, failed } = await classifyTeam(teamId);
 console.log(`Classified ${classified} contributions${failed > 0 ? `, ${failed} failed` : ''}`);
+
+console.log('Running risk reasoner...');
+await runReasoner(teamId);
+
+const riskRows = db
+  .prepare(`SELECT level, description, evidence FROM risks WHERE team_id = ? AND dismissed = 0 ORDER BY CASE level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, generated_at DESC`)
+  .all(teamId) as Array<{ level: string; description: string; evidence: string }>;
+
+const suggRows = db
+  .prepare(`
+    SELECT s.id, m1.github_login AS from_login, m2.github_login AS to_login,
+           t.github_issue_number, t.title AS task_title,
+           s.rationale, s.checkin_message
+    FROM suggestions s
+    JOIN members m1 ON m1.id = s.from_member_id
+    JOIN members m2 ON m2.id = s.to_member_id
+    JOIN tasks t ON t.id = s.task_id
+    WHERE s.team_id = ? AND s.status = 'pending'
+  `)
+  .all(teamId) as Array<{
+    id: number;
+    from_login: string;
+    to_login: string;
+    github_issue_number: number | null;
+    task_title: string;
+    rationale: string;
+    checkin_message: string;
+  }>;
+
+console.log('\n── Risks ──────────────────────────────────────────');
+if (riskRows.length === 0) {
+  console.log('  (none)');
+} else {
+  for (const r of riskRows) {
+    console.log(`  [${r.level.toUpperCase()}] ${r.description}`);
+    const ev = JSON.parse(r.evidence) as Array<{ type: string; id: number }>;
+    console.log(`         evidence: ${ev.map(e => `${e.type}#${e.id}`).join(', ')}`);
+  }
+}
+
+console.log('\n── Suggestions ────────────────────────────────────');
+if (suggRows.length === 0) {
+  console.log('  (none)');
+} else {
+  for (const s of suggRows) {
+    const rationale = JSON.parse(s.rationale) as string[];
+    console.log(`  Swap: issue #${s.github_issue_number} "${s.task_title}"`);
+    console.log(`        from: ${s.from_login} → to: ${s.to_login}`);
+    console.log(`        rationale:`);
+    for (const r of rationale) console.log(`          • ${r}`);
+    console.log(`        check-in: "${s.checkin_message}"`);
+  }
+}
 
 console.log('\n✅ StudyBuddy seed complete.');
 console.log(`   Team id: ${teamId}`);

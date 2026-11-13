@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/client.js';
 import { syncTeam } from '../ingestion/sync.js';
 import { classifyTeam } from '../ai/classifier.js';
+import { runReasoner } from '../ai/reasoner.js';
 
 const router = Router();
 
@@ -77,6 +78,7 @@ router.post('/:teamId/classify', async (req, res) => {
 
   try {
     const { classified, failed } = await classifyTeam(teamId);
+    await runReasoner(teamId);
     res.json({ ok: true, classified, failed });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -11,6 +11,7 @@ import tasksRouter from './routes/tasks.js';
 import risksRouter from './routes/risks.js';
 import suggestionsRouter from './routes/suggestions.js';
 import manualRouter from './routes/manual.js';
+import summaryRouter from './routes/summary.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
@@ -30,6 +31,7 @@ app.use('/api/teams/:teamId/tasks', tasksRouter);
 app.use('/api/teams/:teamId/risks', risksRouter);
 app.use('/api/teams/:teamId/suggestions', suggestionsRouter);
 app.use('/api/teams/:teamId/manual', manualRouter);
+app.use('/api/teams/:teamId/summary', summaryRouter);
 
 // Serve built client in production
 // Works from both src/ (dev/tsx) and dist/ (compiled):

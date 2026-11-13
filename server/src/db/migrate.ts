@@ -104,6 +104,23 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_003: Add `paths` JSON column to contributions.
+   *
+   * Stores the array of file paths changed by a commit, as a JSON string.
+   * NULL for manual entries or commits fetched before this migration.
+   */
+  if (!appliedSet.has('migration_003_contributions_paths')) {
+    db.transaction(() => {
+      try {
+        db.exec('ALTER TABLE contributions ADD COLUMN paths TEXT');
+      } catch { /* column already exists — idempotent */ }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
+        'migration_003_contributions_paths',
+      );
+    })();
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);

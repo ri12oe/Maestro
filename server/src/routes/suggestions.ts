@@ -25,11 +25,33 @@ router.post('/:suggestionId/respond', (req: Request<TeamParams & { suggestionId:
     return;
   }
 
-  const result = db.prepare(
+  const teamId = Number(req.params.teamId);
+  const suggestionId = Number(req.params.suggestionId);
+
+  const updateSuggestion = db.prepare(
     'UPDATE suggestions SET status = ? WHERE id = ? AND team_id = ?',
-  ).run(status, Number(req.params.suggestionId), Number(req.params.teamId));
+  );
+  const result = updateSuggestion.run(status, suggestionId, teamId);
 
   if (result.changes === 0) { res.status(404).json({ error: 'Suggestion not found' }); return; }
+
+  // When accepted: update the task's assignee_login to the to_member's github_login (local only)
+  if (status === 'accepted') {
+    const sug = db.prepare(`
+      SELECT s.task_id, m.github_login AS to_login
+      FROM suggestions s
+      JOIN members m ON m.id = s.to_member_id
+      WHERE s.id = ? AND s.team_id = ?
+    `).get(suggestionId, teamId) as { task_id: number; to_login: string } | undefined;
+
+    if (sug) {
+      db.prepare('UPDATE tasks SET assignee_login = ? WHERE id = ?').run(
+        sug.to_login,
+        sug.task_id,
+      );
+    }
+  }
+
   res.json({ ok: true });
 });
 

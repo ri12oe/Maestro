@@ -25,6 +25,7 @@ export interface GitHubCommitSummary {
   isMerge: boolean;
   prNumber: number | null;
   files: Array<{ filename: string; additions: number; deletions: number }>;
+  paths: string[];         // just the filenames, for SPOF analysis
   diffSummary: string;     // patch truncated to PATCH_LINE_LIMIT lines
   filesChanged: number;    // total files touched
   additions: number;       // total lines added
@@ -72,7 +73,7 @@ async function fetchCommitDetail(
   sha: string,
   token: string,
   fetchFn: FetchFn,
-): Promise<{ files: GitHubCommitSummary['files']; diffSummary: string; filesChanged: number; additions: number; deletions: number } | null> {
+): Promise<{ files: GitHubCommitSummary['files']; paths: string[]; diffSummary: string; filesChanged: number; additions: number; deletions: number } | null> {
   const url = `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`;
   const res = await fetchFn(url, { headers: buildHeaders(token) });
   if (!res.ok) return null;
@@ -103,8 +104,9 @@ async function fetchCommitDetail(
   const filesChanged = rawFiles.length;
   const additions = rawFiles.reduce((s, f) => s + (f.additions ?? 0), 0);
   const deletions = rawFiles.reduce((s, f) => s + (f.deletions ?? 0), 0);
+  const paths = rawFiles.map(f => f.filename);
 
-  return { files, diffSummary: truncatePatch(diffSummary), filesChanged, additions, deletions };
+  return { files, paths, diffSummary: truncatePatch(diffSummary), filesChanged, additions, deletions };
 }
 
 /**
@@ -167,6 +169,7 @@ export async function fetchCommits(
         isMerge: false,
         prNumber: null,
         files: detail?.files ?? [],
+        paths: detail?.paths ?? [],
         diffSummary: detail?.diffSummary ?? '',
         filesChanged: detail?.filesChanged ?? 0,
         additions: detail?.additions ?? 0,

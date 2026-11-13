@@ -458,3 +458,15 @@ with "expected array, received string" and fell back to template text.
  ✓ src/tests/migration.test.ts (5 tests)
       Tests  65 passed (65)
 ```
+
+## 2026-11-13 — Session 9: Rebalance suggestion quality (written with Claude, not IBM Bob)
+
+Reviewing the first real Grok run: one suggested swap moved work to a member who already held as
+many open tasks as the giver, and rationales claimed skills the profiles did not show.
+
+| File | Change |
+|---|---|
+| `server/src/ai/reasoner.ts` | **Balance check in code:** a swap is rejected unless the receiver ends with no more open tasks than the giver keeps (counts tracked across swaps in the same run). Prompt now: states the balance rule with examples, shows each member's open-task count, requires specific descriptions (task number, days idle, days until due — now passed as `daysUntilDue`), allows skill claims only from work types and directories, and marks repository text as data, not instructions. Mock rationale no longer claims unshown experience. |
+| `server/src/tests/reasoner-fixes.test.ts` | Tests: an unbalancing swap is rejected while a balancing one is kept; the prompt includes open-task counts, `daysUntilDue` and the data-not-instructions note. |
+
+`npm test`: 67 passed (67).

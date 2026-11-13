@@ -383,6 +383,11 @@ export async function classifyTeam(teamId: number): Promise<ClassifyTeamResult> 
     if (t.github_issue_number != null) taskByNumber.set(t.github_issue_number, t);
   }
 
+  // Remember which tasks each commit has been checked against, so Issues created
+  // later can still be matched to it (see rematchNewTasks).
+  const maxTaskId = allTasks.reduce((m, t) => Math.max(m, t.id), 0);
+  const markChecked = db.prepare('UPDATE contributions SET match_checked_task_id = ? WHERE id = ?');
+
   // Build a thunk per contribution, run with concurrency = 4
   const thunks = unclassified.map(contrib => async () => {
     const isManual = contrib.source === 'manual';
@@ -426,6 +431,8 @@ export async function classifyTeam(teamId: number): Promise<ClassifyTeamResult> 
         model_version: mv,
       });
 
+      markChecked.run(maxTaskId, contrib.id);
+
       // Write task_match if appropriate
       if (
         result.task_number != null &&
@@ -465,4 +472,74 @@ export async function classifyTeam(teamId: number): Promise<ClassifyTeamResult> 
   }
 
   return { classified, failed };
+}
+
+
+// ── Re-linking commits to Issues created later ───────────────────────────────
+
+export interface RematchResult {
+  checked: number;
+  linked: number;
+  failed: number;
+}
+
+/**
+ * Commits are linked to Issues when they are first classified. A team often opens
+ * an Issue after the work has started, so on every sync, commits that are still
+ * unlinked are checked against the Issues created since they were last checked.
+ * Only those new Issues are sent, so an old commit costs an AI call only when
+ * there is actually something new to compare it with. Bounded by `limit` per sync;
+ * anything left over is picked up by the next sync.
+ */
+export async function rematchNewTasks(teamId: number, limit = 200): Promise<RematchResult> {
+  const allTasks = db.prepare(
+    'SELECT id, github_issue_number, title, status FROM tasks WHERE team_id = ? AND github_issue_number IS NOT NULL',
+  ).all(teamId) as TaskRow[];
+  const maxTaskId = allTasks.reduce((m, t) => Math.max(m, t.id), 0);
+  if (maxTaskId === 0) return { checked: 0, linked: 0, failed: 0 };
+
+  const candidates = db.prepare(`
+    SELECT c.id, c.title, c.diff_summary, c.files_changed, c.additions, c.deletions,
+           COALESCE(c.match_checked_task_id, 0) AS checked_upto
+    FROM contributions c
+    JOIN classifications cl ON cl.contribution_id = c.id
+    LEFT JOIN task_matches tm ON tm.contribution_id = c.id
+    WHERE c.team_id = ? AND c.source = 'commit' AND tm.id IS NULL
+      AND COALESCE(c.match_checked_task_id, 0) < ?
+    ORDER BY c.authored_at DESC
+    LIMIT ?
+  `).all(teamId, maxTaskId, limit) as Array<ContribRow & { checked_upto: number }>;
+
+  const markChecked = db.prepare('UPDATE contributions SET match_checked_task_id = ? WHERE id = ?');
+  const insertMatch = db.prepare(`
+    INSERT INTO task_matches (contribution_id, task_id, similarity_score, matched_at)
+    SELECT ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+    WHERE NOT EXISTS (SELECT 1 FROM task_matches WHERE contribution_id = ?)
+  `);
+
+  let linked = 0;
+  const outcomes = await withConcurrency(candidates.map(c => async () => {
+    const newTasks = allTasks.filter(t => t.id > c.checked_upto);
+    if (newTasks.length) {
+      const result = await classifyOne(c.title, c.diff_summary, newTasks, {
+        filesChanged: c.files_changed, additions: c.additions, deletions: c.deletions,
+      });
+      const task = newTasks.find(t => t.github_issue_number === result.task_number);
+      if (task && result.match_confidence !== 'low') {
+        const info = insertMatch.run(c.id, task.id, confidenceToScore(result.match_confidence), c.id);
+        if (info.changes) linked++;
+      }
+    }
+    // Only marked as checked once the AI call succeeded, so failures are retried next sync.
+    markChecked.run(maxTaskId, c.id);
+  }), 4);
+
+  const failed = outcomes.filter(o => !o.ok).length;
+  for (let i = 0; i < outcomes.length; i++) {
+    const o = outcomes[i];
+    if (!o.ok) {
+      console.error(`[classifier] re-match of contribution ${candidates[i].id} failed: ${o.error instanceof Error ? o.error.message : o.error}`);
+    }
+  }
+  return { checked: candidates.length - failed, linked, failed };
 }

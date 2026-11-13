@@ -25,3 +25,13 @@
 }
 
 .overview__why { font-size: 14px; color: $color-muted; }
+
+.overview__synced { align-self: center; font-size: 14px; color: $color-muted; }
+
+.overview__note {
+  border-radius: $radius-sm;
+  padding: 12px 14px;
+  font-size: 14px;
+  &--ok { background: $color-accent-soft; color: $color-accent-dark; }
+  &--error { background: $color-risk-bg; color: $color-risk-strong; }
+}

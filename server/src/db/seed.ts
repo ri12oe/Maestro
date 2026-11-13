@@ -65,7 +65,7 @@ if (existing) {
 // ── Insert team ───────────────────────────────────────────────────────────────
 
 const teamId = db
-  .prepare("INSERT INTO teams (name, repo_owner, repo_name) VALUES ('StudyBuddy', 'studybuddy-org', 'studybuddy-app')")
+  .prepare("INSERT INTO teams (name, repo_owner, repo_name, is_demo) VALUES ('StudyBuddy', 'studybuddy-org', 'studybuddy-app', 1)")
   .run().lastInsertRowid as number;
 
 console.log(`Created team StudyBuddy (id=${teamId})`);

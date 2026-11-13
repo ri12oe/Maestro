@@ -121,6 +121,25 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_004: re-linking commits to Issues created later, and sync status.
+   *  - contributions.match_checked_task_id: highest task id this commit has been
+   *    checked against, so new Issues can be matched against older commits.
+   *  - teams.last_synced_at / teams.is_demo: shown on the overview.
+   */
+  if (!appliedSet.has('migration_004_rematch_and_sync_status')) {
+    db.transaction(() => {
+      for (const col of [
+        'ALTER TABLE contributions ADD COLUMN match_checked_task_id INTEGER',
+        'ALTER TABLE teams ADD COLUMN last_synced_at TEXT',
+        'ALTER TABLE teams ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0',
+      ]) {
+        try { db.exec(col); } catch { /* column already exists — idempotent */ }
+      }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_004_rematch_and_sync_status');
+    })();
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);

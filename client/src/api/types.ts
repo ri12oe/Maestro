@@ -20,7 +20,7 @@ export interface MemberSummary {
 }
 
 export interface TeamSummary {
-  team: { id: number; name: string; repo: string };
+  team: { id: number; name: string; repo: string; lastSyncedAt: string | null; isDemo: boolean };
   statCards: {
     tasksDone: number;
     tasksTotal: number;
@@ -135,4 +135,5 @@ export interface SyncResult {
   newMembers: number;
   classified: number;
   classifyFailed: number;
+  relinked: number;
 }

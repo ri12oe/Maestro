@@ -51,8 +51,8 @@ function focusSummary(
 router.get('/', (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
 
-  const team = db.prepare('SELECT id, name, repo_owner, repo_name FROM teams WHERE id = ?').get(teamId) as
-    | { id: number; name: string; repo_owner: string; repo_name: string }
+  const team = db.prepare('SELECT id, name, repo_owner, repo_name, last_synced_at, is_demo FROM teams WHERE id = ?').get(teamId) as
+    | { id: number; name: string; repo_owner: string; repo_name: string; last_synced_at: string | null; is_demo: number }
     | undefined;
   if (!team) { res.status(404).json({ error: 'Team not found' }); return; }
 
@@ -149,7 +149,13 @@ router.get('/', (req: Request<TeamParams>, res: Response) => {
   });
 
   res.json({
-    team: { id: team.id, name: team.name, repo: `${team.repo_owner}/${team.repo_name}` },
+    team: {
+      id: team.id,
+      name: team.name,
+      repo: `${team.repo_owner}/${team.repo_name}`,
+      lastSyncedAt: team.last_synced_at,
+      isDemo: team.is_demo === 1,
+    },
     statCards: {
       tasksDone: tasksDone ?? 0,
       tasksTotal: tasksTotal ?? 0,

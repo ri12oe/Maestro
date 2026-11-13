@@ -9,7 +9,7 @@
 
   &__eyebrow { font-size: 14px; color: $color-muted; margin-bottom: 6px; }
   &__title { font-size: 34px; font-weight: 700; }
-  &__aside { display: flex; flex-wrap: wrap; gap: $space-sm; }
+  &__aside { display: flex; flex-wrap: wrap; gap: $space-sm; align-items: center; }
 }
 
 .card {

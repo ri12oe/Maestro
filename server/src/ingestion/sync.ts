@@ -12,8 +12,8 @@
  */
 
 import db from '../db/client.js';
-import { fetchCommits, fetchIssues, authorKey } from './github.js';
-import { classifyTeam } from '../ai/classifier.js';
+import { fetchCommits, fetchIssues, authorKey, isBotAuthor } from './github.js';
+import { classifyTeam, rematchNewTasks } from '../ai/classifier.js';
 import { runReasoner } from '../ai/reasoner.js';
 
 export interface SyncResult {
@@ -23,6 +23,7 @@ export interface SyncResult {
   classified: number;
   classifyFailed: number;
   risksDetected: number;
+  relinked: number;
 }
 
 export async function syncTeam(teamId: number): Promise<SyncResult> {
@@ -88,6 +89,7 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   const syncTx = db.transaction(() => {
     for (const commit of commits) {
       const { author } = commit;
+      if (isBotAuthor(author)) continue; // automation, not a teammate
 
       // Find or create member — prefer login lookup, then email lookup
       let member = author.login
@@ -193,11 +195,16 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   // ── 4. Classify any unclassified contributions ───────────────────────────
   const { classified, failed: classifyFailed } = await classifyTeam(teamId);
 
+  // ── 4b. Link older commits to Issues that were created after them ──────────
+  const { linked: relinked } = await rematchNewTasks(teamId);
+
   // ── 5. Run risk reasoner ─────────────────────────────────────────────────
   await runReasoner(teamId);
   const risksDetected = (db.prepare(
     'SELECT COUNT(*) AS n FROM risks WHERE team_id = ? AND dismissed = 0',
   ).get(teamId) as { n: number }).n;
 
-  return { newContributions, updatedTasks: issues.length, newMembers, classified, classifyFailed, risksDetected };
+  db.prepare("UPDATE teams SET last_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(teamId);
+
+  return { newContributions, updatedTasks: issues.length, newMembers, classified, classifyFailed, relinked, risksDetected };
 }

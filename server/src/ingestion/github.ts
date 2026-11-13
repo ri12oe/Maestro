@@ -247,3 +247,12 @@ export async function fetchIssues(
 export function authorKey(author: GitHubCommitSummary['author']): string {
   return author.login || author.email || 'unknown';
 }
+
+/**
+ * True for automation accounts (dependabot[bot], github-actions[bot], renovate[bot]…).
+ * GitHub marks every app/bot login with a "[bot]" suffix; their commits are not a
+ * teammate's work, so they are left out of the team picture.
+ */
+export function isBotAuthor(author: GitHubCommitSummary['author']): boolean {
+  return !!author.login && /\[bot\]$/i.test(author.login);
+}

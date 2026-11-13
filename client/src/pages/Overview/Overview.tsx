@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api/client.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import ContributionMap from '../../components/ContributionMap.tsx';
 import { Card, Empty, ErrorState, LevelBadge, Loading, PageHeader, Pill, StatCard } from '../../components/ui.tsx';
+import { timeAgo } from '../../dates.ts';
 import './Overview.scss';
 
 function firstName(name: string | null, login: string): string {
@@ -14,6 +16,28 @@ export default function Overview() {
   const summary = useApi(() => api.summary(teamId), [teamId]);
   const risks = useApi(() => api.risks(teamId), [teamId]);
   const suggestions = useApi(() => api.suggestions(teamId), [teamId]);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncNote, setSyncNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function syncNow() {
+    setSyncing(true);
+    setSyncNote(null);
+    try {
+      const r = await api.sync(teamId);
+      const parts = [
+        `${r.newContributions} new contribution${r.newContributions === 1 ? '' : 's'}`,
+        `${r.updatedTasks} task${r.updatedTasks === 1 ? '' : 's'}`,
+      ];
+      if (r.relinked) parts.push(`${r.relinked} older commit${r.relinked === 1 ? '' : 's'} linked to new Issues`);
+      setSyncNote({ ok: true, text: `Synced: ${parts.join(', ')}.` });
+      summary.reload(); risks.reload(); suggestions.reload();
+    } catch (e) {
+      setSyncNote({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (summary.loading && !summary.data) return <Loading label="Loading team overview…" />;
   if (summary.error || !summary.data) {
@@ -27,10 +51,24 @@ export default function Overview() {
   return (
     <>
       <PageHeader eyebrow={team.repo} title={`${team.name} — overview`}>
-        {statCards.tasksAtRisk > 0
-          ? <Pill tone="risk">{statCards.tasksAtRisk} task{statCards.tasksAtRisk === 1 ? '' : 's'} at risk</Pill>
-          : <Pill tone="accent">No tasks at risk</Pill>}
+        {team.isDemo ? (
+          <Pill>Demo data — not connected to GitHub</Pill>
+        ) : (
+          <>
+            <span className="overview__synced">
+              {syncing ? 'Syncing with GitHub…' : team.lastSyncedAt ? `Synced ${timeAgo(team.lastSyncedAt)}` : 'Not synced yet'}
+            </span>
+            <button type="button" className="btn btn--secondary btn--small" onClick={syncNow} disabled={syncing}>
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </>
+        )}
       </PageHeader>
+      {syncNote && (
+        <p className={`overview__note overview__note--${syncNote.ok ? 'ok' : 'error'}`} role={syncNote.ok ? 'status' : 'alert'}>
+          {syncNote.text}
+        </p>
+      )}
 
       <div className="grid-3">
         <StatCard label="Tasks done" value={`${statCards.tasksDone} of ${statCards.tasksTotal}`} />

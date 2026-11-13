@@ -539,3 +539,19 @@ Synced the real `ri12oe/Maestro` repository end to end through the API (16 commi
 | `server/src/ai/classifier.ts` | Offline mock labeled every real commit "test" because it keyword-searched the diff text. Now the title decides first (keywords at word starts, so "latest" ≠ "test"), then the changed file paths (all test files → test, all docs → docs), else feature. Mock eval work_type: 73.3% → 83.3% on the main set. |
 
 Not yet tested against real data: GitHub Issues and milestone due dates (the Maestro repo has none).
+
+## 2026-11-13 — Session 15: Re-linking, Sync now, bots (written with Claude, not IBM Bob)
+
+| File | Change |
+|---|---|
+| `server/src/ai/classifier.ts` | `rematchNewTasks()`: commits that are still unlinked are checked against Issues created after they were classified (only the new Issues are sent; up to 200 commits per sync; a failed AI call is retried next sync). Each commit records the highest task id it was checked against (`match_checked_task_id`). |
+| `server/src/ingestion/sync.ts` | Runs re-linking after classification, records `teams.last_synced_at`, returns `relinked`. Skips commits from automation accounts (`…[bot]` logins such as dependabot). |
+| `server/src/ingestion/github.ts` | `isBotAuthor()`. |
+| `server/src/db/migrate.ts`, `schema.sql`, `seed.ts` | migration_004: `contributions.match_checked_task_id`, `teams.last_synced_at`, `teams.is_demo` (set for the seeded StudyBuddy team). |
+| `server/src/routes/summary.ts` | `team.lastSyncedAt`, `team.isDemo`. |
+| `client/src/pages/Overview/` | "Sync now" button with "Synced 3 min ago" and a result note (new contributions, tasks, older commits linked to new Issues); the demo team shows "Demo data — not connected to GitHub" instead. |
+| `server/src/tests/rematch.test.ts`, `github.test.ts` | 4 re-linking tests, 7 bot-detection tests. |
+
+**Checked against the real `ri12oe/Maestro` repo** in a browser: Sync now pulled 17 commits and the 4 real Issues with milestone due dates; 9 commit→Issue links, all sensible; "#4 Write deployment guide for Railway" flagged HIGH (no matched work, due in 5 days).
+
+`npm test`: 89 passed (89).

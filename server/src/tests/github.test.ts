@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { authorKey, fetchCommits, fetchIssues, PATCH_LINE_LIMIT } from '../ingestion/github.js';
+import { authorKey, fetchCommits, fetchIssues, isBotAuthor, PATCH_LINE_LIMIT } from '../ingestion/github.js';
 
 // ── authorKey ────────────────────────────────────────────────────────────────
 
@@ -222,5 +222,15 @@ describe('fetchIssues', () => {
       [makeIssue({ number: 1, state: 'closed' })],
     ]));
     expect(issues[0].state).toBe('closed');
+  });
+});
+
+describe('isBotAuthor', () => {
+  const a = (login: string | null) => ({ login, email: 'x@x', name: 'x', date: '2026-01-01T00:00:00Z' });
+  it.each(['dependabot[bot]', 'github-actions[bot]', 'renovate[bot]'])('treats %s as a bot', login => {
+    expect(isBotAuthor(a(login))).toBe(true);
+  });
+  it.each(['ri12oe', 'bot-builder', 'robot', null])('treats %s as a person', login => {
+    expect(isBotAuthor(a(login))).toBe(false);
   });
 });

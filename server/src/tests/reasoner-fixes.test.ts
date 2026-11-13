@@ -4,6 +4,8 @@
  *  2. Risk descriptions name the task they are about.
  *  3. The summary's tasksAtRisk counts distinct tasks, not risk cards.
  *  4. A failed AI call falls back to template wording instead of failing the sync.
+ *  5. Grok receives arrays as arrays, and a valid Grok reply is stored end to end.
+ *  6. Pending suggestions are replaced each run; invalid swaps are rejected.
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
@@ -13,6 +15,7 @@ import { tmpdir } from 'os';
 import Database from 'better-sqlite3';
 import express from 'express';
 import request from 'supertest';
+import * as z from 'zod';
 
 const TODAY = new Date('2026-11-13T12:00:00Z');
 const tmpDir = mkdtempSync(join(tmpdir(), 'reasoner-fixes-'));
@@ -26,6 +29,7 @@ const { runMigration } = await import('../db/migrate.js');
 const { runReasoner } = await import('../ai/reasoner.js');
 const { default: summaryRouter } = await import('../routes/summary.js');
 const { default: singletonDb } = await import('../db/client.js');
+const { zodToJsonSchema } = await import('../ai/provider.js');
 
 runMigration(dbPath);
 const db = new Database(dbPath);
@@ -124,5 +128,78 @@ describe('AI failure fallback', () => {
     await expect(runReasoner(teamId, TODAY, db)).resolves.not.toThrow();
     const d = (db.prepare('SELECT description FROM risks WHERE task_id = ? AND dismissed = 0').get(dueSoon) as { description: string }).description;
     expect(d).toContain('#1 Due soon');
+  });
+});
+
+describe('Grok round trip', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env.AI_PROVIDER = 'mock';
+  });
+
+  it('zodToJsonSchema sends arrays as arrays (with object items)', () => {
+    const schema = z.object({ xs: z.array(z.object({ a: z.string(), b: z.array(z.string()) })) });
+    expect(zodToJsonSchema(schema)).toEqual({
+      type: 'object',
+      properties: {
+        xs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { a: { type: 'string' }, b: { type: 'array', items: { type: 'string' } } },
+            required: ['a', 'b'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['xs'],
+      additionalProperties: false,
+    });
+  });
+
+  it('zodToJsonSchema refuses types it does not understand instead of guessing', () => {
+    expect(() => zodToJsonSchema(z.object({ d: z.date() }))).toThrow(/unsupported/);
+  });
+
+  it('stores Grok descriptions and a valid suggestion', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.GROK_MODEL = 'test-model';
+    process.env.XAI_API_KEY = 'test-key';
+
+    let sentSchema: unknown;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String((init as RequestInit).body));
+      sentSchema = body.response_format.json_schema.schema;
+      const risksCount = (body.messages[0].content.match(/^Risk \d+/gm) ?? []).length;
+      const reply = {
+        risks: Array.from({ length: risksCount }, (_, i) => ({ description: `Grok description ${i + 1}` })),
+        suggestions: [
+          { task_number: 2, from_login: 'alice', to_login: 'bob',
+            rationale: ['Bob has no open tasks.', 'Frees Alice for #1.'],
+            checkin_message: 'Hey team, could Bob take #2?' },
+          // invalid: same person, task alice does not hold, unknown task
+          { task_number: 3, from_login: 'alice', to_login: 'alice', rationale: ['x'], checkin_message: 'x' },
+          { task_number: 5, from_login: 'bob', to_login: 'alice', rationale: ['x'], checkin_message: 'x' },
+          { task_number: 99, from_login: 'alice', to_login: 'bob', rationale: ['x'], checkin_message: 'x' },
+        ],
+      };
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), { status: 200 });
+    });
+
+    await runReasoner(teamId, TODAY, db);
+
+    const props = (sentSchema as { properties: Record<string, { type: string }> }).properties;
+    expect(props.risks.type).toBe('array');
+    expect(props.suggestions.type).toBe('array');
+
+    const descs = (db.prepare('SELECT description FROM risks WHERE team_id = ? AND dismissed = 0').all(teamId) as Array<{ description: string }>)
+      .map(r => r.description);
+    expect(descs.length).toBeGreaterThan(0);
+    expect(descs.every(d => d.startsWith('Grok description'))).toBe(true);
+
+    const sug = db.prepare("SELECT rationale, checkin_message FROM suggestions WHERE team_id = ? AND status = 'pending'")
+      .all(teamId) as Array<{ rationale: string; checkin_message: string }>;
+    expect(sug).toHaveLength(1);
+    expect(JSON.parse(sug[0].rationale)).toEqual(['Bob has no open tasks.', 'Frees Alice for #1.']);
   });
 });

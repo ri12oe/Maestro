@@ -19,6 +19,7 @@ type JsonSchemaType =
   | { type: 'number' }
   | { type: 'boolean' }
   | { type: 'null' }
+  | { type: 'array'; items: JsonSchemaType }
   | { type: 'object'; properties: Record<string, JsonSchemaType>; required: string[]; additionalProperties: false }
   | { anyOf: JsonSchemaType[] };
 
@@ -55,6 +56,10 @@ export function zodToJsonSchema(schema: z.ZodType<any>): JsonSchemaType {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return zodToJsonSchema(schema.unwrap() as z.ZodType<any>);
   }
+  if (schema instanceof z.ZodArray) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { type: 'array', items: zodToJsonSchema(schema.element as z.ZodType<any>) };
+  }
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape as Record<string, z.ZodType<unknown>>;
     const properties: Record<string, JsonSchemaType> = {};
@@ -75,8 +80,9 @@ export function zodToJsonSchema(schema: z.ZodType<any>): JsonSchemaType {
       additionalProperties: false,
     };
   }
-  // Fallback — treat as string
-  return { type: 'string' };
+  // Fail loudly: silently sending the wrong type makes the model return the
+  // wrong shape (this is how arrays once reached Grok as "string").
+  throw new Error(`zodToJsonSchema: unsupported Zod type ${schema.constructor.name}`);
 }
 
 // ── Retry helper ─────────────────────────────────────────────────────────────
@@ -167,6 +173,7 @@ function mockComplete(schema: z.ZodType<any>): unknown {
       ? (def.defaultValue as () => unknown)()
       : def.defaultValue;
   }
+  if (schema instanceof z.ZodArray) return [];
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape as Record<string, z.ZodType<unknown>>;
     const result: Record<string, unknown> = {};

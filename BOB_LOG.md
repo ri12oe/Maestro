@@ -435,3 +435,26 @@ Milestone 3a code were written by Claude (Anthropic) and applied as a patch.
 [MEDIUM] Only one person has changed server/ recently (100% of the last 11 changes). ...
 [MEDIUM] Open work is unevenly spread: one teammate holds 2 open tasks, including at least one that is behind, ...
 ```
+
+## 2026-11-13 — Session 8: Grok reasoner fixes (written with Claude, not IBM Bob)
+
+Found by running `npm run seed` with `AI_PROVIDER=grok`: the reasoner's AI call failed
+with "expected array, received string" and fell back to template text.
+
+| File | Change |
+|---|---|
+| `server/src/ai/provider.ts` | `zodToJsonSchema` now converts arrays (they were silently sent to Grok as `"string"`, so Grok returned strings). Unsupported types now throw instead of being guessed as strings. The mock also handles arrays. |
+| `server/src/ai/reasoner.ts` | Pending suggestions are cleared and regenerated on each run (before, every sync added more and stale ones never went away). Suggestions are rejected unless the task is open and currently held by `from_login`, and `from` ≠ `to`. |
+| `server/src/tests/reasoner-fixes.test.ts` | Grok round-trip test with a faked API: checks the schema sent has arrays, that Grok's descriptions are stored, and that invalid swaps are rejected. |
+
+### `npm test` output
+
+```
+ ✓ src/tests/ai.test.ts (18 tests)
+ ✓ src/tests/reasoner.test.ts (14 tests)
+ ✓ src/tests/reasoner-fixes.test.ts (12 tests)
+ ✓ src/tests/github.test.ts (15 tests)
+ ✓ src/tests/sync.test.ts (1 test)
+ ✓ src/tests/migration.test.ts (5 tests)
+      Tests  65 passed (65)
+```

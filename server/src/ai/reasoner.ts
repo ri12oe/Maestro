@@ -552,12 +552,16 @@ function persistResults(
     for (const p of profiles) memberByLogin.set(p.login, p.memberId);
 
     const taskByNumber = db.prepare(
-      'SELECT id, github_issue_number FROM tasks WHERE team_id = ?',
-    ).all(teamId) as Array<{ id: number; github_issue_number: number | null }>;
-    const taskIdByNumber = new Map<number, number>();
+      'SELECT id, github_issue_number, status, assignee_login FROM tasks WHERE team_id = ?',
+    ).all(teamId) as Array<{ id: number; github_issue_number: number | null; status: string; assignee_login: string | null }>;
+    const taskInfoByNumber = new Map<number, { id: number; status: string; assignee_login: string | null }>();
     for (const t of taskByNumber) {
-      if (t.github_issue_number != null) taskIdByNumber.set(t.github_issue_number, t.id);
+      if (t.github_issue_number != null) taskInfoByNumber.set(t.github_issue_number, t);
     }
+
+    // Pending suggestions are regenerated on every run, like risks; answered ones
+    // (accepted / dismissed / discuss) are kept and never proposed again.
+    db.prepare("DELETE FROM suggestions WHERE team_id = ? AND status = 'pending'").run(teamId);
 
     // Insert suggestions — reject invalid members/tasks and Unknown Contributor
     for (const sug of aiResponse.suggestions) {
@@ -565,9 +569,13 @@ function persistResults(
 
       const fromId = memberByLogin.get(sug.from_login);
       const toId = memberByLogin.get(sug.to_login);
-      const taskId = taskIdByNumber.get(sug.task_number);
+      const task = taskInfoByNumber.get(sug.task_number);
 
-      if (!fromId || !toId || !taskId) continue;  // invalid — skip
+      if (!fromId || !toId || !task) continue;           // unknown member or task
+      if (fromId === toId) continue;                      // not a swap
+      if (task.status !== 'open') continue;               // only open work can move
+      if (task.assignee_login !== sug.from_login) continue; // from must currently hold it
+      const taskId = task.id;
 
       // Avoid duplicating a pending or already-responded suggestion
       if (suggestionExists(db, teamId, fromId, toId, taskId)) continue;

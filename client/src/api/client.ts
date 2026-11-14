@@ -1,5 +1,5 @@
 import type {
-  Contribution, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, TeamListItem, TeamSummary,
+  ClassifyResult, Contribution, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
 } from './types.ts';
 
 export class ApiError extends Error {
@@ -53,6 +53,17 @@ export const api = {
 
   teams: () =>
     request<TeamListItem[]>('/teams'),
+
+  team: (teamId: number) =>
+    request<Team>(`/teams/${teamId}`),
+
+  /** Set or clear the stored deadline. `null` falls back to milestone dates. */
+  setDeadline: (teamId: number, deadline: string | null) =>
+    request<Team>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ deadline }) }),
+
+  /** Classify anything still unlabeled, then recompute risks. */
+  classify: (teamId: number) =>
+    request<ClassifyResult>(`/teams/${teamId}/classify`, { method: 'POST' }),
 
   createTeam: (input: { name: string; repo_owner: string; repo_name: string }) =>
     request<{ id: number }>('/teams', { method: 'POST', body: JSON.stringify(input) }),

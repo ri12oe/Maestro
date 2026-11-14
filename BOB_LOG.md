@@ -602,3 +602,23 @@ A team can store its own deadline. `PATCH /api/teams/:teamId` with `{ deadline: 
 | `docs/BRIEF.md`, `docs/PLAN.md` | Deadline precedence, the new column, and the route. |
 
 `npm test` (in `server/`): 115 passed (115). `npx tsc --noEmit` exited 0.
+
+## 2026-11-14 — Session 19: Editable team deadline (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Team settings can set or clear the deadline stored in session 18. The date field shows the date in effect: the team's stored deadline when one is set, otherwise the latest GitHub milestone due date. Save sends `PATCH /api/teams/:teamId`. Clear sends `{ deadline: null }`. If the server rejects the change, its error is shown under the field. Overview uses the same rule and a short note of where the date came from.
+
+A save also calls the existing `POST /api/teams/:teamId/classify` route, which reruns the reasoner, and then the pages re-read. Risk cards pick up the new deadline. That route also refreshes pending suggestions, as it already did.
+
+| File | Change |
+|---|---|
+| `client/src/deadline.ts` | Shared rule: stored deadline, otherwise the latest milestone date. |
+| `client/src/api/client.ts`, `client/src/api/types.ts` | `team`, `setDeadline`, and `classify`. |
+| `client/src/pages/TeamSettings/` | Date input, Save, Clear, and the server's error. |
+| `client/src/pages/Overview/Overview.tsx` | Days to deadline uses the shared rule. |
+| `client/src/components/Layout.tsx` | `reload` re-reads every page after the reasoner runs. |
+
+The client has no test runner. Checked in the browser against the seeded StudyBuddy team: the field starts on Dec 9, from milestones. Saving Nov 20 shows that date on Overview ("set by the team"); stalled risks then say due in 6 days, and #14 moves from medium to high. Clear puts Overview back on Dec 9 and restores those risk levels. A rejected PATCH shows `deadline must be YYYY-MM-DD or null` under the field.
+
+`npm run build --workspace=client` succeeded. `npm test --workspace=server`: 115 passed (115). No server changes.

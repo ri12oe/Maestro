@@ -87,6 +87,7 @@ Represents one project team connecting a single GitHub repo. The GitHub token co
 | `repo_owner` | TEXT NOT NULL | GitHub org or user |
 | `repo_name` | TEXT NOT NULL | GitHub repo name |
 | `created_at` | TEXT | ISO-8601 |
+| `deadline` | TEXT | `YYYY-MM-DD` or null. A date the team sets. When set, risk signals use it instead of each task's milestone `due_date`. Null keeps the milestone date. |
 
 ### Table: `members`
 One row per team member. Unknown contributors are auto-created during sync. A row may have no `github_login` if the commit had no associated GitHub account.
@@ -203,7 +204,8 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/teams` | Create team (name, repo_owner, repo_name) |
-| `GET` | `/api/teams/:teamId` | Get team info |
+| `GET` | `/api/teams/:teamId` | Get team info, including `deadline` |
+| `PATCH` | `/api/teams/:teamId` | Set or clear the team deadline. Body: `{ "deadline": "YYYY-MM-DD" }` or `{ "deadline": null }`. `400` if `deadline` is missing or not that shape. `404` if the team does not exist. |
 | `POST` | `/api/teams/:teamId/sync` | Trigger a full GitHub sync (commits + Issues) |
 
 ### Members
@@ -337,7 +339,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 **Acceptance Criteria:**
 - All six screens render with real data from the API (no hardcoded fixtures in the UI).
 - `GET /api/teams/:teamId/summary` returns contribution map data (work-type breakdown per member) and stat card numbers.
-- Risk reasoner computes signals deterministically (days since last activity per task, single-contributor directories, days to due date) and uses the LLM only to write the plain-language description and propose swaps.
+- Risk reasoner computes signals deterministically (days since last activity per task, single-contributor directories, days to due date) and uses the LLM only to write the plain-language description and propose swaps. Days to due date use `teams.deadline` when the team has set one, and the task's milestone `due_date` otherwise.
 - Risk reasoner runs during sync and produces at least one `risks` row for a repo with a stalled task.
 - Rebalance suggestions are generated and returned by `GET /api/teams/:teamId/suggestions`.
 - Manual work log form submits to `POST /api/teams/:teamId/manual` and appears in the member's contribution list.

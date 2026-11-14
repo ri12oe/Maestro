@@ -585,3 +585,20 @@ The Rebalance confirmation for an accepted swap now has an underlined Undo link.
 The client has no test runner. Checked in the browser against the seeded StudyBuddy team: accept #14, Undo returns the pending card (Sam 2 open, Jordan 0), and Risk radar plus Sam's assigned tasks show Sam again. A reassigned task shows the server's 409 message in the card and leaves the rows unchanged.
 
 `npm run build --workspace=client` succeeded. `npm test --workspace=server`: 102 passed (102). No server changes.
+
+## 2026-11-14 — Session 18: Stored team deadline (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+A team can store its own deadline. `PATCH /api/teams/:teamId` with `{ deadline: "YYYY-MM-DD" }` sets it and `{ deadline: null }` clears it. Anything else returns 400; an unknown team returns 404. `GET /api/teams/:teamId` reads it back (`deadline` is null until set). Stalled-task risk uses that date whenever it is set, and otherwise each task's GitHub milestone `due_date`, as before. Milestone dates stay on the tasks. The client is unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/db/schema.sql` | Nullable `teams.deadline` (`YYYY-MM-DD`). |
+| `server/src/db/migrate.ts` | migration_005 adds the column on existing databases. Rows stay; the new value is null. |
+| `server/src/routes/teams.ts` | `PATCH /api/teams/:teamId` validates and stores the date. |
+| `server/src/ai/reasoner.ts` | Stalled-task level uses the stored deadline when one is set. |
+| `server/src/tests/team-deadline.test.ts` | Set, read, clear, 400, 404, milestone override, migration on a database that lacks the column. |
+| `docs/BRIEF.md`, `docs/PLAN.md` | Deadline precedence, the new column, and the route. |
+
+`npm test` (in `server/`): 115 passed (115). `npx tsc --noEmit` exited 0.

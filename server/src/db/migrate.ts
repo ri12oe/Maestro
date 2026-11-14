@@ -148,6 +148,21 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_005: teams.deadline — a YYYY-MM-DD date the team sets.
+   *
+   * Null means "keep using GitHub milestone due dates". ALTER TABLE … ADD COLUMN
+   * leaves existing rows in place; the new column is NULL on those rows.
+   */
+  if (!appliedSet.has('migration_005_teams_deadline')) {
+    db.transaction(() => {
+      try {
+        db.exec('ALTER TABLE teams ADD COLUMN deadline TEXT');
+      } catch { /* column already exists — idempotent */ }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_005_teams_deadline');
+    })();
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);

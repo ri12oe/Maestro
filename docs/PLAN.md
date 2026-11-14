@@ -297,7 +297,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Relevant context:** `docs/BRIEF.md` §Architecture, §Milestones.
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ---
 
@@ -326,7 +326,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Relevant context:** `docs/BRIEF.md` §AI approach; `server/src/ingestion/sync.ts`; `server/src/db/schema.sql`.
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ---
 
@@ -363,7 +363,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Relevant context:** `docs/BRIEF.md` §Screens, §Fairness rules; `server/src/routes/`; `client/src/pages/`.
 
-**Status:** [ ] pending
+**Status:** [ ] in progress
 
 ---
 
@@ -390,7 +390,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Relevant context:** `docs/BRIEF.md` §Milestones (Dec 2–7); `.env.example`; `server/src/db/seed.ts`.
 
-**Status:** [ ] pending
+**Status:** [ ] in progress
 
 ---
 

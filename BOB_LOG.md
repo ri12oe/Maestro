@@ -555,3 +555,32 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 **Checked against the real `ri12oe/Maestro` repo** in a browser: Sync now pulled 17 commits and the 4 real Issues with milestone due dates; 9 commit→Issue links, all sensible; "#4 Write deployment guide for Railway" flagged HIGH (no matched work, due in 5 days).
 
 `npm test`: 89 passed (89).
+
+## 2026-11-13 — Session 16: Client redesign (written with Grok bots, not IBM Bob)
+
+Commits `5df1853` and `41a3258`. The Connect page is gone; setup and the dashboard shell follow the dark Figma tokens. No server changes.
+
+| Area | Change |
+|---|---|
+| `client/src/pages/Connect/` | Removed `Connect.tsx` and `Connect.scss` (repo form, first sync, existing-team list, and the "Our fairness promise" sidebar). |
+| `client/src/pages/Setup/` | New `/` flow in four steps: connect `owner/repo` or a GitHub URL (`POST /api/teams`, then sync, with retry), choose where the plan lives, invite teammates, then open the team. Existing teams still come from `GET /api/teams`. The plan-source choice stays in component state and is not sent to the API. |
+| `client/src/pages/TeamSettings/` | New `/teams/:teamId/settings`: repository and last sync, add/remove members, deadline taken from task due dates. |
+| `client/src/App.tsx`, `client/index.html` | `/` renders Setup; `settings` route added. Document title is Maestro. |
+| `client/src/api/client.ts` | `addMember` and `removeMember` for the setup and settings forms. |
+| `client/src/components/Bulb.tsx` | SVG mascot with states `default`, `thinking`, `happy`, and `done`, plus `LogoMark` in the setup dialog and the sidebar. |
+| `client/src/components/Layout.tsx` | Shared page frame: top bar keeps "Sync now", sidebar wordmark uses `LogoMark`, Risk radar shows the active risk count, and Team settings is the last nav item. |
+| `client/src/styles/_variables.scss`, `global.scss` | Dark tokens (background `#09090B`, accent `#E8A93A`) and the Geist font. Replaces Space Grotesk and the brief blue `#1F5FBF` that the contribution categories used before. |
+| Dashboard pages, `workTypes.ts` | Overview, Member evidence, Risk radar, Rebalance, and Log work updated onto that shell. Work-type colours come from the CSS variables. On a contribution row, substance `low` reads "Minor" and `medium` / `high` read "Substantial". |
+| `.claude/launch.json` | Dev launch config for the server on port 3001 and the client on port 5173. |
+
+## 2026-11-14 — Session 17: Milestone status (written with Grok bots, not IBM Bob)
+
+Checked each milestone's acceptance criteria against the code, then updated only the status lines in `docs/PLAN.md` and added the Session 16 entry above.
+
+| Milestone | Status |
+|---|---|
+| 1 Foundations | `[x] done` |
+| 2 AI Core | `[x] done` |
+| 3 Product / Dashboard | `[ ] in progress` — brief colours and fonts are not the Sass tokens |
+| 4 Demo-ready | `[ ] in progress` — `railway.json` and production static serving exist; no README, public URL, or volume config |
+| 5 Submit | `[ ] pending` |

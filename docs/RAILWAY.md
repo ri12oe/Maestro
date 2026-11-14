@@ -49,6 +49,8 @@ If the deploy log says `Created missing database folder`, the path in `DB_PATH` 
 
 Service → Variables. These are the names `server/src` reads with `process.env`, outside tests. Test files only assign the same names for fixtures. `server/src/db/seed.ts` also contains the text `process.env.DATABASE_URL` and `process.env.REDIS_URL` inside sample commit diffs. The server does not read those.
 
+`.env.example` lists the same nine names for a local copy. That file is set up for local mock mode: `NODE_ENV=development`, `PORT=3001`, `DB_PATH=./dev.db`, `AI_PROVIDER=mock`, an empty `SITE_PASSWORD`, `SITE_USER=maestro`, and placeholders for `GITHUB_TOKEN` and `XAI_API_KEY`. Do not copy those local values into this dashboard. Use the table below. There is no `.env` file on Railway.
+
 Railway injects `PORT`. Leave it unset. The server listens on that value, and falls back to 3001 only when `PORT` is missing.
 
 Railpack also sets `NODE_ENV=production` on the running container, and it still installs dev dependencies for the build (`NPM_CONFIG_PRODUCTION=false`). Set `NODE_ENV` in the dashboard as well, so the value is visible. The server serves the built pages only when it is `production`.
@@ -67,7 +69,7 @@ Railpack also sets `NODE_ENV=production` on the running container, and it still 
 
 `mock` is the provider the StudyBuddy demo was checked with. Use `grok` only when both `XAI_API_KEY` and `GROK_MODEL` are set.
 
-There is no `.env` file on Railway. The dashboard variables are what the process sees. Do not commit a real token or API key.
+The dashboard variables are what the process sees. Do not commit a real token or API key.
 
 Deploy after the variables are saved.
 

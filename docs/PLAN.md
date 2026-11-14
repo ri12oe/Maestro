@@ -378,7 +378,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 - App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume.
 - Public URL is accessible and the demo scenario loads without errors.
 - `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link.
-- No secrets appear in the repo; `.env.example` is complete.
+- No secrets appear in the repo; `.env.example` is complete. — done
 - All acceptance criteria from Milestones 1–3 still pass against the deployed instance.
 
 **Todo:**

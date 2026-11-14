@@ -622,3 +622,33 @@ A save also calls the existing `POST /api/teams/:teamId/classify` route, which r
 The client has no test runner. Checked in the browser against the seeded StudyBuddy team: the field starts on Dec 9, from milestones. Saving Nov 20 shows that date on Overview ("set by the team"); stalled risks then say due in 6 days, and #14 moves from medium to high. Clear puts Overview back on Dec 9 and restores those risk levels. A rejected PATCH shows `deadline must be YYYY-MM-DD or null` under the field.
 
 `npm run build --workspace=client` succeeded. `npm test --workspace=server`: 115 passed (115). No server changes.
+
+## 2026-11-14 — Session 20: Demo seed scenario (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 1. `npm run seed` with `AI_PROVIDER=mock` on a fresh database still builds the StudyBuddy demo, and a second run skips it. The seed data did not need a change. `seedStudyBuddy(today)` takes the clock the reasoner already accepts, so the new test does not depend on the calendar day. The test also accepts a suggestion and undoes it, and stores a near deadline then clears it; the scenario still holds and `teams.deadline` stays null after seeding.
+
+Fresh database, `AI_PROVIDER=mock`, clock = the day it was run (2026-11-14):
+
+| Check | Required | Actual |
+|---|---|---|
+| Demo teams (`StudyBuddy`, `is_demo = 1`) | 1 | 1 |
+| Members | 4 | 4 (Rio, Sam, Priya, Jordan) |
+| Contributions | ≥ 20 | 31 (28 commits + 3 manual) |
+| Stalled open tasks (no matched work in 5 days) | ≥ 1 | 5 |
+| Overloaded members (≥2 open tasks, one at risk, someone else has none) | ≥ 1 | 1 (Sam; Jordan has no open tasks) |
+| High risks | ≥ 1 | 1 (#12 Auth flow, due in 7 days) |
+| Pending rebalance suggestions | ≥ 1 | 1 (#14 Sam → Jordan) |
+| Stored deadline | null after seed | null |
+
+`npx tsc --noEmit` (in `server/`) exited 0.
+
+`npm test` (in `server/`):
+
+```
+ Test Files  12 passed (12)
+      Tests  119 passed (119)
+   Start at  21:28:30
+   Duration  1.25s
+```

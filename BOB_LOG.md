@@ -652,3 +652,30 @@ Fresh database, `AI_PROVIDER=mock`, clock = the day it was run (2026-11-14):
    Start at  21:28:30
    Duration  1.25s
 ```
+
+## 2026-11-14 — Session 21: Production client serving (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 2. `railway.json` builds with `npm run build` and starts with `npm start`. After `npm ci`, that build succeeds. With `NODE_ENV=production`, `PORT=3999`, `AI_PROVIDER=mock`, and `DB_PATH` pointing at a folder that does not exist yet, the server listens on 3999, creates the folder, and runs the migration (all tables, through migration_005).
+
+`/` and `/teams/1` return the built `index.html`. `/assets/index-CWCFJZmA.js` is `application/javascript` and matches the file on disk. `/api/teams` is JSON (`[]` on an empty database).
+
+Unmatched `/api` paths were the break. `GET /api/does-not-exist` returned `index.html` with 200, and `POST` returned Express's HTML 404. Those now return `{"error":"Not found"}`. There was no `db-folder-fix.patch` on this checkout; `migrate.ts` already creates a missing database directory, and boot confirmed that.
+
+| File | Change |
+|---|---|
+| `server/src/serveClient.ts` | Static files, SPA fallback, and a JSON 404 for unmatched `/api`. |
+| `server/src/index.ts` | Production still serves `client/dist` through that helper. |
+| `server/src/tests/production-client.test.ts` | Vitest/supertest against a fixture dist folder. |
+
+`npx tsc --noEmit` (in `server/`) exited 0. `npm run build --workspace=client` succeeded.
+
+`npm test` (in `server/`):
+
+```
+ Test Files  13 passed (13)
+      Tests  124 passed (124)
+   Start at  21:33:48
+   Duration  2.34s
+```

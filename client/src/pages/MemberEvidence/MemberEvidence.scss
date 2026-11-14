@@ -1,83 +1,81 @@
 @use '../../styles/variables' as *;
 
-.back-link { font-size: 14px; font-weight: 500; align-self: flex-start; }
-
-.member-head {
+.work-mix {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  gap: $space-12;
+  &__bar { display: flex; align-items: center; gap: $space-16; .muted { white-space: nowrap; } }
+}
 
-  &__avatar {
-    width: 64px;
-    height: 64px;
-    flex: none;
-    border-radius: 50%;
-    background: $color-accent-soft;
-    color: $color-accent;
+.assigned {
+  list-style: none;
+  li {
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-family: $font-heading;
-    font-size: 26px;
-    font-weight: 700;
+    flex-wrap: wrap;
+    gap: $space-4 $space-12;
+    padding: $space-12 0;
+    border-top: 1px solid $border;
   }
-
-  h1 { font-size: 32px; font-weight: 700; }
-  p { color: $color-muted; font-size: 15px; }
+  &__title { @include t-label; }
+  &__due { margin-left: auto; color: $text-muted; @include phone { margin-left: 0; flex-basis: 100%; } }
 }
 
-.mix {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $space-md;
-  font-size: 14px;
-
-  &__item { display: inline-flex; align-items: center; gap: 6px; }
-  &__swatch { width: 12px; height: 12px; border-radius: 3px; }
-}
-
-.contrib-list { list-style: none; display: flex; flex-direction: column; }
+.contrib-list { list-style: none; }
 
 .contrib {
-  border-top: 1px solid #EEEEE8;
-  padding: 14px 0;
-  &:first-child { border-top: 0; padding-top: 0; }
+  border-bottom: 1px solid $border;
+  &:last-child { border-bottom: 0; }
 
-  &__main { display: flex; gap: $space-md; align-items: flex-start; }
-  &__date { flex: none; width: 52px; font-size: 13px; color: $color-muted; padding-top: 2px; }
-  &__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-  &__title { font-weight: 500; overflow-wrap: anywhere; }
-  &__summary { font-size: 14px; color: $color-muted; }
-  &__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; .pill { padding: 4px 10px; font-size: 13px; } }
-  &__size { font-size: 13px; color: $color-muted; }
-  &__disputed { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; color: $color-muted;
-    .pill { padding: 4px 10px; font-size: 13px; } }
-  &__flag { flex: none; }
+  &__row {
+    display: grid;
+    grid-template-columns: 80px 110px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: $space-16;
+    padding: $space-16 0;
 
-  @media (max-width: 640px) {
-    &__main { flex-wrap: wrap; }
-    &__flag { margin-left: 68px; }
+    @include phone {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas: 'date type' 'details details' 'tags dispute';
+      gap: 6px $space-12;
+      .contrib__date { grid-area: date; }
+      .contrib__type { grid-area: type; }
+      .contrib__details { grid-area: details; }
+      .contrib__tags { grid-area: tags; }
+      .contrib__dispute { grid-area: dispute; justify-self: end; }
+    }
   }
+
+  &__date { color: $text-muted; }
+  &__type { display: inline-flex; align-items: center; gap: $space-8; }
+  &__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  &__details { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  &__summary {
+    @include t-label;
+    a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  }
+  &__task { color: $text-muted; }
+  &__tags { display: flex; gap: $space-8; flex-wrap: wrap; }
 }
 
 .dispute {
-  margin: 12px 0 0 68px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 14px;
+  gap: $space-16;
+  margin-bottom: $space-16;
+  padding: $space-20;
+  background: $bg;
+  border: 1px solid $border;
+  border-radius: $radius-control;
+  @include phone { padding: $space-16; }
 
-  textarea {
-    font: inherit;
-    padding: 10px 12px;
-    border: 1px solid $color-border-strong;
-    border-radius: $radius-sm;
-    resize: vertical;
-    &:focus-visible { outline: 2px solid $color-accent; outline-offset: 1px; }
+  &__options {
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $space-8;
+    legend { margin-bottom: $space-8; }
   }
-
-  &__actions { display: flex; gap: 8px; }
-  &__error { color: $color-risk-strong; }
-
-  @media (max-width: 640px) { margin-left: 0; }
+  &__error { color: $risk-high; }
+  &__actions { display: flex; gap: $space-12; flex-wrap: wrap; }
 }

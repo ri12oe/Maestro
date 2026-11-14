@@ -1,61 +1,34 @@
-import { useId, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useCallback, useState } from 'react';
 import { api } from '../../api/client.ts';
-import type { Suggestion } from '../../api/types.ts';
+import type { RiskLevel, Suggestion } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
-import { Card, Empty, ErrorState, Loading, PageHeader, Pill } from '../../components/ui.tsx';
-import { dueLabel } from '../../dates.ts';
+import { Page, useTeam } from '../../components/Layout.tsx';
+import { ArrowRight, Check, EmptyState, ErrorState, Initials, Loading, RiskBadge, Toast } from '../../components/ui.tsx';
 import './Rebalance.scss';
 
-type Answer = 'accepted' | 'discuss' | 'dismissed';
-
-function first(name: string | null, login: string): string {
-  return name?.split(' ')[0] || login;
+function display(name: string | null, login: string): string {
+  return name || login;
 }
 
-const CONFIRMATION: Record<Answer, (s: Suggestion) => string> = {
-  accepted: s => `Swap accepted: #${s.task_number} ${s.task_title} is now assigned to ${first(s.to_name, s.to_login)} in Referee. Remember to update the assignee on GitHub too.`,
-  discuss: s => `Marked for discussion. Bring #${s.task_number} ${s.task_title} up with the team — the check-in message below can start the conversation.`,
-  dismissed: s => `Dismissed. Referee won't suggest moving #${s.task_number} ${s.task_title} to ${first(s.to_name, s.to_login)} again.`,
-};
-
-function CheckinMessage({ initial }: { initial: string }) {
-  const [text, setText] = useState(initial);
-  const [copied, setCopied] = useState(false);
-  const id = useId();
-
+function PersonChip({ name, open }: { name: string; open: number }) {
   return (
-    <div className="checkin">
-      <label htmlFor={id} className="checkin__label">Check-in message for the team</label>
-      <p className="checkin__hint">Written about the work, not the person. Edit it before sending.</p>
-      <textarea id={id} rows={4} value={text} onChange={e => { setText(e.target.value); setCopied(false); }} />
-      <div>
-        <button
-          type="button"
-          className="btn btn--secondary btn--small"
-          onClick={async () => {
-            try { await navigator.clipboard.writeText(text); setCopied(true); }
-            catch { setCopied(false); }
-          }}
-        >
-          {copied ? 'Copied' : 'Copy message'}
-        </button>
-        <span className="checkin__status" role="status">{copied ? 'Message copied to clipboard.' : ''}</span>
-      </div>
-    </div>
+    <span className="person-chip">
+      <Initials name={name} />
+      <span>{name} · {open} open</span>
+    </span>
   );
 }
 
-function SuggestionCard({ s, teamId, onAnswered }: {
-  s: Suggestion; teamId: number; onAnswered: (s: Suggestion, a: Answer) => void;
+function SuggestionCard({ s, level, teamId, onAnswered }: {
+  s: Suggestion; level?: RiskLevel; teamId: number; onAnswered: (s: Suggestion, a: 'accepted' | 'dismissed') => void;
 }) {
-  const [busy, setBusy] = useState<Answer | null>(null);
+  const [busy, setBusy] = useState<'accepted' | 'dismissed' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const from = first(s.from_name, s.from_login);
-  const to = first(s.to_name, s.to_login);
-  const due = s.task_due_date ? dueLabel(s.task_due_date) : null;
+  const [copied, setCopied] = useState(false);
+  const from = display(s.from_name, s.from_login);
+  const to = display(s.to_name, s.to_login);
 
-  async function answer(a: Answer) {
+  async function answer(a: 'accepted' | 'dismissed') {
     setBusy(a);
     setError(null);
     try { await api.respond(teamId, s.id, a); onAnswered(s, a); }
@@ -63,86 +36,99 @@ function SuggestionCard({ s, teamId, onAnswered }: {
   }
 
   return (
-    <Card className="swap">
-      <div className="swap__task">
-        <span className="swap__eyebrow">Task</span>
-        <h2>#{s.task_number} {s.task_title}</h2>
-        {due && <Pill tone={due.urgent ? 'risk' : 'neutral'}>{due.text}</Pill>}
+    <section className="suggestion" aria-labelledby={`sug-${s.id}`}>
+      <div className="suggestion__head">
+        <h2 id={`sug-${s.id}`} className="suggestion__title">#{s.task_number} {s.task_title}</h2>
+        {level && <RiskBadge level={level} />}
       </div>
 
-      <div className="swap__flow" aria-label={`Move from ${from} to ${to}`}>
-        <div className="swap__person">
-          <span className="swap__eyebrow">From</span>
-          <strong>{from}</strong>
-          <span>{s.from_open_tasks} open task{s.from_open_tasks === 1 ? '' : 's'} → {s.from_open_tasks - 1}</span>
-        </div>
-        <svg className="swap__arrow" width="32" height="20" viewBox="0 0 32 20" aria-hidden="true">
-          <path d="M2 10h26M20 3l8 7-8 7" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <div className="swap__person swap__person--to">
-          <span className="swap__eyebrow">To</span>
-          <strong>{to}</strong>
-          <span>{s.to_open_tasks} open task{s.to_open_tasks === 1 ? '' : 's'} → {s.to_open_tasks + 1}</span>
-        </div>
+      <div className="suggestion__flow" aria-label={`Move from ${from} to ${to}`}>
+        <PersonChip name={from} open={s.from_open_tasks} />
+        <ArrowRight className="muted" />
+        <PersonChip name={to} open={s.to_open_tasks} />
       </div>
 
       {s.rationale.length > 0 && (
-        <div className="swap__why">
-          <h3>Why this swap</h3>
-          <ul>{s.rationale.map((r, i) => <li key={i}>{r}</li>)}</ul>
+        <div className="suggestion__section">
+          <h3 className="suggestion__label">Why</h3>
+          {s.rationale.map((r, i) => <p key={i} className="suggestion__body">{r}</p>)}
         </div>
       )}
 
-      {error && <p className="swap__error" role="alert">{error}</p>}
-      <div className="swap__actions">
+      {s.checkin_message && (
+        <div className="suggestion__section">
+          <h3 className="suggestion__label">Check-in message</h3>
+          <p className="suggestion__message">{s.checkin_message}</p>
+          <div className="suggestion__copy">
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={async () => {
+                try { await navigator.clipboard.writeText(s.checkin_message ?? ''); setCopied(true); }
+                catch { setCopied(false); }
+              }}
+            >
+              {copied ? 'Copied' : 'Copy message'}
+            </button>
+            <span className="visually-hidden" role="status">{copied ? 'Message copied to clipboard.' : ''}</span>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="suggestion__error" role="alert">{error}</p>}
+      <div className="suggestion__actions">
         <button type="button" className="btn btn--primary" disabled={!!busy} onClick={() => answer('accepted')}>
           {busy === 'accepted' ? 'Accepting…' : 'Accept swap'}
         </button>
-        <button type="button" className="btn btn--secondary" disabled={!!busy} onClick={() => answer('discuss')}>
-          Discuss with team
-        </button>
-        <button type="button" className="btn btn--ghost" disabled={!!busy} onClick={() => answer('dismissed')}>
-          Dismiss
+        <button type="button" className="btn btn--secondary" disabled={!!busy} onClick={() => answer('dismissed')}>
+          {busy === 'dismissed' ? 'Dismissing…' : 'Dismiss'}
         </button>
       </div>
-
-      {s.checkin_message && <CheckinMessage initial={s.checkin_message} />}
-    </Card>
+    </section>
   );
 }
 
 export default function Rebalance() {
-  const teamId = Number(useParams().teamId);
-  const suggestions = useApi(() => api.suggestions(teamId), [teamId]);
-  const [answered, setAnswered] = useState<Array<{ s: Suggestion; a: Answer }>>([]);
+  const { teamId, version, refresh } = useTeam();
+  const suggestions = useApi(() => api.suggestions(teamId), [teamId, version]);
+  const risks = useApi(() => api.risks(teamId), [teamId, version]);
+  const [accepted, setAccepted] = useState<Suggestion[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
+
+  const pending = suggestions.data ?? [];
+  const levelFor = (taskId: number) => risks.data?.find(r => r.task_id === taskId)?.level;
 
   return (
-    <>
-      <PageHeader title="Rebalance suggestions" />
-      <p className="lead">
-        Suggested task swaps based on the risks and on each person's open work. A swap is only suggested if it
-        leaves the work more evenly spread. The team decides.
-      </p>
-
-      {answered.map(({ s, a }) => (
-        <div key={s.id} className={`answered answered--${a}`} role="status">{CONFIRMATION[a](s)}</div>
+    <Page title="Rebalance" subtitle="Suggestions are based on recent activity and open tasks. Nothing changes until your team agrees.">
+      {accepted.map(s => (
+        <div key={s.id} className="suggestion suggestion--accepted" role="status">
+          <Check className="suggestion__ok" />
+          <p>Swap accepted. #{s.task_number} is now {display(s.to_name, s.to_login)}&rsquo;s.</p>
+        </div>
       ))}
 
       {suggestions.loading && !suggestions.data && <Loading label="Loading suggestions…" />}
       {suggestions.error && <ErrorState message={suggestions.error} onRetry={suggestions.reload} />}
-      {suggestions.data && suggestions.data.length === 0 && (
-        <Card>
-          <Empty>No swaps to suggest right now. Check the <Link to={`/teams/${teamId}/risks`}>risk radar</Link> for anything that needs attention.</Empty>
-        </Card>
+      {suggestions.data && pending.length === 0 && accepted.length === 0 && (
+        <EmptyState heading="No suggestions" line="Workload looks balanced. Check back after the next sync." />
       )}
-      {suggestions.data?.map(s => (
+      {pending.map(s => (
         <SuggestionCard
           key={s.id}
           s={s}
+          level={levelFor(s.task_id)}
           teamId={teamId}
-          onAnswered={(sug, a) => { setAnswered(prev => [...prev, { s: sug, a }]); suggestions.reload(); }}
+          onAnswered={(sug, a) => {
+            if (a === 'accepted') { setAccepted(prev => [...prev, sug]); setToast('Swap saved'); }
+            else setToast('Suggestion dismissed');
+            suggestions.reload();
+            refresh();
+          }}
         />
       ))}
-    </>
+
+      {toast && <Toast message={toast} onClose={closeToast} />}
+    </Page>
   );
 }

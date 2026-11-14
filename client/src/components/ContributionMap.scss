@@ -3,50 +3,36 @@
 .cmap {
   display: flex;
   flex-direction: column;
-  gap: $space-md;
+  gap: $space-16;
 
-  &__legend {
-    list-style: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: $space-md;
-    font-size: 13px;
-    color: $color-muted;
-
-    li { display: flex; align-items: center; gap: 6px; }
-  }
-
-  &__swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-
-  &__rows { list-style: none; display: flex; flex-direction: column; gap: $space-sm; }
+  &__rows { list-style: none; display: flex; flex-direction: column; gap: $space-16; }
 
   &__row {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px;
-    margin: 0 -12px;
-    border-radius: 10px;
-    color: $color-text;
-    text-decoration: none;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: $space-16;
 
-    &:hover { background: $color-bg; text-decoration: none; }
-    &:focus-visible { outline: 2px solid $color-accent; outline-offset: 0; }
+    @include phone {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: 'name meta' 'bar bar';
+      gap: $space-8;
+      .cmap__name { grid-area: name; }
+      .cmap__meta { grid-area: meta; }
+      .stacked { grid-area: bar; }
+    }
   }
 
-  &__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  &__name { font-weight: 600; }
-  &__focus { font-size: 13px; color: $color-muted; }
-
-  &__track { display: block; height: 16px; }
-
-  &__bar {
-    display: flex;
-    height: 16px;
-    border-radius: 4px;
+  &__name {
+    @include t-label;
+    text-decoration: underline;
+    text-decoration-color: rgba($text, 0.35);
+    text-underline-offset: 3px;
     overflow: hidden;
-    span { display: block; height: 100%; }
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    &:hover { text-decoration-color: $text; }
   }
 
-  &__meta { font-size: 13px; color: $color-muted; }
+  &__meta { color: $text-muted; text-align: right; white-space: nowrap; }
 }

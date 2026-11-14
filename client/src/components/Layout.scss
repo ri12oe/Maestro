@@ -1,71 +1,127 @@
 @use '../styles/variables' as *;
 
-.layout {
+.shell {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  @include phone { display: block; }
+
+  &__main { min-width: 0; display: flex; flex-direction: column; }
+  &__banner { padding: $space-24 $space-32 0; max-width: 1104px; @include phone { padding: $space-16 $space-20 0; } }
+}
+
+/* Sidebar (desktop) → top bar with scrollable pills (phone) */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: $space-24;
+  padding: $space-24 $space-16;
+  background: $bg;
+  border-right: 1px solid $border;
 
-  // Phones: nav and content wrap onto two lines; keep the nav its natural
-  // height instead of sharing the leftover page height with the content.
-  @media (max-width: 640px) { align-content: flex-start; }
+  &__brand { display: flex; flex-direction: column; gap: 4px; padding: 0 $space-12; }
+  &__wordmark { display: inline-flex; align-items: center; gap: $space-12; @include t-wordmark; }
+  &__team { color: $text-muted; }
 
-  &__nav {
-    flex: 1 1 200px;
-    background: $color-sidebar;
-    color: #fff;
-    padding: $space-lg $space-md;
-    display: flex;
-    flex-direction: column;
-    gap: $space-xs;
+  &__nav { flex: 1; display: flex; flex-direction: column; gap: $space-4; }
 
-    // Phones: a compact wrapping row instead of a tall column
-    @media (max-width: 640px) {
+  @include phone {
+    position: static;
+    height: auto;
+    padding: $space-12 0 0;
+    gap: $space-12;
+    border-right: 0;
+    border-bottom: 1px solid $border;
+
+    &__brand { flex-direction: row; align-items: center; gap: $space-12; padding: 0 $space-20; }
+    &__nav {
       flex-direction: row;
-      flex-wrap: wrap;
-      padding: $space-md;
-      gap: 4px;
-      align-items: center;
+      gap: $space-8;
+      padding: 0 $space-20 $space-12;
+      overflow-x: auto;
+      scrollbar-width: none;
+      &::-webkit-scrollbar { display: none; }
     }
   }
+}
 
-  &__brand {
-    display: flex;
+.nav-item {
+  min-height: 44px;
+  padding: 0 $space-12;
+  border-radius: $radius-control;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-8;
+  color: $text-muted;
+  @include t-label;
+  @include focus-ring;
+  &:hover { color: $text; }
+  &.is-active { background: $surface-raised; color: $text; }
+  &--bottom { margin-top: auto; }
+
+  &__count {
+    @include t-badge;
+    min-width: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    text-align: center;
+    background: $risk-high-bg;
+    color: $risk-high;
+  }
+
+  @include phone {
+    flex: none;
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid $border;
+    &--bottom { margin-top: 0; }
+  }
+}
+
+/* Page top bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: $space-24;
+  padding: $space-20 $space-32;
+  border-bottom: 1px solid $border;
+
+  &__heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: $space-4; }
+  &__back {
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 12px $space-lg;
-    font-family: $font-heading;
-    font-size: 20px;
-    font-weight: 700;
-
-    @media (max-width: 640px) { flex-basis: 100%; padding: 0 4px $space-sm; }
+    gap: 6px;
+    align-self: flex-start;
+    color: $text-muted;
+    padding-bottom: $space-4;
+    &:hover { color: $text; }
   }
+  &__title-row { display: flex; align-items: center; gap: $space-12; flex-wrap: wrap; }
+  &__title { @include t-page-title; }
+  &__subtitle { color: $text-muted; }
+  &__sync { display: flex; align-items: center; gap: $space-16; }
+  &__synced { color: $text-muted; white-space: nowrap; }
 
-  &__link {
-    padding: 12px;
-    border-radius: $radius-sm;
-    color: $color-sidebar-text;
-    font-size: 15px;
-    text-decoration: none;
-
-    &:hover { background: $color-sidebar-active; text-decoration: none; color: #fff; }
-    &:focus-visible { outline: 2px solid #8FB4EE; outline-offset: 2px; }
-    &.is-active { background: $color-sidebar-active; color: #fff; font-weight: 500; }
-
-    @media (max-width: 640px) { padding: 10px 12px; font-size: 14px; }
-  }
-
-  &__main {
-    flex: 999 1 560px;
-    min-width: 0;
-    padding: 32px 40px;
-
-    @media (max-width: 640px) { padding: $space-lg $space-md; }
-  }
-
-  &__content {
-    max-width: 1040px;
-    display: flex;
+  @include phone {
     flex-direction: column;
-    gap: $space-lg;
+    align-items: stretch;
+    gap: $space-12;
+    padding: $space-20 $space-20 $space-8;
+    border-bottom: 0;
   }
+}
+
+.page {
+  width: 100%;
+  max-width: 1104px;
+  padding: $space-32;
+  display: flex;
+  flex-direction: column;
+  gap: $space-24;
+  @include phone { padding: $space-20; gap: $space-16; }
 }

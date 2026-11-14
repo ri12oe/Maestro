@@ -1,44 +1,78 @@
-// Brand tokens — Group Project Referee
-// Reference: docs/BRIEF.md §Screens and the UI draft canvas
+// Maestro design tokens — mirrors the "Color" and "Layout" variables in the
+// Figma file (Maestro → Components page). Dark only.
 
-// Colours
-$color-bg:          #F6F6F3;
-$color-surface:     #FFFFFF;
-$color-border:      #E2E2DC;
-$color-border-strong: #C9CBC3;
-$color-sidebar:     #16181D;
-$color-sidebar-active: #2A2E36;
-$color-sidebar-text: #C9CDD4;
-$color-accent:      #1F5FBF;
-$color-accent-dark: #174A94;
-$color-accent-soft: #E8EFFA;
-$color-risk-text:   #A34A06;
-$color-risk-strong: #8A3D05;
-$color-risk-bg:     #FDF0E4;
-$color-neutral-bg:  #F1F2EE;
-$color-text:        #16181D;
-$color-muted:       #5A606B;   // 6.2:1 on white — passes WCAG AA for small text
+// Colour
+$bg:               #09090B;
+$surface:          #111114;
+$surface-raised:   #18181C;
+$border:           #222228;
+$text:             #EDEDEF;
+$text-muted:       #8B8B94;
+$text-placeholder: #5C5C66;
+$accent:           #E8A93A;
+$accent-deep:      #C48522;
+$accent-subtle:    #1C170E;
+$accent-text:      #09090B;
+$bulb-base:        #3A3A42;
+$bulb-groove:      #2A2A30;
 
-// Typography
-$font-heading:      'Space Grotesk', sans-serif;
-$font-body:         'Inter', sans-serif;
+$risk-high:        #E5484D;
+$risk-high-bg:     #2A1315;
+$risk-medium:      #E8A93A;
+$risk-medium-bg:   #2A2112;
+$risk-low:         #8B8B94;
+$ok:               #3FB68B;
 
-// Spacing
-$space-xs:  4px;
-$space-sm:  8px;
-$space-md:  16px;
-$space-lg:  24px;
-$space-xl:  40px;
+$work-feature:     #6E8EF5;
+$work-fix:         #9AA5F0;
+$work-test:        #E8A93A;
+$work-docs:        #8B8B94;
+$work-other:       #4A4A52;
 
-$radius:    12px;
-$radius-sm: 8px;
+// Type (Geist, matching the Figma text styles)
+$font: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+// Spacing (8px grid)
+$space-4:  4px;
+$space-8:  8px;
+$space-12: 12px;
+$space-16: 16px;
+$space-20: 20px;
+$space-24: 24px;
+$space-32: 32px;
+$space-40: 40px;
+$space-48: 48px;
+
+// Shape and size
+$radius-control: 10px;
+$radius-card:    16px;
+$radius-panel:   20px;
+$control-height: 52px;
+
+$mobile: 767px; // at or below: phone layout
+
+@mixin phone { @media (max-width: $mobile) { @content; } }
 
 @mixin card {
-  background: $color-surface;
-  border: 1px solid $color-border;
-  border-radius: $radius;
-  padding: $space-lg;
+  background: $surface;
+  border: 1px solid $border;
+  border-radius: $radius-card;
+  padding: $space-24;
+  @include phone { padding: $space-20; }
 }
+
+// Text styles
+@mixin t-page-title   { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.015em; }
+@mixin t-h1-welcome   { font-size: 48px; line-height: 56px; font-weight: 600; letter-spacing: -0.025em; }
+@mixin t-h1-step      { font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; }
+@mixin t-h1-mobile    { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.015em; }
+@mixin t-heading-sm   { font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: -0.01em; }
+@mixin t-stat         { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.015em; }
+@mixin t-body         { font-size: 18px; line-height: 28px; font-weight: 400; letter-spacing: -0.005em; }
+@mixin t-label        { font-size: 15px; line-height: 22px; font-weight: 500; letter-spacing: -0.005em; }
+@mixin t-small        { font-size: 15px; line-height: 22px; font-weight: 400; }
+@mixin t-badge        { font-size: 12px; line-height: 16px; font-weight: 500; }
+@mixin t-wordmark     { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.02em; }
 
 @mixin visually-hidden {
   position: absolute;
@@ -47,4 +81,8 @@ $radius-sm: 8px;
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+@mixin focus-ring {
+  &:focus-visible { outline: 2px solid $accent; outline-offset: 2px; }
 }

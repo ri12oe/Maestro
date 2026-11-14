@@ -1,9 +1,9 @@
-import type { WorkType } from './api/types.ts';
+import type { Substance, WorkType } from './api/types.ts';
 
 /**
  * Work types are grouped into five categories for the contribution bars.
- * Colors differ in lightness as well as hue, so they stay distinguishable
- * for color-blind viewers; every bar also has a text equivalent.
+ * Colours come from the design tokens (CSS variables set in global.scss);
+ * every bar also has a text equivalent.
  */
 export interface WorkCategory {
   key: string;
@@ -13,11 +13,11 @@ export interface WorkCategory {
 }
 
 export const WORK_CATEGORIES: WorkCategory[] = [
-  { key: 'features', label: 'Features', color: '#1F5FBF', types: ['feature'] },
-  { key: 'fixes', label: 'Fixes and refactors', color: '#8FB4EE', types: ['fix', 'refactor'] },
-  { key: 'tests', label: 'Tests', color: '#E8873A', types: ['test'] },
-  { key: 'docs', label: 'Docs and design', color: '#7E8794', types: ['docs', 'design'] },
-  { key: 'other', label: 'Other', color: '#C2C7CE', types: ['formatting', 'generated', 'other'] },
+  { key: 'features', label: 'Features', color: 'var(--work-feature)', types: ['feature'] },
+  { key: 'fixes', label: 'Fixes and refactors', color: 'var(--work-fix)', types: ['fix', 'refactor'] },
+  { key: 'tests', label: 'Tests', color: 'var(--work-test)', types: ['test'] },
+  { key: 'docs', label: 'Docs and design', color: 'var(--work-docs)', types: ['docs', 'design'] },
+  { key: 'other', label: 'Other', color: 'var(--work-other)', types: ['formatting', 'generated', 'other'] },
 ];
 
 export const WORK_TYPE_LABEL: Record<WorkType, string> = {
@@ -31,6 +31,18 @@ export const WORK_TYPE_LABEL: Record<WorkType, string> = {
   design: 'Design',
   other: 'Other',
 };
+
+/** Colour for a single work type (the colour of its category). */
+export function workTypeColor(type: WorkType | null): string {
+  if (!type) return 'var(--work-other)';
+  return WORK_CATEGORIES.find(c => c.types.includes(type))?.color ?? 'var(--work-other)';
+}
+
+/** "Substantial" or "Minor", the two substance tags shown on contribution rows. */
+export function substanceLabel(s: Substance | null): string | null {
+  if (!s) return null;
+  return s === 'low' ? 'Minor' : 'Substantial';
+}
 
 /** Share of a member's weighted work per category (0–1), in WORK_CATEGORIES order. */
 export function categoryShares(shares: Partial<Record<WorkType, number>>): Array<WorkCategory & { share: number }> {

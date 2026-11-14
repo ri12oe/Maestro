@@ -1,36 +1,37 @@
-import { useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { useCallback, useState, type FormEvent } from 'react';
 import { api } from '../../api/client.ts';
 import type { ManualKind } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
-import { Card, Empty, ErrorState, Loading, PageHeader, Pill } from '../../components/ui.tsx';
+import { Page, useTeam } from '../../components/Layout.tsx';
+import { Card, Chip, ErrorState, Loading, Toast } from '../../components/ui.tsx';
 import { shortDate } from '../../dates.ts';
 import './LogWork.scss';
 
-const KINDS: Array<{ value: ManualKind; label: string }> = [
-  { value: 'design', label: 'Design' },
-  { value: 'research', label: 'Research' },
-  { value: 'meeting', label: 'Meeting notes' },
-  { value: 'coordination', label: 'Coordination' },
-  { value: 'other', label: 'Other' },
+// The kinds the API accepts for work done outside the repo.
+const KINDS: Array<{ value: ManualKind; label: string; color: string }> = [
+  { value: 'design', label: 'Design', color: 'var(--work-docs)' },
+  { value: 'research', label: 'Research', color: 'var(--work-other)' },
+  { value: 'meeting', label: 'Meeting', color: 'var(--work-other)' },
+  { value: 'coordination', label: 'Coordination', color: 'var(--work-other)' },
+  { value: 'other', label: 'Other', color: 'var(--work-other)' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map(k => [k.value, k.label])) as Record<ManualKind, string>;
 
 export default function LogWork() {
-  const teamId = Number(useParams().teamId);
-  const members = useApi(() => api.members(teamId), [teamId]);
-  const tasks = useApi(() => api.tasks(teamId), [teamId]);
-  const entries = useApi(() => api.manualEntries(teamId), [teamId]);
+  const { teamId, version } = useTeam();
+  const members = useApi(() => api.members(teamId), [teamId, version]);
+  const tasks = useApi(() => api.tasks(teamId), [teamId, version]);
+  const entries = useApi(() => api.manualEntries(teamId), [teamId, version]);
 
   const [memberId, setMemberId] = useState('');
   const [kind, setKind] = useState<ManualKind>('design');
   const [taskId, setTaskId] = useState('');
   const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
 
   const people = (members.data ?? []).filter(m => m.github_login);
   const openTasks = (tasks.data ?? []).filter(t => t.status === 'open');
@@ -38,23 +39,21 @@ export default function LogWork() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!memberId) { setError('Choose who did the work.'); return; }
-    if (!title.trim()) { setError('Add a short title.'); return; }
+    if (!title.trim()) { setError('Say what was done.'); return; }
     if (link.trim() && !/^https?:\/\//i.test(link.trim())) { setError('The link should start with http:// or https://'); return; }
 
     setBusy(true);
     setError(null);
-    setSaved(null);
     try {
       await api.logWork(teamId, {
         member_id: Number(memberId),
         kind,
         title: title.trim(),
-        body: body.trim() || undefined,
         link: link.trim() || undefined,
         task_id: taskId ? Number(taskId) : undefined,
       });
-      setSaved(`Logged “${title.trim()}”. It now counts toward the contribution map${taskId ? ' and the task’s progress' : ''}.`);
-      setTitle(''); setBody(''); setLink(''); setTaskId('');
+      setToast('Logged. It’ll appear on the overview after the next refresh.');
+      setTitle(''); setLink(''); setTaskId('');
       entries.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -64,101 +63,73 @@ export default function LogWork() {
   }
 
   return (
-    <>
-      <PageHeader title="Log work outside the repo" />
-      <p className="lead">
-        Design, research, meetings and coordination count too. Logged work is labeled and linked to a
-        task just like a commit, so people who don't write code aren't undervalued.
-      </p>
+    <Page title="Log work" subtitle="Meetings, design, research and writing count too.">
+      <div className="logwork">
+        {members.error && <ErrorState message={members.error} onRetry={members.reload} />}
+        {members.loading && !members.data && <Loading />}
 
-      <div className="split">
-        <div className="split__main">
-          <Card>
-            {(members.loading || tasks.loading) && !members.data && <Loading />}
-            {members.error && <ErrorState message={members.error} onRetry={members.reload} />}
-            <form className="logform" onSubmit={submit} noValidate>
-              <div className="logform__row">
-                <div className="field">
-                  <label htmlFor="who">Who did this?</label>
-                  <select id="who" value={memberId} onChange={e => setMemberId(e.target.value)} required>
-                    <option value="">Choose a teammate</option>
-                    {people.map(m => (
-                      <option key={m.id} value={m.id}>{m.display_name ?? m.github_login}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="kind">Type of work</label>
-                  <select id="kind" value={kind} onChange={e => setKind(e.target.value as ManualKind)}>
-                    {KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-                  </select>
-                </div>
-              </div>
+        <form className="logform" onSubmit={submit} noValidate>
+          <div className="field">
+            <label htmlFor="who">Who did this?</label>
+            <select id="who" className="input" value={memberId} onChange={e => setMemberId(e.target.value)} required>
+              <option value="">Choose a teammate</option>
+              {people.map(m => <option key={m.id} value={m.id}>{m.display_name ?? m.github_login}</option>)}
+            </select>
+          </div>
 
-              <div className="field">
-                <label htmlFor="title">What did you do?</label>
-                <input id="title" value={title} onChange={e => setTitle(e.target.value)} required maxLength={120}
-                  placeholder="e.g. Usability tests on the onboarding prototype" />
-              </div>
+          <div className="field">
+            <label htmlFor="what">What did you do?</label>
+            <textarea id="what" className="input" value={title} onChange={e => setTitle(e.target.value)} required maxLength={120}
+              placeholder="e.g. Designed the onboarding screens in Figma" />
+          </div>
 
-              <div className="field">
-                <label htmlFor="body">Details <span className="optional">(optional)</span></label>
-                <textarea id="body" rows={3} value={body} onChange={e => setBody(e.target.value)}
-                  placeholder="What came out of it? Findings, decisions, next steps." />
-              </div>
+          <fieldset className="field logform__kinds">
+            <legend className="field__label">Type</legend>
+            <div className="chips">
+              {KINDS.map(k => (
+                <Chip key={k.value} selected={kind === k.value} onClick={() => setKind(k.value)} dot={k.color}>{k.label}</Chip>
+              ))}
+            </div>
+          </fieldset>
 
-              <div className="logform__row">
-                <div className="field">
-                  <label htmlFor="task">Related task <span className="optional">(optional)</span></label>
-                  <select id="task" value={taskId} onChange={e => setTaskId(e.target.value)}>
-                    <option value="">Not tied to a task</option>
-                    {openTasks.map(t => (
-                      <option key={t.id} value={t.id}>#{t.github_issue_number} {t.title}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="link">Link <span className="optional">(optional)</span></label>
-                  <input id="link" type="url" value={link} onChange={e => setLink(e.target.value)}
-                    placeholder="Figma, Google Doc, notes…" />
-                </div>
-              </div>
+          <div className="field">
+            <label htmlFor="task">Related task (optional)</label>
+            <select id="task" className="input" value={taskId} onChange={e => setTaskId(e.target.value)}>
+              <option value="">Not tied to a task</option>
+              {openTasks.map(t => <option key={t.id} value={t.id}>#{t.github_issue_number} {t.title}</option>)}
+            </select>
+          </div>
 
-              {error && <p className="logform__error" role="alert">{error}</p>}
-              {saved && <p className="logform__saved" role="status">{saved}</p>}
-              <div>
-                <button type="submit" className="btn btn--primary" disabled={busy}>
-                  {busy ? 'Saving…' : 'Add to contributions'}
-                </button>
-              </div>
-            </form>
-          </Card>
-        </div>
+          <div className="field">
+            <label htmlFor="link">Link (optional)</label>
+            <input id="link" type="url" className="input" value={link} onChange={e => setLink(e.target.value)} placeholder="Figma, Google Doc, notes…" />
+          </div>
 
-        <div className="split__side">
-          <Card title="Recently logged">
-            {entries.loading && !entries.data && <Loading />}
-            {entries.error && <ErrorState message={entries.error} onRetry={entries.reload} />}
-            {entries.data && entries.data.length === 0 && <Empty>Nothing logged yet.</Empty>}
-            {entries.data && entries.data.length > 0 && (
-              <ul className="logged">
-                {entries.data.slice(0, 8).map(e => (
-                  <li key={e.id}>
-                    <span className="logged__title">
-                      {e.link ? <a href={e.link} target="_blank" rel="noreferrer">{e.title}</a> : e.title}
-                    </span>
-                    <span className="logged__meta">
-                      {e.display_name?.split(' ')[0] ?? e.github_login}
-                      {e.kind && <> · <Pill>{KIND_LABEL[e.kind] ?? e.kind}</Pill></>}
-                      {' · '}{shortDate(e.authored_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
+          {error && <p className="logform__error" role="alert">{error}</p>}
+          <div>
+            <button type="submit" className="btn btn--primary" disabled={busy}>{busy ? 'Saving…' : 'Log work'}</button>
+          </div>
+        </form>
+
+        <Card title="Recently logged">
+          {entries.loading && !entries.data && <Loading />}
+          {entries.error && <ErrorState message={entries.error} onRetry={entries.reload} />}
+          {entries.data && entries.data.length === 0 && <p className="muted">Nothing logged yet.</p>}
+          {entries.data && entries.data.length > 0 && (
+            <ul className="logged">
+              {entries.data.slice(0, 8).map(e => (
+                <li key={e.id}>
+                  {shortDate(e.authored_at)} · {e.display_name ?? e.github_login}
+                  {e.kind && <> · {KIND_LABEL[e.kind] ?? e.kind}</>}
+                  {' · '}
+                  {e.link ? <a href={e.link} target="_blank" rel="noreferrer">{e.title}</a> : e.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
-    </>
+      {toast && <Toast message={toast} onClose={closeToast} />}
+    </Page>
   );
 }

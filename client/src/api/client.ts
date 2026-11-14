@@ -45,6 +45,12 @@ export const api = {
   members: (teamId: number) =>
     request<Member[]>(`/teams/${teamId}/members`),
 
+  addMember: (teamId: number, githubLogin: string) =>
+    request<Member>(`/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify({ github_login: githubLogin }) }),
+
+  removeMember: (teamId: number, memberId: number) =>
+    request<{ ok: true }>(`/teams/${teamId}/members/${memberId}`, { method: 'DELETE' }),
+
   teams: () =>
     request<TeamListItem[]>('/teams'),
 

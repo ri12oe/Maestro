@@ -1,0 +1,19 @@
+@use '../../styles/variables' as *;
+
+.settings {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: $space-24;
+  @include phone { gap: $space-16; }
+
+  &__repo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $space-16;
+    @include phone { flex-direction: column; align-items: flex-start; }
+  }
+  &__repo-name { @include t-label; }
+  &__error { color: $risk-high; }
+}

@@ -57,7 +57,7 @@ Railpack also sets `NODE_ENV=production` on the running container, and it still 
 |---|---|---|---|
 | `PORT` | Set by Railway | Port the process listens on. | Leave unset |
 | `NODE_ENV` | Required for the site | `production` serves `client/dist`. Any other value serves the API only. Read in `server/src/index.ts`. | `production` |
-| `DB_PATH` | Required | SQLite file. Parent directory is created on boot, then migrations run. Read in `server/src/db/client.ts`, `server/src/db/migrate.ts`, `server/src/db/seed.ts`. | `/data/maestro.db` |
+| `DB_PATH` | Required | SQLite file. A relative path is resolved from the repo root. An absolute path is used as given. Parent directory is created on boot, then migrations run. Read in `server/src/db/paths.ts` (client, migrate, and seed). | `/data/maestro.db` |
 | `AI_PROVIDER` | Optional | `mock` (the default) labels work offline. `grok` calls xAI. Read in `server/src/ai/provider.ts`, `server/src/ai/classifier.ts`, `server/src/ai/reasoner.ts`, `server/src/ai/eval/run.ts`, `server/src/routes/manual.ts`. | `mock` |
 | `XAI_API_KEY` | Required when `AI_PROVIDER=grok` | Bearer token for `https://api.x.ai`. The server throws if it is missing when a Grok call runs, and it does not log the key. Read in `server/src/ai/provider.ts`. | secret, set in Railway |
 | `GROK_MODEL` | Required when `AI_PROVIDER=grok` | Model name sent to xAI and stored on each classification. Read in `server/src/ai/provider.ts` and `server/src/ai/classifier.ts`. | `grok-4.20-0309-non-reasoning` |

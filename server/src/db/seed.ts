@@ -18,17 +18,13 @@
  * Pass `today` to pin commit dates, due dates, and the reasoner clock.
  */
 
-import dotenv from 'dotenv';
+import '../loadEnv.js';
 import Database from 'better-sqlite3';
-import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { runMigration } from './migrate.js';
+import { resolveDbPath } from './paths.js';
 import { classifyTeam } from '../ai/classifier.js';
 import { runReasoner } from '../ai/reasoner.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
-dotenv.config({ path: join(__dirname, '..', '..', '..', '.env') });
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -55,7 +51,7 @@ export interface SeedResult {
  * A second call finds the team and inserts nothing.
  */
 export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResult> {
-  const dbPath = process.env.DB_PATH ?? join(__dirname, '..', '..', '..', 'dev.db');
+  const dbPath = resolveDbPath();
   runMigration(dbPath);
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
@@ -217,13 +213,9 @@ export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResu
 
   // ── Run classifier ────────────────────────────────────────────────────────────
 
-  // We need to override the db singleton that classifier.ts imports from client.ts
-  // Instead, we set DB_PATH before the import so both resolve to the same file.
-  // Since the classifier imports db from client.ts (a singleton), and we're
-  // running seed.ts with tsx (the same process), it will use the same DB_PATH.
-  // Just call classifyTeam with the teamId.
-
-  // Dynamic import to avoid top-level circular dependency during seed run
+  // classifyTeam uses the singleton in client.ts. .env is loaded and DB_PATH is
+  // resolved before that module opens, so this connection and the singleton
+  // are the same file.
   console.log('Running classifier...');
   const { classified, failed } = await classifyTeam(teamId);
   console.log(`Classified ${classified} contributions${failed > 0 ? `, ${failed} failed` : ''}`);

@@ -715,3 +715,32 @@ Commands on a clean clone of this branch, mock mode, after commenting out `DB_PA
 | `npm run eval` (repo root) | Missing script. Eval is only in `server/`. |
 
 One database file after the seed: `<repo>/dev.db`. The demo rows were still there after the tests.
+
+## 2026-11-14 — Session 24: One SQLite file for the copied .env (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Copying `.env.example` to `.env` left `DB_PATH=./dev.db`. The API imported the SQLite client before `dotenv` ran, so it never saw that variable and opened `<repo>/dev.db`. The seed read `.env` afterwards and opened `./dev.db` from its working directory, `server/`. The classifier uses the API client, so that file had 31 contributions and 0 classifications.
+
+`.env` is now loaded before the client opens. A relative `DB_PATH` is resolved from the repo root. An absolute path is unchanged (`DB_PATH=/data/maestro.db` on Railway). When `DB_PATH` is unset, the file is still `<repo>/dev.db`. The README no longer says to comment the line out.
+
+| File | Change |
+|---|---|
+| `server/src/loadEnv.ts` | Loads `<repo>/.env` once, before the database opens. |
+| `server/src/db/paths.ts` | `resolveDbPath()`. |
+| `server/src/db/client.ts`, `seed.ts`, `migrate.ts`, `index.ts`, `server/src/ai/eval/run.ts` | Load env first and open the resolved path. |
+| `server/src/tests/db-path.test.ts` | Relative path, absolute path, and unset. |
+| `.env.example`, `README.md`, `docs/RAILWAY.md` | The copied example works with no edits. |
+
+With `cp .env.example .env` and no edits, `npm run dev:server` and `npm run seed --workspace=server` both logged `Migration complete: <repo>/dev.db`. The seed classified 31 contributions and printed the high risk on #12 Auth flow. Overview at `/teams/1` showed that risk and the classified contribution map.
+
+`npx tsc --noEmit` (in `server/`) exited 0. `npm run build --workspace=client` succeeded.
+
+`npm test` (in `server/`, with that `.env` present):
+
+```
+ Test Files  14 passed (14)
+      Tests  127 passed (127)
+   Start at  22:12:40
+   Duration  1.29s
+```

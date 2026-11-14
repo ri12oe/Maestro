@@ -13,6 +13,7 @@ import suggestionsRouter from './routes/suggestions.js';
 import manualRouter from './routes/manual.js';
 import summaryRouter from './routes/summary.js';
 import { sitePassword } from './middleware/sitePassword.js';
+import { serveProductionClient } from './serveClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
@@ -43,10 +44,7 @@ app.use('/api/teams/:teamId/summary', summaryRouter);
 // dist/ → server/dist/../../client/dist = <repo>/client/dist
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
+  serveProductionClient(app, clientDist);
 }
 
 app.listen(PORT, () => {

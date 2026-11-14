@@ -63,7 +63,7 @@ export const api = {
   dismissRisk: (teamId: number, riskId: number) =>
     request<{ ok: true }>(`/teams/${teamId}/risks/${riskId}/dismiss`, { method: 'POST' }),
 
-  respond: (teamId: number, suggestionId: number, status: 'accepted' | 'discuss' | 'dismissed') =>
+  respond: (teamId: number, suggestionId: number, status: Suggestion['status']) =>
     request<{ ok: true }>(`/teams/${teamId}/suggestions/${suggestionId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ status }),

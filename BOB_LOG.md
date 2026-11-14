@@ -555,3 +555,17 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 **Checked against the real `ri12oe/Maestro` repo** in a browser: Sync now pulled 17 commits and the 4 real Issues with milestone due dates; 9 commit→Issue links, all sensible; "#4 Write deployment guide for Railway" flagged HIGH (no matched work, due in 5 days).
 
 `npm test`: 89 passed (89).
+
+## 2026-11-14 — Session 16: Undo an accepted rebalance suggestion (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`POST /api/teams/:teamId/suggestions/:suggestionId/respond` with `{ status: "pending" }` sets an accepted suggestion back to pending. Accept is the only response that changes anything else: it sets the task's `assignee_login` to the receiving member. Undo puts that login back to the member who held the task (`from_login`). If the task is no longer assigned to the receiver, undo returns 409 and leaves both rows alone. A suggestion that is not accepted returns 400; an unknown id returns 404. The Rebalance screen is unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/routes/suggestions.ts` | Undo path on the existing respond route. |
+| `server/src/tests/suggestions-undo.test.ts` | Accept then undo, plus the 400 / 404 / 409 cases. |
+| `docs/PLAN.md` | Suggestions respond row notes the pending status. |
+
+`npm test`: 102 passed (102). `npx tsc --noEmit` exited 0.

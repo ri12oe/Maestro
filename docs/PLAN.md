@@ -248,7 +248,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/teams/:teamId/suggestions` | All pending suggestions |
-| `POST` | `/api/teams/:teamId/suggestions/:suggestionId/respond` | Accept / discuss / dismiss |
+| `POST` | `/api/teams/:teamId/suggestions/:suggestionId/respond` | Accept / discuss / dismiss, or set an accepted suggestion back to `pending` |
 
 ### Dashboard Summary (aggregated)
 

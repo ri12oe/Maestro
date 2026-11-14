@@ -67,7 +67,7 @@ describe('sync errors', () => {
     const res = await request(app).post(`/api/teams/${teamId}/sync`);
     process.env.GITHUB_TOKEN = saved;
     expect(res.status).toBe(503);
-    expect(res.body.error).toMatch(/Add GITHUB_TOKEN to the \.env file/);
+    expect(res.body.error).toMatch(/Set the GITHUB_TOKEN environment variable/);
   });
 
   it.each([

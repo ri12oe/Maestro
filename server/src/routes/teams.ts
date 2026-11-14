@@ -86,7 +86,7 @@ router.post('/:teamId/sync', async (req, res) => {
 
   if (!process.env.GITHUB_TOKEN) {
     res.status(503).json({
-      error: 'The server has no GitHub token yet. Add GITHUB_TOKEN to the .env file in the Maestro folder, restart the server, then retry.',
+      error: 'The server has no GitHub token configured. Set the GITHUB_TOKEN environment variable (in .env locally, or in your host\'s variables), restart the server, then retry.',
     });
     return;
   }

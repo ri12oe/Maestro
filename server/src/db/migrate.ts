@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
@@ -15,6 +15,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export function runMigration(dbPath: string): void {
   const schemaPath = join(__dirname, 'schema.sql');
   const sql = readFileSync(schemaPath, 'utf-8');
+  const dbDir = dirname(dbPath);
+  if (!existsSync(dbDir)) {
+    mkdirSync(dbDir, { recursive: true });
+    console.warn(
+      `Created missing database folder ${dbDir}. If this is a hosted deploy, ` +
+        'attach a persistent volume there or the data will be lost on redeploy.',
+    );
+  }
   const db = new Database(dbPath);
 
   // Apply base schema

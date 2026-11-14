@@ -569,3 +569,19 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 | `docs/PLAN.md` | Suggestions respond row notes the pending status. |
 
 `npm test`: 102 passed (102). `npx tsc --noEmit` exited 0.
+
+## 2026-11-14 — Session 17: Undo link on an accepted swap (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The Rebalance confirmation for an accepted swap now has an underlined Undo link. It calls the existing respond route with `{ status: "pending" }`. On success the suggestion card is pending again and open-task counts reload, so the owner shown on Risk radar and the member page is the original assignee. If the server refuses (including the 409 when the task was reassigned), that error string is shown in the card and the confirmation stays. The accepted confirmation is kept while you move around the app, so you can check the new owner and still undo.
+
+| File | Change |
+|---|---|
+| `client/src/api/client.ts` | `respond` accepts every suggestion status, including `pending`. |
+| `client/src/pages/Rebalance/Rebalance.tsx` | Undo link, inline error, reload after success. |
+| `client/src/pages/Rebalance/Rebalance.scss` | Link sits in the confirmation line; error wraps under it. |
+
+The client has no test runner. Checked in the browser against the seeded StudyBuddy team: accept #14, Undo returns the pending card (Sam 2 open, Jordan 0), and Risk radar plus Sam's assigned tasks show Sam again. A reassigned task shows the server's 409 message in the card and leaves the rows unchanged.
+
+`npm run build --workspace=client` succeeded. `npm test --workspace=server`: 102 passed (102). No server changes.

@@ -679,3 +679,13 @@ Unmatched `/api` paths were the break. `GET /api/does-not-exist` returned `index
    Start at  21:33:48
    Duration  2.34s
 ```
+
+## 2026-11-14 — Session 22: Railway setup guide (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 3, done-pending-deploy. `docs/RAILWAY.md` is the dashboard setup: create the service, mount a volume at `/data`, set `DB_PATH=/data/maestro.db`, set every variable `server/src` reads, then curl `/`, `/teams/1`, `/api/teams`, and an unknown `/api` path. The demo seed runs inside the container with `node server/dist/db/seed.js`.
+
+`railway.json` is unchanged. It already sets the Railpack builder, `npm run build`, `npm start`, and restart policy `ON_FAILURE`. Railway's config schema does not create a volume. A healthcheck path was left unset: with `SITE_PASSWORD` set, every route returns 401, and Railway only treats a 2xx as healthy. A new Railway service does not read `railway.json` (config-as-code cutoff 2026-12-01), so the guide tells you to copy those settings into the service.
+
+No deploy, and no secrets.

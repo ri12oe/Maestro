@@ -108,6 +108,18 @@ export interface TeamListItem {
   contribution_count: number;
 }
 
+/** Row from GET /api/teams/:teamId and PATCH /api/teams/:teamId. */
+export interface Team {
+  id: number;
+  name: string;
+  repo_owner: string;
+  repo_name: string;
+  created_at: string;
+  last_synced_at: string | null;
+  is_demo: number;
+  deadline: string | null;
+}
+
 export interface Member {
   id: number;
   github_login: string | null;
@@ -136,4 +148,10 @@ export interface SyncResult {
   classified: number;
   classifyFailed: number;
   relinked: number;
+}
+
+export interface ClassifyResult {
+  ok: true;
+  classified: number;
+  failed: number;
 }

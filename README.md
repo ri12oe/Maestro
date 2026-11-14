@@ -31,13 +31,15 @@ cp .env.example .env
 npm install
 ```
 
-The copied `.env` is enough for mock mode: `AI_PROVIDER=mock`. The demo seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
+Comment out `DB_PATH` in `.env`. The example sets `DB_PATH=./dev.db`. The API opens SQLite before it reads `.env`, and the seed command's working directory is `server/`. Left set, the seed writes `server/dev.db` and the API serves `dev.db` at the repo root: nothing is classified, and the dashboard is empty. With that line commented out, both use `dev.db` at the repo root. The server log prints `Migration complete:` and the path.
+
+`AI_PROVIDER=mock` in the copied file is enough for the demo. The seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
 
 Sync against a real repository needs `GITHUB_TOKEN` (a read-only personal access token). Until that variable is set, sync responds with 503.
 
 Grok needs `AI_PROVIDER=grok`, `XAI_API_KEY`, and `GROK_MODEL`.
 
-`DB_PATH` in `.env` is `./dev.db`. `PORT` is `3001`.
+`PORT` in the copied file is `3001`.
 
 From the repo root, in two terminals:
 
@@ -60,7 +62,7 @@ StudyBuddy has 4 members (Rio, Sam, Priya, Jordan) and 31 contributions (28 comm
 
 Running it again is safe. If StudyBuddy already exists, the command prints that team id and inserts nothing.
 
-`npm run dev:server` and the seed command both run in `server/`, so `DB_PATH=./dev.db` is the file `server/dev.db`. Open http://localhost:5173/teams/1, or the id the seed printed. Setup also links to StudyBuddy.
+Open http://localhost:5173/teams/1, or the id the seed printed. Setup also links to StudyBuddy.
 
 ## Tests and eval
 

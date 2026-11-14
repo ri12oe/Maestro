@@ -31,15 +31,15 @@ cp .env.example .env
 npm install
 ```
 
-Leave the copied `.env` as it is. `DB_PATH=./dev.db` is the SQLite file at the repo root. A relative path is resolved from the repo root, so the dev server, seed, migrate, and eval open that same file. An absolute path is used as given (`DB_PATH=/data/maestro.db` on Railway). When `DB_PATH` is unset, the file is still `<repo>/dev.db`. Each command prints `Migration complete:` and that path.
+Leave the copied `.env` as it is. It lists every variable the server reads: `PORT`, `NODE_ENV`, `DB_PATH`, `AI_PROVIDER`, `XAI_API_KEY`, `GROK_MODEL`, `GITHUB_TOKEN`, `SITE_USER`, and `SITE_PASSWORD`.
 
-`AI_PROVIDER=mock` in the copied file is enough for the demo. The seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
+`DB_PATH=./dev.db` is the SQLite file at the repo root. A relative path is resolved from the repo root, so the dev server, seed, migrate, and eval open that same file. An absolute path is used as given (`DB_PATH=/data/maestro.db` on Railway). When `DB_PATH` is unset, the file is still `<repo>/dev.db`. Each command prints `Migration complete:` and that path.
 
-Sync against a real repository needs `GITHUB_TOKEN` (a read-only personal access token). Until that variable is set, sync responds with 503.
+`AI_PROVIDER=mock` and `NODE_ENV=development` in the copied file are enough for the demo. The dev server does not serve `client/dist`. The seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
 
-Grok needs `AI_PROVIDER=grok`, `XAI_API_KEY`, and `GROK_MODEL`.
+`GITHUB_TOKEN` and `XAI_API_KEY` in the copied file are placeholders, not real credentials. Sync against a real repository needs a read-only personal access token in `GITHUB_TOKEN`. Sync responds with 503 when that variable is unset or empty. Grok needs `AI_PROVIDER=grok`, a real `XAI_API_KEY`, and `GROK_MODEL`.
 
-`PORT` in the copied file is `3001`.
+`PORT` in the copied file is `3001`. `SITE_USER` is `maestro` and `SITE_PASSWORD` is empty, so the password gate stays off.
 
 From the repo root, in two terminals:
 

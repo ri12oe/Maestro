@@ -744,3 +744,38 @@ With `cp .env.example .env` and no edits, `npm run dev:server` and `npm run seed
    Start at  22:12:40
    Duration  1.29s
 ```
+
+## 2026-11-14 — Session 25: Secret history audit and a complete .env.example (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4 acceptance criterion: no secrets in the repo, and `.env.example` lists every variable the server reads. No history rewrite.
+
+**Scan.** gitleaks 8.30.0, from the repo root:
+
+```
+gitleaks detect --source . --log-opts="--all --full-history" --redact
+```
+
+It reported 43 commits scanned and no leaks. `git rev-list --all` is 45 commits (32 on main, 13 only on other remote branches). gitleaks skips commits with no additions, which accounts for the gap. A second pass grepped `git log --all -p` across all 45 commits for `ghp_`, `github_pat_`, `xai-`, `sk-`, AWS access-key IDs, private-key blocks, `password=` / `api_key=` / `token=` assignments, Slack tokens, and npm tokens.
+
+No real credential. The hits were placeholders in `.env.example` (`GITHUB_TOKEN`, `XAI_API_KEY`, a commented `SITE_PASSWORD`, and an older `WATSONX_API_KEY` placeholder), test fixtures (`test-key`, `fake-key`, `fake-key-for-test`), and `process.env` reads. Seed and eval sample diffs mention `DATABASE_URL`, `REDIS_URL`, `REFRESH_SECRET`, and `const token =` inside fake commit text. The `sk-` hits are the substring inside the word "task-matching". The only env file ever committed is `.env.example`. No `.env`, `*.db`, `*.db-*`, `dist/`, or `*.patch` path appears in history.
+
+`.gitignore` now also ignores `.env.*` (`.env.example` stays tracked), `*.db-*`, any `dist/` directory, and `*.patch`. `node_modules/` and `*.db` were already ignored.
+
+`.env.example` lists `PORT`, `NODE_ENV`, `DB_PATH`, `AI_PROVIDER`, `XAI_API_KEY`, `GROK_MODEL`, `GITHUB_TOKEN`, `SITE_USER`, and `SITE_PASSWORD`. Copied with no edits it stays in mock mode: `NODE_ENV=development`, `AI_PROVIDER=mock`, `DB_PATH=./dev.db`, empty `SITE_PASSWORD` (the gate stays off), and placeholders that are not tokens. `README.md` and `docs/RAILWAY.md` name the same nine variables. Railway still uses `NODE_ENV=production`, an injected `PORT`, and `DB_PATH=/data/maestro.db`.
+
+`docs/PLAN.md` marks that acceptance criterion done.
+
+With `cp .env.example .env` and no edits, both the dev server and the seed logged `Migration complete: <repo>/dev.db`. The seed classified 31 contributions and printed the high risk on #12 Auth flow. `GET /api/teams/1/summary` showed StudyBuddy, 0 of 6 tasks done, 2 at risk, 1 pending suggestion, and a work-type mix for all four members. Headless Chrome loaded `http://localhost:5173/teams/1`. Overview showed Demo data, that same scoreline, the contribution map (not "no classified work yet"), the high risk on #12 Auth flow, and the swap from Sam Rivera to Jordan Lee. No sign-in prompt.
+
+`npm test` (in `server/`, with that `.env` present):
+
+```
+ Test Files  14 passed (14)
+      Tests  127 passed (127)
+   Start at  22:35:39
+   Duration  1.41s
+```
+
+`.env` and `dev.db` stayed untracked.

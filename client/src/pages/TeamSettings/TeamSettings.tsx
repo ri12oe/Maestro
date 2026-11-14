@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
@@ -89,7 +89,73 @@ export default function TeamSettings() {
             <p className="field__help">Taken from the GitHub milestone.</p>
           </div>
         </Card>
+
+        <DangerZone teamId={teamId} teamName={team?.name ?? ''} />
       </div>
     </Page>
+  );
+}
+
+function DangerZone({ teamId, teamName }: { teamId: number; teamName: string }) {
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const confirmed = teamName.length > 0 && typed.trim() === teamName.trim();
+
+  function cancel() {
+    setConfirming(false);
+    setTyped('');
+    setError(null);
+  }
+
+  async function disconnect(e: FormEvent) {
+    e.preventDefault();
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteTeam(teamId);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Danger zone" className="settings__danger">
+      <p className="muted">
+        Disconnecting removes this team from Maestro, including its members, tasks, and logged work. The GitHub repository is left unchanged.
+      </p>
+      {!confirming ? (
+        <div className="settings__actions">
+          <button type="button" className="btn btn--danger" onClick={() => setConfirming(true)} disabled={!teamName}>
+            Disconnect team
+          </button>
+        </div>
+      ) : (
+        <form className="field" onSubmit={disconnect} noValidate>
+          <label htmlFor="confirm-disconnect">Type {teamName} to confirm</label>
+          <input
+            id="confirm-disconnect"
+            className="input"
+            value={typed}
+            onChange={e => setTyped(e.target.value)}
+            autoComplete="off"
+            autoFocus
+            disabled={busy}
+          />
+          {error && <p className="settings__error" role="alert">{error}</p>}
+          <div className="settings__actions">
+            <button type="submit" className="btn btn--danger" disabled={busy || !confirmed}>
+              {busy ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+            <button type="button" className="text-btn" onClick={cancel} disabled={busy}>Cancel</button>
+          </div>
+        </form>
+      )}
+    </Card>
   );
 }

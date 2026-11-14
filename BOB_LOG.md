@@ -555,3 +555,17 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 **Checked against the real `ri12oe/Maestro` repo** in a browser: Sync now pulled 17 commits and the 4 real Issues with milestone due dates; 9 commit→Issue links, all sensible; "#4 Write deployment guide for Railway" flagged HIGH (no matched work, due in 5 days).
 
 `npm test`: 89 passed (89).
+
+## 2026-11-14 — Session 16: Disconnect a team from Team settings (AI source: Grok bots)
+
+| File | Change |
+|---|---|
+| `client/src/api/client.ts` | `api.deleteTeam` calls `DELETE /api/teams/:teamId` and expects `{ ok: true }`. |
+| `client/src/pages/TeamSettings/TeamSettings.tsx` | Danger zone card at the bottom of Team settings. The user types the team name, then disconnects. A failed call shows the server error. On success the app goes to Setup at `/`. |
+| `client/src/pages/TeamSettings/TeamSettings.scss` | The existing danger button uses the risk colours already in the design tokens. |
+
+The open team is the URL (`/teams/:teamId`). Nothing stores a current team in localStorage, so leaving for `/` is what clears the selection. No client test runner in this repo.
+
+`npm run build --workspace=client` succeeded. `npm test --workspace=server`: 93 passed (93).
+
+Checked in a browser against a seeded StudyBuddy team: typing the team name and disconnecting removed it from `GET /api/teams` and from the Setup list. A delete the server rejected showed `Team not found`.

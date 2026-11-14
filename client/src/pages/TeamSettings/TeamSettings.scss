@@ -16,4 +16,17 @@
   }
   &__repo-name { @include t-label; }
   &__error { color: $risk-high; }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: $space-8;
+    flex-wrap: wrap;
+  }
+
+  &__danger .btn--danger {
+    background: $risk-high-bg;
+    border-color: $risk-high;
+    &:hover:not(:disabled) { background: $risk-high; color: $text; }
+  }
 }

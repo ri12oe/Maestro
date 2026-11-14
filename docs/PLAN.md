@@ -235,7 +235,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/teams/:teamId/manual` | Log an off-repo contribution (kind, title, body, link, memberId, related taskId) |
+| `POST` | `/api/teams/:teamId/manual` | Log an off-repo contribution (kind, title, body, link, memberId, related taskId). Optional `date` is `YYYY-MM-DD` and is stored in `authored_at`. Omit `date` to stamp the current time. `400` if `date` is not a real calendar day or is in the future. |
 | `GET` | `/api/teams/:teamId/manual` | List manual log entries for team |
 
 ### Risks

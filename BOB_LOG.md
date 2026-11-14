@@ -779,3 +779,34 @@ With `cp .env.example .env` and no edits, both the dev server and the seed logge
 ```
 
 `.env` and `dev.db` stayed untracked.
+
+## 2026-11-14 — Session 26: Optional date on a manual log (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Manual log work accepts an optional `date` (`YYYY-MM-DD`). It is stored on the existing `contributions.authored_at` column, at noon UTC, so the calendar day stays put. Omit `date`, or send null, and the row is stamped with the current time, as before. An invalid date or a future date returns 400 and writes nothing. Today is allowed.
+
+The Log work form has a date input that starts on today and sends `date` through `api.logWork`. The server's error is shown under the form. Overview, member evidence, risk radar, and the reasoner were not changed. They already read `authored_at`.
+
+| File | Change |
+|---|---|
+| `server/src/routes/manual.ts` | Optional `date`, stored on `authored_at`. |
+| `server/src/tests/manual-date.test.ts` | No date uses now; a past date is stored; invalid and future dates are 400. |
+| `client/src/pages/LogWork/` | Date field on the dark form. |
+| `client/src/api/client.ts` | `logWork` accepts `date`. |
+| `docs/PLAN.md` | Manual POST row documents `date`. |
+
+Checked in the browser against the seeded StudyBuddy team. Logged "Sketched the deck browser empty state" for Priya Nair on 2026-11-12. The row is `2026-11-12T12:00:00Z`. Member evidence shows Nov 12 on that row, and Last active is "2 days ago". A future date shows `date cannot be in the future` under the form and is not listed.
+
+`npx tsc --noEmit` (in `server/`) exited 0. `npx tsc --noEmit` and `npm run build` (in `client/`) succeeded.
+
+`npm test` (in `server/`):
+
+```
+ Test Files  15 passed (15)
+      Tests  139 passed (139)
+   Start at  22:58:20
+   Duration  2.23s
+```
+
+`.env` and `dev.db` stayed untracked.

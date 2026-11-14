@@ -85,6 +85,8 @@ export const api = {
 
   logWork: (teamId: number, input: {
     member_id: number; title: string; body?: string; kind: ManualKind; link?: string; task_id?: number;
+    /** Calendar day the work happened, `YYYY-MM-DD`. Omit to stamp the current time. */
+    date?: string;
   }) =>
     request<ManualEntry>(`/teams/${teamId}/manual`, { method: 'POST', body: JSON.stringify(input) }),
 

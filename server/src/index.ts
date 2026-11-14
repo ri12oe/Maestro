@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import './loadEnv.js';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -16,8 +16,6 @@ import { sitePassword } from './middleware/sitePassword.js';
 import { serveProductionClient } from './serveClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
-dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 const PORT = process.env.PORT ?? 3001;
 
 const app = express();

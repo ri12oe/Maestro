@@ -1,7 +1,9 @@
+import '../loadEnv.js';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
+import { resolveDbPath } from './paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -170,6 +172,5 @@ export function runMigration(dbPath: string): void {
 
 // Run directly when invoked as a script
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const dbPath = process.env.DB_PATH ?? join(__dirname, '..', '..', '..', 'dev.db');
-  runMigration(dbPath);
+  runMigration(resolveDbPath());
 }

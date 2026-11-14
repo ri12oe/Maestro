@@ -31,7 +31,7 @@ cp .env.example .env
 npm install
 ```
 
-Comment out `DB_PATH` in `.env`. The example sets `DB_PATH=./dev.db`. The API opens SQLite before it reads `.env`, and the seed command's working directory is `server/`. Left set, the seed writes `server/dev.db` and the API serves `dev.db` at the repo root: nothing is classified, and the dashboard is empty. With that line commented out, both use `dev.db` at the repo root. The server log prints `Migration complete:` and the path.
+Leave the copied `.env` as it is. `DB_PATH=./dev.db` is the SQLite file at the repo root. A relative path is resolved from the repo root, so the dev server, seed, migrate, and eval open that same file. An absolute path is used as given (`DB_PATH=/data/maestro.db` on Railway). When `DB_PATH` is unset, the file is still `<repo>/dev.db`. Each command prints `Migration complete:` and that path.
 
 `AI_PROVIDER=mock` in the copied file is enough for the demo. The seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
 

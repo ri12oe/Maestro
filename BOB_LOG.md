@@ -689,3 +689,29 @@ Milestone 4, todo 3, done-pending-deploy. `docs/RAILWAY.md` is the dashboard set
 `railway.json` is unchanged. It already sets the Railpack builder, `npm run build`, `npm start`, and restart policy `ON_FAILURE`. Railway's config schema does not create a volume. A healthcheck path was left unset: with `SITE_PASSWORD` set, every route returns 401, and Railway only treats a 2xx as healthy. A new Railway service does not read `railway.json` (config-as-code cutoff 2026-12-01), so the guide tells you to copy those settings into the service.
 
 No deploy, and no secrets.
+
+## 2026-11-14 — Session 23: README (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 6. Added `README.md`: what Maestro is (it used to be called Group Project Referee), the seven screens that exist (Setup, Overview, Member evidence, Risk radar, Rebalance, Log work, Team settings), the client/server/SQLite stack and the mock-or-grok provider, local setup, the StudyBuddy seed, `npm test` and `npm run eval --workspace=server`, a placeholder demo URL, and a pointer to `docs/RAILWAY.md`. `docs/PLAN.md` marks todo 6 done. No secrets.
+
+The copied `.env.example` sets `DB_PATH=./dev.db`. On a clean clone that left the line set, `npm run seed --workspace=server` wrote `server/dev.db` (31 contributions, 0 classifications, no risks) while `npm run dev:server` served `<repo>/dev.db`. The API opens SQLite before it reads `.env`, and the seed's working directory is `server/`. The README says to comment that line out. With it commented out, both use `<repo>/dev.db`.
+
+Commands on a clean clone of this branch, mock mode, after commenting out `DB_PATH`:
+
+| Command | Result |
+|---|---|
+| `node -v` | `v22.23.4`. No `.nvmrc`. |
+| `cp .env.example .env`, then comment out `DB_PATH` | `AI_PROVIDER=mock`. Placeholders only. |
+| `npm install` | 246 packages added, exit 0. |
+| `npm run dev:server` | `Migration complete: <repo>/dev.db`. Listening on port 3001. |
+| `npm run dev:client` | Vite ready at `http://localhost:5173/`. `/api` proxied to 3001. |
+| `npm run seed --workspace=server` | StudyBuddy id 1. 4 members, 31 contributions, 31 classifications. High risk: #12 Auth flow. Pending suggestion: #14 Sam Rivera → Jordan Lee. |
+| same command again | `StudyBuddy team already exists (id=1). Skipping seed.` |
+| Open `http://localhost:5173/teams/1` | Overview rendered: Demo data, 0 of 6 tasks done, 2 at risk, 1 suggestion, the high risk, and the swap. Setup lists StudyBuddy. |
+| `npm test` | 13 files, 124 passed. |
+| `npm run eval --workspace=server` | mock, `prompt-v2`, main set 30 commits. work_type 83.3% (25/30), substance 50.0% (15/30). |
+| `npm run eval` (repo root) | Missing script. Eval is only in `server/`. |
+
+One database file after the seed: `<repo>/dev.db`. The demo rows were still there after the tests.

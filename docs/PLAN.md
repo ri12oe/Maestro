@@ -384,7 +384,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 **Todo:**
 1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end.
 2. Configure Vite build output and Express static serving for production.
-3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`.
+3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done-pending-deploy (`railway.json` already has the build, start, and restart settings; `docs/RAILWAY.md` is the dashboard steps for the volume and variables. Deploy is still todo 4.)
 4. Deploy to Railway; set all required env vars in the Railway dashboard.
 5. Smoke-test the deployed public URL end-to-end.
 6. Write `README.md` with setup and demo instructions.

@@ -14,6 +14,7 @@
 
   &__kinds { border: 0; legend { margin-bottom: $space-8; } }
   &__error { color: $risk-high; }
+  input[type='date'] { color-scheme: dark; }
   @include phone { .btn--primary { width: 100%; } }
 }
 

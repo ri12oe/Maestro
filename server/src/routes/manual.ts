@@ -10,6 +10,35 @@ const VALID_KINDS = ['design', 'research', 'meeting', 'coordination', 'other'] a
 
 const SummarySchema = z.object({ summary: z.string() });
 
+/** True for a real calendar day written YYYY-MM-DD. Same check as the team deadline. */
+function isIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Optional `date` (`YYYY-MM-DD`). Missing or null keeps the current timestamp.
+ * A chosen day is stored at noon UTC so the calendar day stays put for the
+ * screens and reasoner windows that already read `authored_at`.
+ */
+function authoredAtFor(date: unknown): { ok: true; authoredAt: string | null } | { ok: false; error: string } {
+  if (date === undefined || date === null) return { ok: true, authoredAt: null };
+  if (typeof date !== 'string' || !isIsoDate(date)) {
+    return { ok: false, error: 'date must be YYYY-MM-DD' };
+  }
+  if (date > todayUtc()) return { ok: false, error: 'date cannot be in the future' };
+  return { ok: true, authoredAt: `${date}T12:00:00Z` };
+}
+
 const router = Router({ mergeParams: true });
 
 /** Map kind → work_type for manual entries */
@@ -21,7 +50,7 @@ function kindToWorkType(kind: string | null): 'design' | 'other' {
 // POST /api/teams/:teamId/manual
 router.post('/', async (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
-  const { member_id, title, body, kind, link, task_id } = req.body as Record<string, unknown>;
+  const { member_id, title, body, kind, link, task_id, date } = req.body as Record<string, unknown>;
 
   if (typeof member_id !== 'number' && typeof member_id !== 'string') {
     res.status(400).json({ error: 'member_id is required' });
@@ -33,6 +62,12 @@ router.post('/', async (req: Request<TeamParams>, res: Response) => {
   }
   if (kind !== undefined && kind !== null && !VALID_KINDS.includes(kind as typeof VALID_KINDS[number])) {
     res.status(400).json({ error: `kind must be one of: ${VALID_KINDS.join(', ')}` });
+    return;
+  }
+
+  const when = authoredAtFor(date);
+  if (!when.ok) {
+    res.status(400).json({ error: when.error });
     return;
   }
 
@@ -51,8 +86,8 @@ router.post('/', async (req: Request<TeamParams>, res: Response) => {
     INSERT INTO contributions
       (team_id, member_id, source, title, body, kind, link, authored_at)
     VALUES
-      (?, ?, 'manual', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-  `).run(teamId, Number(member_id), title.trim(), body ?? null, kind ?? null, link ?? null);
+      (?, ?, 'manual', ?, ?, ?, ?, COALESCE(?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')))
+  `).run(teamId, Number(member_id), title.trim(), body ?? null, kind ?? null, link ?? null, when.authoredAt);
 
   const contribId = result.lastInsertRowid;
 

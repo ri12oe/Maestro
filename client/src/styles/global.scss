@@ -1,6 +1,6 @@
 @use 'variables' as *;
 
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -9,7 +9,7 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   // Work-type colours, exposed for inline bar segments (see workTypes.ts)
   --work-feature: #{$work-feature};
   --work-fix: #{$work-fix};
@@ -19,14 +19,14 @@
 }
 
 body {
-  font-family: $font;
+  font-family: $font-body;
   background-color: $bg;
   color: $text;
   @include t-small;
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4 { font-weight: 600; }
+h1, h2, h3, h4 { font-family: $font-heading; font-weight: 600; }
 
 a {
   color: inherit;

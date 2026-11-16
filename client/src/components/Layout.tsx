@@ -17,6 +17,8 @@ interface TeamContextValue {
   syncNow: () => Promise<void>;
   /** Re-read the sidebar data (risk count, team name) after a change. */
   refresh: () => void;
+  /** Re-read every page, the same way a finished sync does. */
+  reload: () => void;
 }
 
 const TeamContext = createContext<TeamContextValue | null>(null);
@@ -84,6 +86,7 @@ export default function Layout() {
   }, [teamId]);
 
   const refresh = useCallback(() => { summary.reload(); risks.reload(); }, [summary, risks]);
+  const reload = useCallback(() => setVersion(v => v + 1), []);
 
   const base = `/teams/${teamId}`;
   // Member pages are reached from the overview, so keep "Overview" highlighted there.
@@ -98,7 +101,7 @@ export default function Layout() {
   ];
 
   return (
-    <TeamContext.Provider value={{ teamId, summary: summary.data, version, syncing, syncNow, refresh }}>
+    <TeamContext.Provider value={{ teamId, summary: summary.data, version, syncing, syncNow, refresh, reload }}>
       <div className="shell">
         <aside className="sidebar">
           <div className="sidebar__brand">

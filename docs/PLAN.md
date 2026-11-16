@@ -87,6 +87,7 @@ Represents one project team connecting a single GitHub repo. The GitHub token co
 | `repo_owner` | TEXT NOT NULL | GitHub org or user |
 | `repo_name` | TEXT NOT NULL | GitHub repo name |
 | `created_at` | TEXT | ISO-8601 |
+| `deadline` | TEXT | `YYYY-MM-DD` or null. A date the team sets. When set, risk signals use it instead of each task's milestone `due_date`. Null keeps the milestone date. |
 
 ### Table: `members`
 One row per team member. Unknown contributors are auto-created during sync. A row may have no `github_login` if the commit had no associated GitHub account.
@@ -203,7 +204,8 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/teams` | Create team (name, repo_owner, repo_name) |
-| `GET` | `/api/teams/:teamId` | Get team info |
+| `GET` | `/api/teams/:teamId` | Get team info, including `deadline` |
+| `PATCH` | `/api/teams/:teamId` | Set or clear the team deadline. Body: `{ "deadline": "YYYY-MM-DD" }` or `{ "deadline": null }`. `400` if `deadline` is missing or not that shape. `404` if the team does not exist. |
 | `POST` | `/api/teams/:teamId/sync` | Trigger a full GitHub sync (commits + Issues) |
 
 ### Members
@@ -233,7 +235,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/teams/:teamId/manual` | Log an off-repo contribution (kind, title, body, link, memberId, related taskId) |
+| `POST` | `/api/teams/:teamId/manual` | Log an off-repo contribution (kind, title, body, link, memberId, related taskId). Optional `date` is `YYYY-MM-DD` and is stored in `authored_at`. Omit `date` to stamp the current time. `400` if `date` is not a real calendar day or is in the future. |
 | `GET` | `/api/teams/:teamId/manual` | List manual log entries for team |
 
 ### Risks
@@ -248,7 +250,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/teams/:teamId/suggestions` | All pending suggestions |
-| `POST` | `/api/teams/:teamId/suggestions/:suggestionId/respond` | Accept / discuss / dismiss |
+| `POST` | `/api/teams/:teamId/suggestions/:suggestionId/respond` | Accept / discuss / dismiss, or set an accepted suggestion back to `pending` |
 
 ### Dashboard Summary (aggregated)
 
@@ -337,7 +339,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 **Acceptance Criteria:**
 - All six screens render with real data from the API (no hardcoded fixtures in the UI).
 - `GET /api/teams/:teamId/summary` returns contribution map data (work-type breakdown per member) and stat card numbers.
-- Risk reasoner computes signals deterministically (days since last activity per task, single-contributor directories, days to due date) and uses the LLM only to write the plain-language description and propose swaps.
+- Risk reasoner computes signals deterministically (days since last activity per task, single-contributor directories, days to due date) and uses the LLM only to write the plain-language description and propose swaps. Days to due date use `teams.deadline` when the team has set one, and the task's milestone `due_date` otherwise.
 - Risk reasoner runs during sync and produces at least one `risks` row for a repo with a stalled task.
 - Rebalance suggestions are generated and returned by `GET /api/teams/:teamId/suggestions`.
 - Manual work log form submits to `POST /api/teams/:teamId/manual` and appears in the member's contribution list.
@@ -358,7 +360,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 10. Build Risk Radar screen (risk cards with evidence chips, task progress table).
 11. Build Rebalance Suggestions screen (swap cards with accept/discuss/dismiss).
 12. Build Log Work screen (manual log form + recently logged list).
-13. Define Sass variables for the brand palette and typography from the brief.
+13. Define Sass variables for the brand palette and typography from the brief. — done
 14. Wire client `api/` fetch wrappers to every endpoint used by the screens.
 
 **Relevant context:** `docs/BRIEF.md` §Screens, §Fairness rules; `server/src/routes/`; `client/src/pages/`.
@@ -373,19 +375,19 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Acceptance Criteria:**
 - Seed script (from Milestone 2) populates a demo team with 4 simulated members, ≥20 contributions, one stalled task, one overloaded member; after running the AI pipeline the dashboard shows at least one high-priority risk card and at least one rebalance suggestion.
-- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume.
+- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (manual deploy of `main` `d15947c`. Data on the `/data` volume persisted. Pushes to `main` do not auto-deploy.)
 - Public URL is accessible and the demo scenario loads without errors.
 - `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link.
-- No secrets appear in the repo; `.env.example` is complete.
+- No secrets appear in the repo; `.env.example` is complete. — done
 - All acceptance criteria from Milestones 1–3 still pass against the deployed instance.
 
 **Todo:**
 1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end.
 2. Configure Vite build output and Express static serving for production.
-3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`.
-4. Deploy to Railway; set all required env vars in the Railway dashboard.
-5. Smoke-test the deployed public URL end-to-end.
-6. Write `README.md` with setup and demo instructions.
+3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done (`railway.json` has the build, start, and restart settings. The dashboard build command is `npm run build` and the start command is `npm start`. `docs/RAILWAY.md` is the dashboard steps for the volume, variables, and a manual redeploy.)
+4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (manual deploy of `main` `d15947c`, PR #18. Auto-deploy is not connected.)
+5. Smoke-test the deployed public URL end-to-end. — done (`/`, `/teams/1` 200 HTML; `/api/teams` 200 JSON; `/api/does-not-exist` 404 JSON; unauthenticated request 401. Data on the `/data` volume persisted.)
+6. Write `README.md` with setup and demo instructions. — done
 7. Add a `BOB_LOG.md` entry for this milestone.
 
 **Relevant context:** `docs/BRIEF.md` §Milestones (Dec 2–7); `.env.example`; `server/src/db/seed.ts`.

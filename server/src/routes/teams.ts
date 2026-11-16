@@ -6,6 +6,21 @@ import { runReasoner } from '../ai/reasoner.js';
 
 const router = Router();
 
+/** True for a real calendar day written YYYY-MM-DD. */
+function isIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function isDeadline(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && isIsoDate(value));
+}
+
 /** Turn GitHub/API failures into messages a student can act on. */
 export function explainSyncError(err: unknown, teamId: number): { status: number; error: string } {
   const message = err instanceof Error ? err.message : String(err);
@@ -71,6 +86,26 @@ router.get('/:teamId', (req, res) => {
     res.status(404).json({ error: 'Team not found' });
     return;
   }
+  res.json(team);
+});
+
+// PATCH /api/teams/:teamId — set or clear the team deadline ({ deadline: 'YYYY-MM-DD' | null })
+router.patch('/:teamId', (req, res) => {
+  const teamId = Number(req.params.teamId);
+  const existing = db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId);
+  if (!existing) {
+    res.status(404).json({ error: 'Team not found' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (!('deadline' in body) || !isDeadline(body.deadline)) {
+    res.status(400).json({ error: 'deadline must be YYYY-MM-DD or null' });
+    return;
+  }
+
+  db.prepare('UPDATE teams SET deadline = ? WHERE id = ?').run(body.deadline, teamId);
+  const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
   res.json(team);
 });
 

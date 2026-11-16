@@ -1,21 +1,16 @@
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.ts';
-import type { Risk, Task } from '../../api/types.ts';
+import type { Risk } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import ContributionMap from '../../components/ContributionMap.tsx';
 import { Page, useTeam } from '../../components/Layout.tsx';
 import { ArrowRight, Card, EmptyState, ErrorState, RiskBadge, Skeleton, StatCard } from '../../components/ui.tsx';
+import { effectiveDeadline } from '../../deadline.ts';
 import { shortDate } from '../../dates.ts';
 import './Overview.scss';
 
 function firstName(name: string | null, login: string): string {
   return name?.split(' ')[0] || login;
-}
-
-/** The project deadline: the latest milestone due date across the repo's Issues. */
-export function projectDeadline(tasks: Task[]): string | null {
-  const dates = tasks.map(t => t.due_date).filter((d): d is string => !!d).sort();
-  return dates.length ? dates[dates.length - 1] : null;
 }
 
 export function daysUntil(iso: string, now = new Date()): number {
@@ -60,6 +55,7 @@ export default function Overview() {
   const risks = useApi(() => api.risks(teamId), [teamId, version]);
   const suggestions = useApi(() => api.suggestions(teamId), [teamId, version]);
   const tasks = useApi(() => api.tasks(teamId), [teamId, version]);
+  const team = useApi(() => api.team(teamId), [teamId, version]);
 
   let body;
   if (summary.loading && !summary.data) {
@@ -70,7 +66,9 @@ export default function Overview() {
     const { statCards, members } = summary.data;
     const topRisks = (risks.data ?? []).slice(0, 2);
     const suggestion = suggestions.data?.find(s => s.status === 'pending');
-    const deadline = tasks.data ? projectDeadline(tasks.data) : null;
+    const deadline = tasks.data && (team.data != null || !team.loading)
+      ? effectiveDeadline(team.data?.deadline, tasks.data.map(t => t.due_date))
+      : null;
 
     body = (
       <div className="overview">
@@ -80,8 +78,10 @@ export default function Overview() {
           <StatCard label="Suggestions" value={statCards.pendingSuggestions} />
           <StatCard
             label="Days to deadline"
-            value={deadline ? daysUntil(deadline) : '—'}
-            sublabel={deadline ? shortDate(deadline) : 'No milestone due date'}
+            value={deadline?.date ? daysUntil(deadline.date) : '—'}
+            sublabel={deadline?.date
+              ? `${shortDate(deadline.date)} · ${deadline.source === 'team' ? 'set by the team' : 'from milestones'}`
+              : deadline ? 'No milestone due date' : undefined}
           />
         </div>
 

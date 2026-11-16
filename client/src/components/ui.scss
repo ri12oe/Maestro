@@ -28,7 +28,7 @@
     background: $surface-raised;
     color: $text;
     border-color: $border;
-    &:hover:not(:disabled) { background: color.mix($surface-raised, #fff, 94%); }
+    &:hover:not(:disabled) { background: color.mix($surface-raised, $text, 94%); }
   }
   &--danger { color: $risk-high; }
   &--block { width: 100%; }
@@ -83,7 +83,8 @@ textarea.input { padding: $space-12 $space-16; min-height: 120px; resize: vertic
 select.input {
   appearance: none;
   padding-right: 44px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238B8B94' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  // Chevron uses $text-muted (#5E5C55). A data URI cannot read the Sass variable.
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%235E5C55' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 18px center;
 }

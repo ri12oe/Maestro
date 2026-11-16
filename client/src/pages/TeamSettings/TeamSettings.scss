@@ -16,4 +16,10 @@
   }
   &__repo-name { @include t-label; }
   &__error { color: $risk-high; }
+
+  &__deadline {
+    input[type='date'] { color-scheme: light; }
+    // The date field is wide; on a phone the buttons drop to the next line.
+    @include phone { .field__row { flex-wrap: wrap; } }
+  }
 }

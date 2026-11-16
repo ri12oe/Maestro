@@ -90,7 +90,7 @@ export default function Bulb({ state = 'default', height = 96, className = '' }:
 /** The small bulb-in-a-tile mark used beside the "Maestro" wordmark. */
 export function LogoMark({ size = 28 }: { size?: number }) {
   return (
-    <span className="inline-grid shrink-0 place-items-center rounded-[8px] border border-neutral bg-accent-subtle" style={{ width: size, height: size }} aria-hidden="true">
+    <span className="inline-grid shrink-0 place-items-center rounded-[8px] border border-line bg-maestro-wash" style={{ width: size, height: size }} aria-hidden="true">
       <Bulb height={Math.round(size * 0.86)} />
     </span>
   );

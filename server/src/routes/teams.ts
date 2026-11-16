@@ -89,7 +89,10 @@ router.get('/:teamId', (req, res) => {
   res.json(team);
 });
 
-// PATCH /api/teams/:teamId — set or clear the team deadline ({ deadline: 'YYYY-MM-DD' | null })
+// PATCH /api/teams/:teamId — team settings.
+// { deadline: 'YYYY-MM-DD' | null } sets or clears the team deadline.
+// { report_enabled: boolean } turns the project report on or off for the whole team.
+// Either key, or both, may be sent.
 router.patch('/:teamId', (req, res) => {
   const teamId = Number(req.params.teamId);
   const existing = db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId);
@@ -99,12 +102,21 @@ router.patch('/:teamId', (req, res) => {
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
-  if (!('deadline' in body) || !isDeadline(body.deadline)) {
+  const hasDeadline = 'deadline' in body;
+  const hasReport = 'report_enabled' in body;
+  if ((!hasDeadline && !hasReport) || (hasDeadline && !isDeadline(body.deadline))) {
     res.status(400).json({ error: 'deadline must be YYYY-MM-DD or null' });
     return;
   }
+  if (hasReport && typeof body.report_enabled !== 'boolean') {
+    res.status(400).json({ error: 'report_enabled must be true or false' });
+    return;
+  }
 
-  db.prepare('UPDATE teams SET deadline = ? WHERE id = ?').run(body.deadline, teamId);
+  db.transaction(() => {
+    if (hasDeadline) db.prepare('UPDATE teams SET deadline = ? WHERE id = ?').run(body.deadline, teamId);
+    if (hasReport) db.prepare('UPDATE teams SET report_enabled = ? WHERE id = ?').run(body.report_enabled ? 1 : 0, teamId);
+  })();
   const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
   res.json(team);
 });

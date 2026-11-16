@@ -118,6 +118,8 @@ export interface Team {
   last_synced_at: string | null;
   is_demo: number;
   deadline: string | null;
+  /** 1 when the team has turned on the project report. */
+  report_enabled: number;
 }
 
 export interface Member {

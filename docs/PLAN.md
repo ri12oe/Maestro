@@ -299,7 +299,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Relevant context:** `docs/BRIEF.md` §Architecture, §Milestones.
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ---
 
@@ -328,7 +328,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Relevant context:** `docs/BRIEF.md` §AI approach; `server/src/ingestion/sync.ts`; `server/src/db/schema.sql`.
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ---
 
@@ -360,12 +360,12 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 10. Build Risk Radar screen (risk cards with evidence chips, task progress table).
 11. Build Rebalance Suggestions screen (swap cards with accept/discuss/dismiss).
 12. Build Log Work screen (manual log form + recently logged list).
-13. Define Sass variables for the brand palette and typography from the brief.
+13. Define Sass variables for the brand palette and typography from the brief. — done
 14. Wire client `api/` fetch wrappers to every endpoint used by the screens.
 
 **Relevant context:** `docs/BRIEF.md` §Screens, §Fairness rules; `server/src/routes/`; `client/src/pages/`.
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ---
 
@@ -375,7 +375,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Acceptance Criteria:**
 - Seed script (from Milestone 2) populates a demo team with 4 simulated members, ≥20 contributions, one stalled task, one overloaded member; after running the AI pipeline the dashboard shows at least one high-priority risk card and at least one rebalance suggestion.
-- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume.
+- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (manual deploy of `main` `d15947c`. Data on the `/data` volume persisted. Pushes to `main` do not auto-deploy.)
 - Public URL is accessible and the demo scenario loads without errors.
 - `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link.
 - No secrets appear in the repo; `.env.example` is complete. — done
@@ -384,15 +384,15 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 **Todo:**
 1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end.
 2. Configure Vite build output and Express static serving for production.
-3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done-pending-deploy (`railway.json` already has the build, start, and restart settings; `docs/RAILWAY.md` is the dashboard steps for the volume and variables. Deploy is still todo 4.)
-4. Deploy to Railway; set all required env vars in the Railway dashboard.
-5. Smoke-test the deployed public URL end-to-end.
+3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done (`railway.json` has the build, start, and restart settings. The dashboard build command is `npm run build` and the start command is `npm start`. `docs/RAILWAY.md` is the dashboard steps for the volume, variables, and a manual redeploy.)
+4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (manual deploy of `main` `d15947c`, PR #18. Auto-deploy is not connected.)
+5. Smoke-test the deployed public URL end-to-end. — done (`/`, `/teams/1` 200 HTML; `/api/teams` 200 JSON; `/api/does-not-exist` 404 JSON; unauthenticated request 401. Data on the `/data` volume persisted.)
 6. Write `README.md` with setup and demo instructions. — done
 7. Add a `BOB_LOG.md` entry for this milestone.
 
 **Relevant context:** `docs/BRIEF.md` §Milestones (Dec 2–7); `.env.example`; `server/src/db/seed.ts`.
 
-**Status:** [ ] pending
+**Status:** [ ] in progress
 
 ---
 

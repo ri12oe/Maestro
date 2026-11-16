@@ -556,7 +556,24 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 
 `npm test`: 89 passed (89).
 
-## 2026-11-14 — Session 16: Undo an accepted rebalance suggestion (written with Grok bots, not IBM Bob)
+## 2026-11-13 — Session 16: Client redesign (written with Grok bots, not IBM Bob)
+
+Commits `5df1853` and `41a3258`. The Connect page is gone; setup and the dashboard shell follow the dark Figma tokens. No server changes. This work is from Nov 13, before the sessions below. Session 29 replaces these dark tokens with the brief's light palette, and sessions 19 and 20 store an editable team deadline.
+
+| Area | Change |
+|---|---|
+| `client/src/pages/Connect/` | Removed `Connect.tsx` and `Connect.scss` (repo form, first sync, existing-team list, and the "Our fairness promise" sidebar). |
+| `client/src/pages/Setup/` | New `/` flow in four steps: connect `owner/repo` or a GitHub URL (`POST /api/teams`, then sync, with retry), choose where the plan lives, invite teammates, then open the team. Existing teams still come from `GET /api/teams`. The plan-source choice stays in component state and is not sent to the API. |
+| `client/src/pages/TeamSettings/` | New `/teams/:teamId/settings`: repository and last sync, add/remove members, deadline taken from task due dates. |
+| `client/src/App.tsx`, `client/index.html` | `/` renders Setup; `settings` route added. Document title is Maestro. |
+| `client/src/api/client.ts` | `addMember` and `removeMember` for the setup and settings forms. |
+| `client/src/components/Bulb.tsx` | SVG mascot with states `default`, `thinking`, `happy`, and `done`, plus `LogoMark` in the setup dialog and the sidebar. |
+| `client/src/components/Layout.tsx` | Shared page frame: top bar keeps "Sync now", sidebar wordmark uses `LogoMark`, Risk radar shows the active risk count, and Team settings is the last nav item. |
+| `client/src/styles/_variables.scss`, `global.scss` | Dark tokens (background `#09090B`, accent `#E8A93A`) and the Geist font. Replaces Space Grotesk and the brief blue `#1F5FBF` that the contribution categories used before. |
+| Dashboard pages, `workTypes.ts` | Overview, Member evidence, Risk radar, Rebalance, and Log work updated onto that shell. Work-type colours come from the CSS variables. On a contribution row, substance `low` reads "Minor" and `medium` / `high` read "Substantial". |
+| `.claude/launch.json` | Dev launch config for the server on port 3001 and the client on port 5173. |
+
+## 2026-11-14 — Session 17: Undo an accepted rebalance suggestion (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -570,7 +587,7 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 
 `npm test`: 102 passed (102). `npx tsc --noEmit` exited 0.
 
-## 2026-11-14 — Session 17: Undo link on an accepted swap (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 18: Undo link on an accepted swap (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -586,7 +603,7 @@ The client has no test runner. Checked in the browser against the seeded StudyBu
 
 `npm run build --workspace=client` succeeded. `npm test --workspace=server`: 102 passed (102). No server changes.
 
-## 2026-11-14 — Session 18: Stored team deadline (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 19: Stored team deadline (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -603,11 +620,11 @@ A team can store its own deadline. `PATCH /api/teams/:teamId` with `{ deadline: 
 
 `npm test` (in `server/`): 115 passed (115). `npx tsc --noEmit` exited 0.
 
-## 2026-11-14 — Session 19: Editable team deadline (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 20: Editable team deadline (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
-Team settings can set or clear the deadline stored in session 18. The date field shows the date in effect: the team's stored deadline when one is set, otherwise the latest GitHub milestone due date. Save sends `PATCH /api/teams/:teamId`. Clear sends `{ deadline: null }`. If the server rejects the change, its error is shown under the field. Overview uses the same rule and a short note of where the date came from.
+Team settings can set or clear the deadline stored in session 19. The date field shows the date in effect: the team's stored deadline when one is set, otherwise the latest GitHub milestone due date. Save sends `PATCH /api/teams/:teamId`. Clear sends `{ deadline: null }`. If the server rejects the change, its error is shown under the field. Overview uses the same rule and a short note of where the date came from.
 
 A save also calls the existing `POST /api/teams/:teamId/classify` route, which reruns the reasoner, and then the pages re-read. Risk cards pick up the new deadline. That route also refreshes pending suggestions, as it already did.
 
@@ -623,7 +640,7 @@ The client has no test runner. Checked in the browser against the seeded StudyBu
 
 `npm run build --workspace=client` succeeded. `npm test --workspace=server`: 115 passed (115). No server changes.
 
-## 2026-11-14 — Session 20: Demo seed scenario (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 21: Demo seed scenario (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -653,7 +670,7 @@ Fresh database, `AI_PROVIDER=mock`, clock = the day it was run (2026-11-14):
    Duration  1.25s
 ```
 
-## 2026-11-14 — Session 21: Production client serving (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 22: Production client serving (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -680,7 +697,7 @@ Unmatched `/api` paths were the break. `GET /api/does-not-exist` returned `index
    Duration  2.34s
 ```
 
-## 2026-11-14 — Session 22: Railway setup guide (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 23: Railway setup guide (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -690,7 +707,7 @@ Milestone 4, todo 3, done-pending-deploy. `docs/RAILWAY.md` is the dashboard set
 
 No deploy, and no secrets.
 
-## 2026-11-14 — Session 23: README (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 24: README (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -716,7 +733,7 @@ Commands on a clean clone of this branch, mock mode, after commenting out `DB_PA
 
 One database file after the seed: `<repo>/dev.db`. The demo rows were still there after the tests.
 
-## 2026-11-14 — Session 24: One SQLite file for the copied .env (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 25: One SQLite file for the copied .env (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -745,7 +762,7 @@ With `cp .env.example .env` and no edits, `npm run dev:server` and `npm run seed
    Duration  1.29s
 ```
 
-## 2026-11-14 — Session 25: Secret history audit and a complete .env.example (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 26: Secret history audit and a complete .env.example (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -780,7 +797,7 @@ With `cp .env.example .env` and no edits, both the dev server and the seed logge
 
 `.env` and `dev.db` stayed untracked.
 
-## 2026-11-14 — Session 26: Optional date on a manual log (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 27: Optional date on a manual log (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -810,3 +827,70 @@ Checked in the browser against the seeded StudyBuddy team. Logged "Sketched the 
 ```
 
 `.env` and `dev.db` stayed untracked.
+
+## 2026-11-16 — Session 28: Railway production check and deploy (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots (maestro-senior)
+
+The production service was still running a Nov 13 commit, so `main` `d15947c` (PR #18) was deployed. The dashboard build command is `npm run build` and the start command is `npm start`.
+
+Smoke tests passed. `/` and `/teams/1` return 200 HTML. `/api/teams` returns 200 JSON. `/api/does-not-exist` returns 404 JSON. An unauthenticated request returns 401. Data on the `/data` volume was still there after the deploy.
+
+Auto-deploy is not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is the manual redeploy, and section 4 is the smoke test.
+
+## 2026-11-16 — Session 29: Light palette from the brief (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots, maestro-senior
+
+The client tokens followed the dark Figma palette (`#09090B`, gold `#E8A93A`, Geist). They now follow `docs/BRIEF.md`: page `#F6F6F3`, sidebar `#16181D`, accent `#1F5FBF`, risk orange `#A34A06` on `#FDF0E4`, Space Grotesk for headings, Inter for body. Borders, muted text, and the other status colors are light-theme equivalents with WCAG AA contrast on `#F6F6F3`. Sidebar text stays light so it remains readable on `#16181D`.
+
+`docs/PLAN.md` had no "palette mismatch" line. Milestone 3 todo 13 (brand palette and typography) is marked done.
+
+`npm run build` succeeded in both workspaces (`tsc` in each, then the client Vite build). `npm test`: 15 files, 139 passed.
+
+## 2026-11-16 — Session 30: Delete a team (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`DELETE /api/teams/:teamId` sits next to `PATCH /api/teams/:teamId`. Success is `200 { ok: true }`. An unknown id, and a non-numeric id, return `404 { error: "Team not found" }`, the same body as `GET /api/teams/:teamId`.
+
+One `DELETE FROM teams` removes the row, including `teams.deadline`. Child rows follow the foreign keys already in `schema.sql`: members, tasks, contributions, risks, and suggestions. A manual log's calendar day lives on `contributions.authored_at` (`YYYY-MM-DDT12:00:00Z`), so that row goes with the contribution cascade, and so do its classification and task match. Another team's deadline, suggestion, and dated manual log stay. `schema.sql` and `migrate.ts` are unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/routes/teams.ts` | `DELETE /api/teams/:teamId` after the deadline PATCH. |
+| `server/src/tests/delete-team.test.ts` | Cascade covers a stored deadline, a suggestion, and a dated manual contribution. The other team keeps all three. |
+
+`npm test` (in `server/`): 16 files, 142 passed (142).
+
+## 2026-11-16 — Session 31: Danger zone on Team settings (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Team settings can disconnect the open team. The Danger zone card sits below the Deadline card and calls `DELETE /api/teams/:teamId` from session 30. Disconnect team opens a confirm step: type the team name, then Disconnect. Cancel returns to the first button. Success replaces the history entry and opens Setup at `/`. A failed call shows the server error and stays on the card.
+
+The card uses the light palette tokens. Background is `$surface`, border is `$border`, the button uses `$risk-high-bg` and `$risk-high`, and the hover label is `$surface`. No hard-coded dark colors.
+
+| File | Change |
+|---|---|
+| `client/src/api/client.ts` | `api.deleteTeam` calls `DELETE /api/teams/:teamId`. |
+| `client/src/pages/TeamSettings/TeamSettings.tsx` | Danger zone under Deadline, with the confirm step. |
+| `client/src/pages/TeamSettings/TeamSettings.scss` | Light risk tokens on the card and the danger button. |
+
+This branch includes the delete route. Checked in the browser against the seeded StudyBuddy team with `AI_PROVIDER=mock`. Typing StudyBuddy and disconnecting left `GET /api/teams` as `[]`, `GET /api/teams/1` as 404 `{ error: "Team not found" }`, and the browser on Setup at `/` with StudyBuddy absent from the list.
+
+`npm run build` succeeded in both workspaces. `npm test` (in `server/`): 16 files, 142 passed (142).
+
+## 2026-11-16 — Session 32: Milestone status, refreshed (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The status lines in `docs/PLAN.md` follow the code on main, including the delete route (session 30) and the Danger zone (session 31). Those two sessions do not change a milestone status. A Nov 14 draft of this note is not used. That draft left milestone 3 in progress because the brief colours were not the Sass tokens, and it said milestone 4 had no README, public URL, or volume config. Only the status lines changed. Newer notes in the milestone bodies stay, including milestone 3 todo 13 marked done.
+
+| Milestone | Status |
+|---|---|
+| 1 Foundations | `[x] done` |
+| 2 AI Core | `[x] done` |
+| 3 Product / Dashboard | `[x] done`. The brief colours and fonts are the Sass tokens (session 29). |
+| 4 Demo-ready | `[ ] in progress`. The seed check, `railway.json`, the volume steps, production static serving, the README, the secrets audit, and a manual deploy of `d15947c` are in place. The README demo link is still a placeholder, and that deploy is from before the light palette. |
+| 5 Submit | `[ ] pending` |

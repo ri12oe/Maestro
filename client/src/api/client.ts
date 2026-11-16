@@ -68,6 +68,9 @@ export const api = {
   createTeam: (input: { name: string; repo_owner: string; repo_name: string }) =>
     request<{ id: number }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
 
+  deleteTeam: (teamId: number) =>
+    request<{ ok: true }>(`/teams/${teamId}`, { method: 'DELETE' }),
+
   sync: (teamId: number) =>
     request<SyncResult>(`/teams/${teamId}/sync`, { method: 'POST' }),
 

@@ -9,6 +9,7 @@ const btnClass = `inline-flex min-h-[52px] items-center justify-center gap-2 whi
 
 export const primaryBtnClass = `${btnClass} border-transparent bg-primary text-primary-content [&:hover:not(:disabled)]:bg-[rgb(234,178,78)]`;
 export const secondaryBtnClass = `${btnClass} border-neutral bg-base-300 text-base-content [&:hover:not(:disabled)]:bg-[rgb(38,38,42)]`;
+export const dangerBtnClass = `${btnClass} border-error bg-risk-high-bg text-error [&:hover:not(:disabled)]:border-error [&:hover:not(:disabled)]:bg-error [&:hover:not(:disabled)]:text-base-200`;
 export const textBtnClass = `inline-flex items-center gap-1.5 rounded-[8px] p-2 text-label text-muted ${focusRing} [&:hover]:text-base-content`;
 export const linkClass = 'inline-flex items-center gap-1.5 text-label text-base-content no-underline [&:hover]:underline [&:hover]:underline-offset-[3px]';
 export const fieldClass = 'flex flex-col gap-2 [&>label]:text-label [&>label]:text-base-content';

@@ -122,7 +122,9 @@ With `AI_PROVIDER=mock` the seed stays offline. With `AI_PROVIDER=grok` the same
 
 This project deploys manually. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy.
 
-After a merge, redeploy from the service's Deployments tab, or run `railway redeploy` or `railway up` with the CLI. Then run the smoke test in section 4.
+`railway redeploy` and the dashboard's Redeploy button rebuild the commit that is already deployed.
+
+After a merge, pull `main` locally and run `railway up` from the repo root with the project linked. That uploads the checked-out code and deploys it. Then run the smoke test in section 4.
 
 The dashboard build command is now `npm run build` and the start command is `npm start`, so the deploy no longer depends on `railway.json` being read. Services that already use that file stop reading it on 2026-12-01.
 

@@ -2,16 +2,19 @@
 node_modules/
 
 # build output
-client/dist/
-server/dist/
+dist/
 
-# environment secrets
+# environment secrets (.env.example stays tracked)
 .env
+.env.*
+!.env.example
 
-# SQLite databases
+# SQLite databases, including WAL and SHM sidecars
 *.db
-*.db-shm
-*.db-wal
+*.db-*
+
+# local patch files (none are tracked)
+*.patch
 
 # OS/editor
 .DS_Store

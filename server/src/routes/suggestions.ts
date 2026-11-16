@@ -29,10 +29,22 @@ router.get('/', (req: Request<TeamParams>, res: Response) => {
   }));
 });
 
+type AcceptedSuggestion = {
+  status: string;
+  task_id: number;
+  from_login: string | null;
+  to_login: string | null;
+  assignee_login: string | null;
+};
+
 // POST /api/teams/:teamId/suggestions/:suggestionId/respond
+// status `pending` undoes an accept: the suggestion goes back to pending and the
+// task returns to the member who held it (from_login). Accept is the only
+// response that writes anything besides the suggestion row, and that write is
+// local: tasks.assignee_login = the receiving member's GitHub login.
 router.post('/:suggestionId/respond', (req: Request<TeamParams & { suggestionId: string }>, res: Response) => {
   const { status } = req.body as { status?: string };
-  const allowed = ['accepted', 'dismissed', 'discuss'];
+  const allowed = ['accepted', 'dismissed', 'discuss', 'pending'];
 
   if (!status || !allowed.includes(status)) {
     res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
@@ -41,6 +53,11 @@ router.post('/:suggestionId/respond', (req: Request<TeamParams & { suggestionId:
 
   const teamId = Number(req.params.teamId);
   const suggestionId = Number(req.params.suggestionId);
+
+  if (status === 'pending') {
+    undoAcceptedSuggestion(teamId, suggestionId, res);
+    return;
+  }
 
   const updateSuggestion = db.prepare(
     'UPDATE suggestions SET status = ? WHERE id = ? AND team_id = ?',
@@ -68,5 +85,56 @@ router.post('/:suggestionId/respond', (req: Request<TeamParams & { suggestionId:
 
   res.json({ ok: true });
 });
+
+function undoAcceptedSuggestion(teamId: number, suggestionId: number, res: Response): void {
+  const sug = db.prepare(`
+    SELECT s.status, s.task_id,
+           fm.github_login AS from_login,
+           tm.github_login AS to_login,
+           t.assignee_login AS assignee_login
+    FROM suggestions s
+    JOIN members fm ON fm.id = s.from_member_id
+    JOIN members tm ON tm.id = s.to_member_id
+    JOIN tasks t ON t.id = s.task_id
+    WHERE s.id = ? AND s.team_id = ?
+  `).get(suggestionId, teamId) as AcceptedSuggestion | undefined;
+
+  if (!sug) { res.status(404).json({ error: 'Suggestion not found' }); return; }
+  if (sug.status !== 'accepted') {
+    res.status(400).json({ error: 'Only an accepted suggestion can be set back to pending' });
+    return;
+  }
+
+  // Accept set assignee_login to to_login. Put it back only while that write is
+  // still the current assignment. A later sync or another accept may have moved
+  // the task; overwriting that would undo a change this suggestion did not make.
+  const stillAssignedToReceiver = sug.assignee_login === sug.to_login;
+  const alreadyWithOriginal = sug.assignee_login === sug.from_login;
+  if (stillAssignedToReceiver && !sug.from_login) {
+    res.status(409).json({ error: 'Cannot undo this suggestion because the original assignee has no GitHub login' });
+    return;
+  }
+  if (!stillAssignedToReceiver && !alreadyWithOriginal) {
+    res.status(409).json({ error: 'Cannot undo this suggestion because the task is no longer assigned to the member who received it' });
+    return;
+  }
+
+  const reverted = db.transaction(() => {
+    const updated = db.prepare(
+      `UPDATE suggestions SET status = 'pending' WHERE id = ? AND team_id = ? AND status = 'accepted'`,
+    ).run(suggestionId, teamId);
+    if (updated.changes !== 1) return false;
+    if (stillAssignedToReceiver) {
+      db.prepare('UPDATE tasks SET assignee_login = ? WHERE id = ?').run(sug.from_login, sug.task_id);
+    }
+    return true;
+  })();
+
+  if (!reverted) {
+    res.status(400).json({ error: 'Only an accepted suggestion can be set back to pending' });
+    return;
+  }
+  res.json({ ok: true });
+}
 
 export default router;

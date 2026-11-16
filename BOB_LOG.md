@@ -558,7 +558,7 @@ Not yet tested against real data: GitHub Issues and milestone due dates (the Mae
 
 ## 2026-11-13 — Session 16: Client redesign (written with Grok bots, not IBM Bob)
 
-Commits `5df1853` and `41a3258`. The Connect page is gone; setup and the dashboard shell follow the dark Figma tokens. No server changes.
+Commits `5df1853` and `41a3258`. The Connect page is gone; setup and the dashboard shell follow the dark Figma tokens. No server changes. This work is from Nov 13, before the sessions below. Session 29 replaces these dark tokens with the brief's light palette, and sessions 19 and 20 store an editable team deadline.
 
 | Area | Change |
 |---|---|
@@ -573,14 +573,291 @@ Commits `5df1853` and `41a3258`. The Connect page is gone; setup and the dashboa
 | Dashboard pages, `workTypes.ts` | Overview, Member evidence, Risk radar, Rebalance, and Log work updated onto that shell. Work-type colours come from the CSS variables. On a contribution row, substance `low` reads "Minor" and `medium` / `high` read "Substantial". |
 | `.claude/launch.json` | Dev launch config for the server on port 3001 and the client on port 5173. |
 
-## 2026-11-14 — Session 17: Milestone status (written with Grok bots, not IBM Bob)
+## 2026-11-14 — Session 17: Undo an accepted rebalance suggestion (written with Grok bots, not IBM Bob)
 
-Checked each milestone's acceptance criteria against the code, then updated only the status lines in `docs/PLAN.md` and added the Session 16 entry above.
+**AI source:** Grok bots
+
+`POST /api/teams/:teamId/suggestions/:suggestionId/respond` with `{ status: "pending" }` sets an accepted suggestion back to pending. Accept is the only response that changes anything else: it sets the task's `assignee_login` to the receiving member. Undo puts that login back to the member who held the task (`from_login`). If the task is no longer assigned to the receiver, undo returns 409 and leaves both rows alone. A suggestion that is not accepted returns 400; an unknown id returns 404. The Rebalance screen is unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/routes/suggestions.ts` | Undo path on the existing respond route. |
+| `server/src/tests/suggestions-undo.test.ts` | Accept then undo, plus the 400 / 404 / 409 cases. |
+| `docs/PLAN.md` | Suggestions respond row notes the pending status. |
+
+`npm test`: 102 passed (102). `npx tsc --noEmit` exited 0.
+
+## 2026-11-14 — Session 18: Undo link on an accepted swap (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The Rebalance confirmation for an accepted swap now has an underlined Undo link. It calls the existing respond route with `{ status: "pending" }`. On success the suggestion card is pending again and open-task counts reload, so the owner shown on Risk radar and the member page is the original assignee. If the server refuses (including the 409 when the task was reassigned), that error string is shown in the card and the confirmation stays. The accepted confirmation is kept while you move around the app, so you can check the new owner and still undo.
+
+| File | Change |
+|---|---|
+| `client/src/api/client.ts` | `respond` accepts every suggestion status, including `pending`. |
+| `client/src/pages/Rebalance/Rebalance.tsx` | Undo link, inline error, reload after success. |
+| `client/src/pages/Rebalance/Rebalance.scss` | Link sits in the confirmation line; error wraps under it. |
+
+The client has no test runner. Checked in the browser against the seeded StudyBuddy team: accept #14, Undo returns the pending card (Sam 2 open, Jordan 0), and Risk radar plus Sam's assigned tasks show Sam again. A reassigned task shows the server's 409 message in the card and leaves the rows unchanged.
+
+`npm run build --workspace=client` succeeded. `npm test --workspace=server`: 102 passed (102). No server changes.
+
+## 2026-11-14 — Session 19: Stored team deadline (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+A team can store its own deadline. `PATCH /api/teams/:teamId` with `{ deadline: "YYYY-MM-DD" }` sets it and `{ deadline: null }` clears it. Anything else returns 400; an unknown team returns 404. `GET /api/teams/:teamId` reads it back (`deadline` is null until set). Stalled-task risk uses that date whenever it is set, and otherwise each task's GitHub milestone `due_date`, as before. Milestone dates stay on the tasks. The client is unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/db/schema.sql` | Nullable `teams.deadline` (`YYYY-MM-DD`). |
+| `server/src/db/migrate.ts` | migration_005 adds the column on existing databases. Rows stay; the new value is null. |
+| `server/src/routes/teams.ts` | `PATCH /api/teams/:teamId` validates and stores the date. |
+| `server/src/ai/reasoner.ts` | Stalled-task level uses the stored deadline when one is set. |
+| `server/src/tests/team-deadline.test.ts` | Set, read, clear, 400, 404, milestone override, migration on a database that lacks the column. |
+| `docs/BRIEF.md`, `docs/PLAN.md` | Deadline precedence, the new column, and the route. |
+
+`npm test` (in `server/`): 115 passed (115). `npx tsc --noEmit` exited 0.
+
+## 2026-11-14 — Session 20: Editable team deadline (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Team settings can set or clear the deadline stored in session 19. The date field shows the date in effect: the team's stored deadline when one is set, otherwise the latest GitHub milestone due date. Save sends `PATCH /api/teams/:teamId`. Clear sends `{ deadline: null }`. If the server rejects the change, its error is shown under the field. Overview uses the same rule and a short note of where the date came from.
+
+A save also calls the existing `POST /api/teams/:teamId/classify` route, which reruns the reasoner, and then the pages re-read. Risk cards pick up the new deadline. That route also refreshes pending suggestions, as it already did.
+
+| File | Change |
+|---|---|
+| `client/src/deadline.ts` | Shared rule: stored deadline, otherwise the latest milestone date. |
+| `client/src/api/client.ts`, `client/src/api/types.ts` | `team`, `setDeadline`, and `classify`. |
+| `client/src/pages/TeamSettings/` | Date input, Save, Clear, and the server's error. |
+| `client/src/pages/Overview/Overview.tsx` | Days to deadline uses the shared rule. |
+| `client/src/components/Layout.tsx` | `reload` re-reads every page after the reasoner runs. |
+
+The client has no test runner. Checked in the browser against the seeded StudyBuddy team: the field starts on Dec 9, from milestones. Saving Nov 20 shows that date on Overview ("set by the team"); stalled risks then say due in 6 days, and #14 moves from medium to high. Clear puts Overview back on Dec 9 and restores those risk levels. A rejected PATCH shows `deadline must be YYYY-MM-DD or null` under the field.
+
+`npm run build --workspace=client` succeeded. `npm test --workspace=server`: 115 passed (115). No server changes.
+
+## 2026-11-14 — Session 21: Demo seed scenario (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 1. `npm run seed` with `AI_PROVIDER=mock` on a fresh database still builds the StudyBuddy demo, and a second run skips it. The seed data did not need a change. `seedStudyBuddy(today)` takes the clock the reasoner already accepts, so the new test does not depend on the calendar day. The test also accepts a suggestion and undoes it, and stores a near deadline then clears it; the scenario still holds and `teams.deadline` stays null after seeding.
+
+Fresh database, `AI_PROVIDER=mock`, clock = the day it was run (2026-11-14):
+
+| Check | Required | Actual |
+|---|---|---|
+| Demo teams (`StudyBuddy`, `is_demo = 1`) | 1 | 1 |
+| Members | 4 | 4 (Rio, Sam, Priya, Jordan) |
+| Contributions | ≥ 20 | 31 (28 commits + 3 manual) |
+| Stalled open tasks (no matched work in 5 days) | ≥ 1 | 5 |
+| Overloaded members (≥2 open tasks, one at risk, someone else has none) | ≥ 1 | 1 (Sam; Jordan has no open tasks) |
+| High risks | ≥ 1 | 1 (#12 Auth flow, due in 7 days) |
+| Pending rebalance suggestions | ≥ 1 | 1 (#14 Sam → Jordan) |
+| Stored deadline | null after seed | null |
+
+`npx tsc --noEmit` (in `server/`) exited 0.
+
+`npm test` (in `server/`):
+
+```
+ Test Files  12 passed (12)
+      Tests  119 passed (119)
+   Start at  21:28:30
+   Duration  1.25s
+```
+
+## 2026-11-14 — Session 22: Production client serving (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 2. `railway.json` builds with `npm run build` and starts with `npm start`. After `npm ci`, that build succeeds. With `NODE_ENV=production`, `PORT=3999`, `AI_PROVIDER=mock`, and `DB_PATH` pointing at a folder that does not exist yet, the server listens on 3999, creates the folder, and runs the migration (all tables, through migration_005).
+
+`/` and `/teams/1` return the built `index.html`. `/assets/index-CWCFJZmA.js` is `application/javascript` and matches the file on disk. `/api/teams` is JSON (`[]` on an empty database).
+
+Unmatched `/api` paths were the break. `GET /api/does-not-exist` returned `index.html` with 200, and `POST` returned Express's HTML 404. Those now return `{"error":"Not found"}`. There was no `db-folder-fix.patch` on this checkout; `migrate.ts` already creates a missing database directory, and boot confirmed that.
+
+| File | Change |
+|---|---|
+| `server/src/serveClient.ts` | Static files, SPA fallback, and a JSON 404 for unmatched `/api`. |
+| `server/src/index.ts` | Production still serves `client/dist` through that helper. |
+| `server/src/tests/production-client.test.ts` | Vitest/supertest against a fixture dist folder. |
+
+`npx tsc --noEmit` (in `server/`) exited 0. `npm run build --workspace=client` succeeded.
+
+`npm test` (in `server/`):
+
+```
+ Test Files  13 passed (13)
+      Tests  124 passed (124)
+   Start at  21:33:48
+   Duration  2.34s
+```
+
+## 2026-11-14 — Session 23: Railway setup guide (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 3, done-pending-deploy. `docs/RAILWAY.md` is the dashboard setup: create the service, mount a volume at `/data`, set `DB_PATH=/data/maestro.db`, set every variable `server/src` reads, then curl `/`, `/teams/1`, `/api/teams`, and an unknown `/api` path. The demo seed runs inside the container with `node server/dist/db/seed.js`.
+
+`railway.json` is unchanged. It already sets the Railpack builder, `npm run build`, `npm start`, and restart policy `ON_FAILURE`. Railway's config schema does not create a volume. A healthcheck path was left unset: with `SITE_PASSWORD` set, every route returns 401, and Railway only treats a 2xx as healthy. A new Railway service does not read `railway.json` (config-as-code cutoff 2026-12-01), so the guide tells you to copy those settings into the service.
+
+No deploy, and no secrets.
+
+## 2026-11-14 — Session 24: README (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4, todo 6. Added `README.md`: what Maestro is (it used to be called Group Project Referee), the seven screens that exist (Setup, Overview, Member evidence, Risk radar, Rebalance, Log work, Team settings), the client/server/SQLite stack and the mock-or-grok provider, local setup, the StudyBuddy seed, `npm test` and `npm run eval --workspace=server`, a placeholder demo URL, and a pointer to `docs/RAILWAY.md`. `docs/PLAN.md` marks todo 6 done. No secrets.
+
+The copied `.env.example` sets `DB_PATH=./dev.db`. On a clean clone that left the line set, `npm run seed --workspace=server` wrote `server/dev.db` (31 contributions, 0 classifications, no risks) while `npm run dev:server` served `<repo>/dev.db`. The API opens SQLite before it reads `.env`, and the seed's working directory is `server/`. The README says to comment that line out. With it commented out, both use `<repo>/dev.db`.
+
+Commands on a clean clone of this branch, mock mode, after commenting out `DB_PATH`:
+
+| Command | Result |
+|---|---|
+| `node -v` | `v22.23.4`. No `.nvmrc`. |
+| `cp .env.example .env`, then comment out `DB_PATH` | `AI_PROVIDER=mock`. Placeholders only. |
+| `npm install` | 246 packages added, exit 0. |
+| `npm run dev:server` | `Migration complete: <repo>/dev.db`. Listening on port 3001. |
+| `npm run dev:client` | Vite ready at `http://localhost:5173/`. `/api` proxied to 3001. |
+| `npm run seed --workspace=server` | StudyBuddy id 1. 4 members, 31 contributions, 31 classifications. High risk: #12 Auth flow. Pending suggestion: #14 Sam Rivera → Jordan Lee. |
+| same command again | `StudyBuddy team already exists (id=1). Skipping seed.` |
+| Open `http://localhost:5173/teams/1` | Overview rendered: Demo data, 0 of 6 tasks done, 2 at risk, 1 suggestion, the high risk, and the swap. Setup lists StudyBuddy. |
+| `npm test` | 13 files, 124 passed. |
+| `npm run eval --workspace=server` | mock, `prompt-v2`, main set 30 commits. work_type 83.3% (25/30), substance 50.0% (15/30). |
+| `npm run eval` (repo root) | Missing script. Eval is only in `server/`. |
+
+One database file after the seed: `<repo>/dev.db`. The demo rows were still there after the tests.
+
+## 2026-11-14 — Session 25: One SQLite file for the copied .env (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Copying `.env.example` to `.env` left `DB_PATH=./dev.db`. The API imported the SQLite client before `dotenv` ran, so it never saw that variable and opened `<repo>/dev.db`. The seed read `.env` afterwards and opened `./dev.db` from its working directory, `server/`. The classifier uses the API client, so that file had 31 contributions and 0 classifications.
+
+`.env` is now loaded before the client opens. A relative `DB_PATH` is resolved from the repo root. An absolute path is unchanged (`DB_PATH=/data/maestro.db` on Railway). When `DB_PATH` is unset, the file is still `<repo>/dev.db`. The README no longer says to comment the line out.
+
+| File | Change |
+|---|---|
+| `server/src/loadEnv.ts` | Loads `<repo>/.env` once, before the database opens. |
+| `server/src/db/paths.ts` | `resolveDbPath()`. |
+| `server/src/db/client.ts`, `seed.ts`, `migrate.ts`, `index.ts`, `server/src/ai/eval/run.ts` | Load env first and open the resolved path. |
+| `server/src/tests/db-path.test.ts` | Relative path, absolute path, and unset. |
+| `.env.example`, `README.md`, `docs/RAILWAY.md` | The copied example works with no edits. |
+
+With `cp .env.example .env` and no edits, `npm run dev:server` and `npm run seed --workspace=server` both logged `Migration complete: <repo>/dev.db`. The seed classified 31 contributions and printed the high risk on #12 Auth flow. Overview at `/teams/1` showed that risk and the classified contribution map.
+
+`npx tsc --noEmit` (in `server/`) exited 0. `npm run build --workspace=client` succeeded.
+
+`npm test` (in `server/`, with that `.env` present):
+
+```
+ Test Files  14 passed (14)
+      Tests  127 passed (127)
+   Start at  22:12:40
+   Duration  1.29s
+```
+
+## 2026-11-14 — Session 26: Secret history audit and a complete .env.example (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Milestone 4 acceptance criterion: no secrets in the repo, and `.env.example` lists every variable the server reads. No history rewrite.
+
+**Scan.** gitleaks 8.30.0, from the repo root:
+
+```
+gitleaks detect --source . --log-opts="--all --full-history" --redact
+```
+
+It reported 43 commits scanned and no leaks. `git rev-list --all` is 45 commits (32 on main, 13 only on other remote branches). gitleaks skips commits with no additions, which accounts for the gap. A second pass grepped `git log --all -p` across all 45 commits for `ghp_`, `github_pat_`, `xai-`, `sk-`, AWS access-key IDs, private-key blocks, `password=` / `api_key=` / `token=` assignments, Slack tokens, and npm tokens.
+
+No real credential. The hits were placeholders in `.env.example` (`GITHUB_TOKEN`, `XAI_API_KEY`, a commented `SITE_PASSWORD`, and an older `WATSONX_API_KEY` placeholder), test fixtures (`test-key`, `fake-key`, `fake-key-for-test`), and `process.env` reads. Seed and eval sample diffs mention `DATABASE_URL`, `REDIS_URL`, `REFRESH_SECRET`, and `const token =` inside fake commit text. The `sk-` hits are the substring inside the word "task-matching". The only env file ever committed is `.env.example`. No `.env`, `*.db`, `*.db-*`, `dist/`, or `*.patch` path appears in history.
+
+`.gitignore` now also ignores `.env.*` (`.env.example` stays tracked), `*.db-*`, any `dist/` directory, and `*.patch`. `node_modules/` and `*.db` were already ignored.
+
+`.env.example` lists `PORT`, `NODE_ENV`, `DB_PATH`, `AI_PROVIDER`, `XAI_API_KEY`, `GROK_MODEL`, `GITHUB_TOKEN`, `SITE_USER`, and `SITE_PASSWORD`. Copied with no edits it stays in mock mode: `NODE_ENV=development`, `AI_PROVIDER=mock`, `DB_PATH=./dev.db`, empty `SITE_PASSWORD` (the gate stays off), and placeholders that are not tokens. `README.md` and `docs/RAILWAY.md` name the same nine variables. Railway still uses `NODE_ENV=production`, an injected `PORT`, and `DB_PATH=/data/maestro.db`.
+
+`docs/PLAN.md` marks that acceptance criterion done.
+
+With `cp .env.example .env` and no edits, both the dev server and the seed logged `Migration complete: <repo>/dev.db`. The seed classified 31 contributions and printed the high risk on #12 Auth flow. `GET /api/teams/1/summary` showed StudyBuddy, 0 of 6 tasks done, 2 at risk, 1 pending suggestion, and a work-type mix for all four members. Headless Chrome loaded `http://localhost:5173/teams/1`. Overview showed Demo data, that same scoreline, the contribution map (not "no classified work yet"), the high risk on #12 Auth flow, and the swap from Sam Rivera to Jordan Lee. No sign-in prompt.
+
+`npm test` (in `server/`, with that `.env` present):
+
+```
+ Test Files  14 passed (14)
+      Tests  127 passed (127)
+   Start at  22:35:39
+   Duration  1.41s
+```
+
+`.env` and `dev.db` stayed untracked.
+
+## 2026-11-14 — Session 27: Optional date on a manual log (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Manual log work accepts an optional `date` (`YYYY-MM-DD`). It is stored on the existing `contributions.authored_at` column, at noon UTC, so the calendar day stays put. Omit `date`, or send null, and the row is stamped with the current time, as before. An invalid date or a future date returns 400 and writes nothing. Today is allowed.
+
+The Log work form has a date input that starts on today and sends `date` through `api.logWork`. The server's error is shown under the form. Overview, member evidence, risk radar, and the reasoner were not changed. They already read `authored_at`.
+
+| File | Change |
+|---|---|
+| `server/src/routes/manual.ts` | Optional `date`, stored on `authored_at`. |
+| `server/src/tests/manual-date.test.ts` | No date uses now; a past date is stored; invalid and future dates are 400. |
+| `client/src/pages/LogWork/` | Date field on the dark form. |
+| `client/src/api/client.ts` | `logWork` accepts `date`. |
+| `docs/PLAN.md` | Manual POST row documents `date`. |
+
+Checked in the browser against the seeded StudyBuddy team. Logged "Sketched the deck browser empty state" for Priya Nair on 2026-11-12. The row is `2026-11-12T12:00:00Z`. Member evidence shows Nov 12 on that row, and Last active is "2 days ago". A future date shows `date cannot be in the future` under the form and is not listed.
+
+`npx tsc --noEmit` (in `server/`) exited 0. `npx tsc --noEmit` and `npm run build` (in `client/`) succeeded.
+
+`npm test` (in `server/`):
+
+```
+ Test Files  15 passed (15)
+      Tests  139 passed (139)
+   Start at  22:58:20
+   Duration  2.23s
+```
+
+`.env` and `dev.db` stayed untracked.
+
+## 2026-11-16 — Session 28: Railway production check and deploy (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots (maestro-senior)
+
+The production service was still running a Nov 13 commit, so `main` `d15947c` (PR #18) was deployed. The dashboard build command is `npm run build` and the start command is `npm start`.
+
+Smoke tests passed. `/` and `/teams/1` return 200 HTML. `/api/teams` returns 200 JSON. `/api/does-not-exist` returns 404 JSON. An unauthenticated request returns 401. Data on the `/data` volume was still there after the deploy.
+
+Auto-deploy is not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is the manual redeploy, and section 4 is the smoke test.
+
+## 2026-11-16 — Session 29: Light palette from the brief (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots, maestro-senior
+
+The client tokens followed the dark Figma palette (`#09090B`, gold `#E8A93A`, Geist). They now follow `docs/BRIEF.md`: page `#F6F6F3`, sidebar `#16181D`, accent `#1F5FBF`, risk orange `#A34A06` on `#FDF0E4`, Space Grotesk for headings, Inter for body. Borders, muted text, and the other status colors are light-theme equivalents with WCAG AA contrast on `#F6F6F3`. Sidebar text stays light so it remains readable on `#16181D`.
+
+`docs/PLAN.md` had no "palette mismatch" line. Milestone 3 todo 13 (brand palette and typography) is marked done.
+
+`npm run build` succeeded in both workspaces (`tsc` in each, then the client Vite build). `npm test`: 15 files, 139 passed.
+
+## 2026-11-16 — Session 30: Milestone status, refreshed (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The status lines in `docs/PLAN.md` now follow the code on main. A Nov 14 draft of this note is not used. That draft left milestone 3 in progress because the brief colours were not the Sass tokens, and it said milestone 4 had no README, public URL, or volume config. Sessions 17 through 29 already record that work. Only the status lines changed. Newer notes in the milestone bodies stay, including milestone 3 todo 13 marked done.
 
 | Milestone | Status |
 |---|---|
 | 1 Foundations | `[x] done` |
 | 2 AI Core | `[x] done` |
-| 3 Product / Dashboard | `[ ] in progress` — brief colours and fonts are not the Sass tokens |
-| 4 Demo-ready | `[ ] in progress` — `railway.json` and production static serving exist; no README, public URL, or volume config |
+| 3 Product / Dashboard | `[x] done`. The brief colours and fonts are the Sass tokens (session 29). |
+| 4 Demo-ready | `[ ] in progress`. The seed check, `railway.json`, the volume steps, production static serving, the README, the secrets audit, and a manual deploy of `d15947c` are in place. The README demo link is still a placeholder, and that deploy is from before the light palette. |
 | 5 Submit | `[ ] pending` |

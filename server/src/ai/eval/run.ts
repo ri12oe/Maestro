@@ -13,15 +13,13 @@
  *   - List of misses (title, expected, got)
  */
 
-import dotenv from 'dotenv';
+import '../../loadEnv.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { classifyOne, modelVersion } from '../classifier.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Load .env from the repo root — works from both src/ (tsx dev) and dist/ (compiled)
-dotenv.config({ path: join(__dirname, '..', '..', '..', '..', '.env') });
 
 // ── CLI flags ─────────────────────────────────────────────────────────────────
 

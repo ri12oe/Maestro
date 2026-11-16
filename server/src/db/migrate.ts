@@ -1,7 +1,9 @@
+import '../loadEnv.js';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
+import { resolveDbPath } from './paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -148,6 +150,21 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_005: teams.deadline — a YYYY-MM-DD date the team sets.
+   *
+   * Null means "keep using GitHub milestone due dates". ALTER TABLE … ADD COLUMN
+   * leaves existing rows in place; the new column is NULL on those rows.
+   */
+  if (!appliedSet.has('migration_005_teams_deadline')) {
+    db.transaction(() => {
+      try {
+        db.exec('ALTER TABLE teams ADD COLUMN deadline TEXT');
+      } catch { /* column already exists — idempotent */ }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_005_teams_deadline');
+    })();
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);
@@ -155,6 +172,5 @@ export function runMigration(dbPath: string): void {
 
 // Run directly when invoked as a script
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const dbPath = process.env.DB_PATH ?? join(__dirname, '..', '..', '..', 'dev.db');
-  runMigration(dbPath);
+  runMigration(resolveDbPath());
 }

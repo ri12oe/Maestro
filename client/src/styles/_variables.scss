@@ -1,36 +1,46 @@
-// Maestro design tokens — mirrors the "Color" and "Layout" variables in the
-// Figma file (Maestro → Components page). Dark only.
+// Light palette. docs/BRIEF.md names the page background, the sidebar, the
+// accent, the risk orange, and the two fonts. Other tokens are light-theme
+// equivalents of the previous dark set.
 
 // Colour
-$bg:               #09090B;
-$surface:          #111114;
-$surface-raised:   #18181C;
-$border:           #222228;
-$text:             #EDEDEF;
-$text-muted:       #8B8B94;
-$text-placeholder: #5C5C66;
-$accent:           #E8A93A;
-$accent-deep:      #C48522;
-$accent-subtle:    #1C170E;
-$accent-text:      #09090B;
+$bg:               #F6F6F3; // brief: off-white background
+$surface:          #FFFFFF;
+$surface-raised:   #E6E4DC;
+$border:           #8C8882;
+$text:             #1C1C19;
+$text-muted:       #5E5C55;
+$text-placeholder: #6E6C64;
+
+// The sidebar stays dark, so it cannot share the page text and surface tokens.
+$sidebar:          #16181D; // brief: dark sidebar
+$sidebar-text:     #EDEDEF;
+$sidebar-muted:    #8B8B94;
+$sidebar-raised:   #2A2C33;
+$sidebar-border:   #636374;
+
+$accent:           #1F5FBF; // brief: one blue accent
+$accent-deep:      #204D90;
+$accent-subtle:    #E6EEF8;
+$accent-text:      #FFFFFF;
 $bulb-base:        #3A3A42;
 $bulb-groove:      #2A2A30;
 
-$risk-high:        #E5484D;
-$risk-high-bg:     #2A1315;
-$risk-medium:      #E8A93A;
-$risk-medium-bg:   #2A2112;
-$risk-low:         #8B8B94;
-$ok:               #3FB68B;
+$risk-high:        #C61C22;
+$risk-high-bg:     #FDECEA;
+$risk-medium:      #A34A06; // brief: orange for risk
+$risk-medium-bg:   #FDF0E4; // brief: orange for risk, on this ground
+$risk-low:         #5E5C55;
+$ok:               #2B7C5F;
 
-$work-feature:     #6E8EF5;
-$work-fix:         #9AA5F0;
-$work-test:        #E8A93A;
-$work-docs:        #8B8B94;
+$work-feature:     #2656F0;
+$work-fix:         #596BE6;
+$work-test:        #B77D15;
+$work-docs:        #58585F;
 $work-other:       #4A4A52;
 
-// Type (Geist, matching the Figma text styles)
-$font: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+// Type. Brief: Space Grotesk for headings, Inter for body.
+$font-heading: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+$font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
 // Spacing (8px grid)
 $space-4:  4px;
@@ -62,17 +72,17 @@ $mobile: 767px; // at or below: phone layout
 }
 
 // Text styles
-@mixin t-page-title   { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.015em; }
-@mixin t-h1-welcome   { font-size: 48px; line-height: 56px; font-weight: 600; letter-spacing: -0.025em; }
-@mixin t-h1-step      { font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; }
-@mixin t-h1-mobile    { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.015em; }
-@mixin t-heading-sm   { font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: -0.01em; }
+@mixin t-page-title   { font-family: $font-heading; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.015em; }
+@mixin t-h1-welcome   { font-family: $font-heading; font-size: 48px; line-height: 56px; font-weight: 600; letter-spacing: -0.025em; }
+@mixin t-h1-step      { font-family: $font-heading; font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; }
+@mixin t-h1-mobile    { font-family: $font-heading; font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.015em; }
+@mixin t-heading-sm   { font-family: $font-heading; font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: -0.01em; }
 @mixin t-stat         { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.015em; }
 @mixin t-body         { font-size: 18px; line-height: 28px; font-weight: 400; letter-spacing: -0.005em; }
 @mixin t-label        { font-size: 15px; line-height: 22px; font-weight: 500; letter-spacing: -0.005em; }
 @mixin t-small        { font-size: 15px; line-height: 22px; font-weight: 400; }
 @mixin t-badge        { font-size: 12px; line-height: 16px; font-weight: 500; }
-@mixin t-wordmark     { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.02em; }
+@mixin t-wordmark     { font-family: $font-heading; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.02em; }
 
 @mixin visually-hidden {
   position: absolute;

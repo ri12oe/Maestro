@@ -1,12 +1,10 @@
+import '../loadEnv.js';
 import Database from 'better-sqlite3';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { runMigration } from './migrate.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { resolveDbPath } from './paths.js';
 
 function createDb(): Database.Database {
-  const dbPath = process.env.DB_PATH ?? join(__dirname, '..', '..', '..', 'dev.db');
+  const dbPath = resolveDbPath();
   runMigration(dbPath);
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
@@ -14,7 +12,7 @@ function createDb(): Database.Database {
   return db;
 }
 
-// Singleton instance
+// Singleton instance. loadEnv is imported above so DB_PATH is set before this runs.
 const db = createDb();
 
 export default db;

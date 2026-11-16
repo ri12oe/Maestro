@@ -109,6 +109,20 @@ router.patch('/:teamId', (req, res) => {
   res.json(team);
 });
 
+// DELETE /api/teams/:teamId — disconnect a team; child rows follow ON DELETE CASCADE
+router.delete('/:teamId', (req, res) => {
+  const teamId = Number(req.params.teamId);
+
+  const team = db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId);
+  if (!team) {
+    res.status(404).json({ error: 'Team not found' });
+    return;
+  }
+
+  db.prepare('DELETE FROM teams WHERE id = ?').run(teamId);
+  res.json({ ok: true });
+});
+
 // POST /api/teams/:teamId/sync — trigger full GitHub sync
 router.post('/:teamId/sync', async (req, res) => {
   const teamId = Number(req.params.teamId);

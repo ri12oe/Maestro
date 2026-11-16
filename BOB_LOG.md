@@ -810,3 +810,13 @@ Checked in the browser against the seeded StudyBuddy team. Logged "Sketched the 
 ```
 
 `.env` and `dev.db` stayed untracked.
+
+## 2026-11-16 — Session 27: Light palette from the brief (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots, maestro-senior
+
+The client tokens followed the dark Figma palette (`#09090B`, gold `#E8A93A`, Geist). They now follow `docs/BRIEF.md`: page `#F6F6F3`, sidebar `#16181D`, accent `#1F5FBF`, risk orange `#A34A06` on `#FDF0E4`, Space Grotesk for headings, Inter for body. Borders, muted text, and the other status colors are light-theme equivalents with WCAG AA contrast on `#F6F6F3`. Sidebar text stays light so it remains readable on `#16181D`.
+
+`docs/PLAN.md` had no "palette mismatch" line. Milestone 3 todo 13 (brand palette and typography) is marked done.
+
+`npm run build` succeeded in both workspaces (`tsc` in each, then the client Vite build). `npm test`: 15 files, 139 passed.

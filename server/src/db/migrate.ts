@@ -165,6 +165,20 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_006: teams.report_enabled — the team's opt-in for the project report.
+   *
+   * One team-wide setting; 0 (off) on existing rows.
+   */
+  if (!appliedSet.has('migration_006_teams_report_enabled')) {
+    db.transaction(() => {
+      try {
+        db.exec('ALTER TABLE teams ADD COLUMN report_enabled INTEGER NOT NULL DEFAULT 0');
+      } catch { /* column already exists — idempotent */ }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_006_teams_report_enabled');
+    })();
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);

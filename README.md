@@ -8,17 +8,28 @@ Demo: _coming soon_ (TODO: add Railway URL)
 
 ## Screens
 
-- **Setup** (`/`). Connect a repository as `owner/repo` or a GitHub URL, add teammates by GitHub login, and open the project. Teams already in the database are listed on the first step.
-- **Overview**. Tasks done, tasks at risk, suggestions waiting, days to the deadline, a contribution map by work type, the top risks, and the first suggested swap.
-- **Member evidence**. One member's contribution count, open tasks, work mix, assigned tasks, and each contribution with its AI label, substance, and matched task. Dispute is on the row.
-- **Risk radar**. High, medium, and low risk cards with the evidence behind them, and a task progress table.
-- **Rebalance**. A pending task swap with the reason and a check-in message. Accept swap, Dismiss, and Undo on an accepted swap.
-- **Log work**. Record design, research, meeting, coordination, or other work that is not a commit.
-- **Team settings**. The repository, members, and a team deadline. A saved deadline is what risk uses. With no saved deadline, risk uses each task's GitHub milestone due date.
+- **Start** (`/`). Your teams, or connect a repository on one screen: paste `owner/repo` or a GitHub URL, Maestro syncs it and fills in the team from commit authors and the deadline from milestones, then you confirm and open it.
+- **Today** (`/t/:teamId`). Maestro's short brief on where the project stands, then "Needs the team": each risk and the swap that would fix it on one card, with Accept swap, Copy check-in and Not a problem. Side cards show the team's work mix, this week's activity and what's due soon.
+- **Plan** (`/plan`). Every task with a deadline strip, grouped by at risk, in progress, not started and done. A task opens in a panel with Maestro's note, any suggested swap and the work matched to it.
+- **People** (`/people`). The team's work on one scale, alphabetical, and a panel per person with their work mix, contributions, tasks and logged work. "Wrong label?" disputes a label in place.
+- **Report** (`/report`). The record for peer evaluations: team activity by week and each person's completed tasks, notable work and off-repo work. Off until anyone on the team turns it on in Settings. Export PDF prints it.
+- **Maestro** (`/maestro`). What the AI labeled, disputes, changes still waiting for a label, and how Maestro decides.
+- **Settings** (`/settings`). Members, team deadline, the report switch, theme, and deleting the team.
+- **Log work** is available from anywhere: the sidebar button, the mobile **+**, or the `L` key.
+
+Old `/teams/:id/...` links redirect to the new routes.
+
+### Keyboard
+
+`⌘K` / `Ctrl K` search and commands · `L` log work · `S` sync · `G` then `T` `P` `E` `R` `M` `S` to go to Today, Plan, People, Report, Maestro or Settings · `/` search tasks on Plan · `[` `]` previous and next task · `⌘\` collapse the sidebar.
+
+### Design
+
+Dark is the default; light and system themes are in Settings and the team menu. Amber is reserved for Maestro: the bulb and text the AI wrote. Each device can pick "I'm Rio" once, which adds a Mine filter and fills in who did logged work; it never changes what anyone sees.
 
 ## Stack
 
-`client/` is React, TypeScript, Vite, and Sass. `server/` is Node, TypeScript, and Express. The database is one SQLite file.
+`client/` is React, TypeScript, Vite, Tailwind CSS v4 and lucide-react icons. `server/` is Node, TypeScript, and Express. The database is one SQLite file.
 
 AI calls go through `server/src/ai/provider.ts`. `AI_PROVIDER=mock` is deterministic and offline. `AI_PROVIDER=grok` calls the xAI API.
 

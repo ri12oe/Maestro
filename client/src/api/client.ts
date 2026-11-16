@@ -61,6 +61,10 @@ export const api = {
   setDeadline: (teamId: number, deadline: string | null) =>
     request<Team>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ deadline }) }),
 
+  /** Turn the project report on or off for the whole team. */
+  setReportEnabled: (teamId: number, enabled: boolean) =>
+    request<Team>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ report_enabled: enabled }) }),
+
   /** Classify anything still unlabeled, then recompute risks. */
   classify: (teamId: number) =>
     request<ClassifyResult>(`/teams/${teamId}/classify`, { method: 'POST' }),

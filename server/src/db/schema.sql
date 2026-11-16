@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS teams (
   created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   last_synced_at TEXT,                 -- end of the last successful GitHub sync
   is_demo     INTEGER NOT NULL DEFAULT 0, -- 1 for the seeded demo team (no real repo)
-  deadline    TEXT                     -- YYYY-MM-DD team deadline; overrides milestone dates when set
+  deadline    TEXT,                    -- YYYY-MM-DD team deadline; overrides milestone dates when set
+  report_enabled INTEGER NOT NULL DEFAULT 0 -- 1 when the team has turned on the project report
 );
 
 -- members: one row per contributor; auto-created on first sync appearance

@@ -830,3 +830,18 @@ The client tokens followed the dark Figma palette (`#09090B`, gold `#E8A93A`, Ge
 `docs/PLAN.md` had no "palette mismatch" line. Milestone 3 todo 13 (brand palette and typography) is marked done.
 
 `npm run build` succeeded in both workspaces (`tsc` in each, then the client Vite build). `npm test`: 15 files, 139 passed.
+
+## 2026-11-16 — Session 29: Delete a team (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`DELETE /api/teams/:teamId` sits next to `PATCH /api/teams/:teamId`. Success is `200 { ok: true }`. An unknown id, and a non-numeric id, return `404 { error: "Team not found" }`, the same body as `GET /api/teams/:teamId`.
+
+One `DELETE FROM teams` removes the row, including `teams.deadline`. Child rows follow the foreign keys already in `schema.sql`: members, tasks, contributions, risks, and suggestions. A manual log's calendar day lives on `contributions.authored_at` (`YYYY-MM-DDT12:00:00Z`), so that row goes with the contribution cascade, and so do its classification and task match. Another team's deadline, suggestion, and dated manual log stay. `schema.sql` and `migrate.ts` are unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/routes/teams.ts` | `DELETE /api/teams/:teamId` after the deadline PATCH. |
+| `server/src/tests/delete-team.test.ts` | Cascade covers a stored deadline, a suggestion, and a dated manual contribution. The other team keeps all three. |
+
+`npm test` (in `server/`): 16 files, 142 passed (142).

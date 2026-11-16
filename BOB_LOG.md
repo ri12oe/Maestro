@@ -845,3 +845,21 @@ One `DELETE FROM teams` removes the row, including `teams.deadline`. Child rows 
 | `server/src/tests/delete-team.test.ts` | Cascade covers a stored deadline, a suggestion, and a dated manual contribution. The other team keeps all three. |
 
 `npm test` (in `server/`): 16 files, 142 passed (142).
+
+## 2026-11-16 — Session 30: Danger zone on Team settings (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Team settings can disconnect the open team. The Danger zone card sits below the Deadline card and calls `DELETE /api/teams/:teamId` from session 29. Disconnect team opens a confirm step: type the team name, then Disconnect. Cancel returns to the first button. Success replaces the history entry and opens Setup at `/`. A failed call shows the server error and stays on the card.
+
+The card uses the light palette tokens. Background is `$surface`, border is `$border`, the button uses `$risk-high-bg` and `$risk-high`, and the hover label is `$surface`. No hard-coded dark colors.
+
+| File | Change |
+|---|---|
+| `client/src/api/client.ts` | `api.deleteTeam` calls `DELETE /api/teams/:teamId`. |
+| `client/src/pages/TeamSettings/TeamSettings.tsx` | Danger zone under Deadline, with the confirm step. |
+| `client/src/pages/TeamSettings/TeamSettings.scss` | Light risk tokens on the card and the danger button. |
+
+This branch includes the delete route. Checked in the browser against the seeded StudyBuddy team with `AI_PROVIDER=mock`. Typing StudyBuddy and disconnecting left `GET /api/teams` as `[]`, `GET /api/teams/1` as 404 `{ error: "Team not found" }`, and the browser on Setup at `/` with StudyBuddy absent from the list.
+
+`npm run build` succeeded in both workspaces. `npm test` (in `server/`): 16 files, 142 passed (142).

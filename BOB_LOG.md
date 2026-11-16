@@ -848,11 +848,44 @@ The client tokens followed the dark Figma palette (`#09090B`, gold `#E8A93A`, Ge
 
 `npm run build` succeeded in both workspaces (`tsc` in each, then the client Vite build). `npm test`: 15 files, 139 passed.
 
-## 2026-11-16 — Session 30: Milestone status, refreshed (written with Grok bots, not IBM Bob)
+## 2026-11-16 — Session 30: Delete a team (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
-The status lines in `docs/PLAN.md` now follow the code on main. A Nov 14 draft of this note is not used. That draft left milestone 3 in progress because the brief colours were not the Sass tokens, and it said milestone 4 had no README, public URL, or volume config. Sessions 17 through 29 already record that work. Only the status lines changed. Newer notes in the milestone bodies stay, including milestone 3 todo 13 marked done.
+`DELETE /api/teams/:teamId` sits next to `PATCH /api/teams/:teamId`. Success is `200 { ok: true }`. An unknown id, and a non-numeric id, return `404 { error: "Team not found" }`, the same body as `GET /api/teams/:teamId`.
+
+One `DELETE FROM teams` removes the row, including `teams.deadline`. Child rows follow the foreign keys already in `schema.sql`: members, tasks, contributions, risks, and suggestions. A manual log's calendar day lives on `contributions.authored_at` (`YYYY-MM-DDT12:00:00Z`), so that row goes with the contribution cascade, and so do its classification and task match. Another team's deadline, suggestion, and dated manual log stay. `schema.sql` and `migrate.ts` are unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/routes/teams.ts` | `DELETE /api/teams/:teamId` after the deadline PATCH. |
+| `server/src/tests/delete-team.test.ts` | Cascade covers a stored deadline, a suggestion, and a dated manual contribution. The other team keeps all three. |
+
+`npm test` (in `server/`): 16 files, 142 passed (142).
+
+## 2026-11-16 — Session 31: Danger zone on Team settings (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Team settings can disconnect the open team. The Danger zone card sits below the Deadline card and calls `DELETE /api/teams/:teamId` from session 30. Disconnect team opens a confirm step: type the team name, then Disconnect. Cancel returns to the first button. Success replaces the history entry and opens Setup at `/`. A failed call shows the server error and stays on the card.
+
+The card uses the light palette tokens. Background is `$surface`, border is `$border`, the button uses `$risk-high-bg` and `$risk-high`, and the hover label is `$surface`. No hard-coded dark colors.
+
+| File | Change |
+|---|---|
+| `client/src/api/client.ts` | `api.deleteTeam` calls `DELETE /api/teams/:teamId`. |
+| `client/src/pages/TeamSettings/TeamSettings.tsx` | Danger zone under Deadline, with the confirm step. |
+| `client/src/pages/TeamSettings/TeamSettings.scss` | Light risk tokens on the card and the danger button. |
+
+This branch includes the delete route. Checked in the browser against the seeded StudyBuddy team with `AI_PROVIDER=mock`. Typing StudyBuddy and disconnecting left `GET /api/teams` as `[]`, `GET /api/teams/1` as 404 `{ error: "Team not found" }`, and the browser on Setup at `/` with StudyBuddy absent from the list.
+
+`npm run build` succeeded in both workspaces. `npm test` (in `server/`): 16 files, 142 passed (142).
+
+## 2026-11-16 — Session 32: Milestone status, refreshed (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The status lines in `docs/PLAN.md` follow the code on main, including the delete route (session 30) and the Danger zone (session 31). Those two sessions do not change a milestone status. A Nov 14 draft of this note is not used. That draft left milestone 3 in progress because the brief colours were not the Sass tokens, and it said milestone 4 had no README, public URL, or volume config. Only the status lines changed. Newer notes in the milestone bodies stay, including milestone 3 todo 13 marked done.
 
 | Milestone | Status |
 |---|---|

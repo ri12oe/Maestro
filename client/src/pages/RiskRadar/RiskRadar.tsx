@@ -4,14 +4,22 @@ import { api } from '../../api/client.ts';
 import type { Risk, RiskLevel, Task } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
-import { ArrowRight, Card, Chip, EmptyState, ErrorState, Loading, RiskBadge, Tag } from '../../components/ui.tsx';
+import { ArrowRight, Card, Chip, chipsClass, EmptyState, ErrorState, linkClass, Loading, RiskBadge, Tag, textBtnClass } from '../../components/ui.tsx';
 import { daysAgo, dueLabel, shortDate } from '../../dates.ts';
-import './RiskRadar.scss';
 
 type Filter = 'all' | RiskLevel;
 const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'all', label: 'All' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' },
 ];
+
+const STRIPE: Record<RiskLevel, string> = {
+  high: 'before:bg-error',
+  medium: 'before:bg-primary',
+  low: 'before:bg-muted',
+};
+
+const thClass = 'pb-3 pr-4 text-left font-normal whitespace-nowrap text-muted';
+const tdClass = 'border-t border-neutral py-3 pr-4 align-top';
 
 function evidenceLine(risk: Risk, nameFor: (login: string) => string): string {
   const parts: string[] = [];
@@ -35,21 +43,21 @@ function RiskCard({ risk, teamId, onDismissed, nameFor }: {
   const evidence = evidenceLine(risk, nameFor);
 
   return (
-    <li className={`risk-card risk-card--${risk.level}`}>
-      <div className="risk-card__head">
+    <li className={`relative flex flex-col gap-2 overflow-hidden rounded-card border border-neutral bg-base-200 p-5 md:pl-6 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] ${STRIPE[risk.level]}`}>
+      <div className="flex items-center gap-3">
         <RiskBadge level={risk.level} />
-        <span className="risk-card__title">{title ?? risk.description}</span>
+        <span className="text-label">{title ?? risk.description}</span>
       </div>
-      {title && <p className="risk-card__text">{risk.description}</p>}
-      {evidence && <p className="risk-card__evidence">{evidence}</p>}
-      {error && <p className="risk-card__error" role="alert">{error}</p>}
-      <div className="risk-card__actions">
+      {title && <p className="text-[18px] leading-7 tracking-[-0.005em]">{risk.description}</p>}
+      {evidence && <p className="text-muted">{evidence}</p>}
+      {error && <p className="text-error" role="alert">{error}</p>}
+      <div className="mt-1 flex items-center gap-4">
         {swapCanHelp && (
-          <Link to={`/teams/${teamId}/rebalance`} className="link">See rebalance suggestion <ArrowRight size={16} /></Link>
+          <Link to={`/teams/${teamId}/rebalance`} className={linkClass}>See rebalance suggestion <ArrowRight size={16} /></Link>
         )}
         <button
           type="button"
-          className="text-btn"
+          className={`${textBtnClass} ${swapCanHelp ? '' : 'pl-0!'}`}
           disabled={busy}
           onClick={async () => {
             setBusy(true);
@@ -67,15 +75,15 @@ function RiskCard({ risk, teamId, onDismissed, nameFor }: {
 
 function TaskTable({ tasks, atRisk }: { tasks: Task[]; atRisk: Set<number> }) {
   return (
-    <div className="task-table">
-      <table>
+    <div className="min-w-0 overflow-x-auto">
+      <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th scope="col">Task</th>
-            <th scope="col">Owner</th>
-            <th scope="col">Last activity</th>
-            <th scope="col">Due</th>
-            <th scope="col">Status</th>
+            <th className={thClass} scope="col">Task</th>
+            <th className={thClass} scope="col">Owner</th>
+            <th className={thClass} scope="col">Last activity</th>
+            <th className={thClass} scope="col">Due</th>
+            <th className={thClass} scope="col">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -83,17 +91,17 @@ function TaskTable({ tasks, atRisk }: { tasks: Task[]; atRisk: Set<number> }) {
             const due = t.due_date && t.status === 'open' ? dueLabel(t.due_date) : null;
             return (
               <tr key={t.id}>
-                <td className="task-table__title">
-                  {t.github_issue_number != null && <span className="muted">#{t.github_issue_number}</span>} {t.title}
+                <td className={`${tdClass} min-w-[200px] text-label`}>
+                  {t.github_issue_number != null && <span className="text-muted">#{t.github_issue_number}</span>} {t.title}
                 </td>
-                <td>{t.assignee_name ?? t.assignee_login ?? <span className="muted">Unassigned</span>}</td>
-                <td>
+                <td className={tdClass}>{t.assignee_name ?? t.assignee_login ?? <span className="text-muted">Unassigned</span>}</td>
+                <td className={tdClass}>
                   {t.last_activity_at
-                    ? <>{daysAgo(t.last_activity_at)} <span className="muted">· {t.contribution_count} change{t.contribution_count === 1 ? '' : 's'}</span></>
-                    : <span className="muted">No matched work</span>}
+                    ? <>{daysAgo(t.last_activity_at)} <span className="text-muted">· {t.contribution_count} change{t.contribution_count === 1 ? '' : 's'}</span></>
+                    : <span className="text-muted">No matched work</span>}
                 </td>
-                <td>{t.due_date ? <>{shortDate(t.due_date)}{due && <span className={due.urgent ? 'task-table__urgent' : 'muted'}> · {due.text}</span>}</> : <span className="muted">—</span>}</td>
-                <td>{t.status === 'closed' ? <Tag>Done</Tag> : atRisk.has(t.id) ? <span className="task-table__at-risk">At risk</span> : <Tag>Open</Tag>}</td>
+                <td className={tdClass}>{t.due_date ? <>{shortDate(t.due_date)}{due && <span className={due.urgent ? 'text-error' : 'text-muted'}> · {due.text}</span>}</> : <span className="text-muted">—</span>}</td>
+                <td className={tdClass}>{t.status === 'closed' ? <Tag>Done</Tag> : atRisk.has(t.id) ? <span className="text-badge whitespace-nowrap rounded-full bg-risk-high-bg px-2 py-1 text-error">At risk</span> : <Tag>Open</Tag>}</td>
               </tr>
             );
           })}
@@ -124,14 +132,14 @@ export default function RiskRadar() {
       )}
       {all.length > 0 && (
         <>
-          <div className="chips" role="group" aria-label="Filter by level">
+          <div className={chipsClass} role="group" aria-label="Filter by level">
             {FILTERS.map(f => (
               <Chip key={f.value} filter selected={filter === f.value} onClick={() => setFilter(f.value)}>{f.label}</Chip>
             ))}
           </div>
           {shown.length === 0
-            ? <p className="muted">No {filter} risks.</p>
-            : <ul className="risk-list">{shown.map(r => <RiskCard key={r.id} risk={r} teamId={teamId} onDismissed={onDismissed} nameFor={nameFor} />)}</ul>}
+            ? <p className="text-muted">No {filter} risks.</p>
+            : <ul className="flex list-none flex-col gap-4">{shown.map(r => <RiskCard key={r.id} risk={r} teamId={teamId} onDismissed={onDismissed} nameFor={nameFor} />)}</ul>}
         </>
       )}
 

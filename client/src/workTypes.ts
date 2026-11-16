@@ -2,7 +2,7 @@ import type { Substance, WorkType } from './api/types.ts';
 
 /**
  * Work types are grouped into five categories for the contribution bars.
- * Colours come from the design tokens (CSS variables set in global.scss);
+ * Colours come from the design tokens (CSS variables set in theme.css);
  * every bar also has a text equivalent.
  */
 export interface WorkCategory {

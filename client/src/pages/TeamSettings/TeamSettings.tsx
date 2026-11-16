@@ -3,9 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
-import { Card, ErrorState, Loading, PersonRow } from '../../components/ui.tsx';
+import { Card, ErrorState, fieldClass, fieldHelpClass, fieldRowClass, inputClass, Loading, PersonRow, secondaryBtnClass, srOnlyClass } from '../../components/ui.tsx';
 import { effectiveDeadline, type DeadlineSource } from '../../deadline.ts';
-import './TeamSettings.scss';
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -93,18 +92,18 @@ export default function TeamSettings() {
 
   return (
     <Page title="Team settings">
-      <div className="settings">
+      <div className="flex w-full max-w-[720px] flex-col gap-4 md:gap-6">
         <Card title="Repository">
-          <div className="settings__repo">
+          <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
             <div>
-              <p className="settings__repo-name">{team?.repo ?? '—'}</p>
-              <p className="muted">
+              <p className="text-label">{team?.repo ?? '—'}</p>
+              <p className="text-muted">
                 {team?.isDemo ? 'Demo data, not connected to GitHub'
                   : team?.lastSyncedAt ? `Last synced ${dateFmt.format(new Date(team.lastSyncedAt))}, ${timeFmt.format(new Date(team.lastSyncedAt))}`
                   : 'Not synced yet'}
               </p>
             </div>
-            <Link to="/" className="btn btn--secondary">Change repository</Link>
+            <Link to="/" className={secondaryBtnClass}>Change repository</Link>
           </div>
         </Card>
 
@@ -112,19 +111,19 @@ export default function TeamSettings() {
           {members.loading && !members.data && <Loading />}
           {members.error && <ErrorState message={members.error} onRetry={members.reload} />}
           {people.length > 0 && (
-            <ul className="person-list">
+            <ul className="flex list-none flex-col gap-2">
               {people.map(m => (
                 <PersonRow key={m.id} name={m.display_name ?? m.github_login!} username={m.github_login}
                   onRemove={() => remove(m.id)} removing={removing === m.id} />
               ))}
             </ul>
           )}
-          <form className="field__row" onSubmit={add} noValidate>
-            <label htmlFor="add-member" className="visually-hidden">GitHub username</label>
-            <input id="add-member" className="input" value={login} onChange={e => setLogin(e.target.value)} placeholder="username" autoComplete="off" />
-            <button type="submit" className="btn btn--secondary" disabled={busy}>{busy ? 'Adding…' : 'Add'}</button>
+          <form className={fieldRowClass} onSubmit={add} noValidate>
+            <label htmlFor="add-member" className={srOnlyClass}>GitHub username</label>
+            <input id="add-member" className={inputClass} value={login} onChange={e => setLogin(e.target.value)} placeholder="username" autoComplete="off" />
+            <button type="submit" className={secondaryBtnClass} disabled={busy}>{busy ? 'Adding…' : 'Add'}</button>
           </form>
-          {error && <p className="settings__error" role="alert">{error}</p>}
+          {error && <p className="text-error" role="alert">{error}</p>}
         </Card>
 
         <Card title="Deadline">
@@ -133,24 +132,24 @@ export default function TeamSettings() {
             <ErrorState message={teamRecord.error} onRetry={teamRecord.reload} />
           )}
           {canResolve && (
-            <form className="field settings__deadline" onSubmit={save} noValidate>
-              <div className="field__row">
-                <label htmlFor="deadline" className="visually-hidden">Deadline</label>
+            <form className={fieldClass} onSubmit={save} noValidate>
+              <div className={`${fieldRowClass} max-md:flex-wrap`}>
+                <label htmlFor="deadline" className={srOnlyClass}>Deadline</label>
                 <input
                   id="deadline"
-                  className="input"
+                  className={`${inputClass} scheme-dark`}
                   type="date"
                   value={dateValue}
                   aria-describedby="deadline-hint"
                   onChange={e => setDraft(e.target.value || null)}
                 />
-                <button type="submit" className="btn btn--secondary" disabled={!!saving || !dateValue || dateValue === baseline}>
+                <button type="submit" className={secondaryBtnClass} disabled={!!saving || !dateValue || dateValue === baseline}>
                   {saving === 'save' ? 'Saving…' : 'Save'}
                 </button>
                 {stored && (
                   <button
                     type="button"
-                    className="btn btn--secondary"
+                    className={secondaryBtnClass}
                     disabled={!!saving}
                     aria-label="Clear the date and use the milestone date"
                     onClick={() => void persist(null, 'clear')}
@@ -159,8 +158,8 @@ export default function TeamSettings() {
                   </button>
                 )}
               </div>
-              <p className="field__help" id="deadline-hint">{sourceHint(resolved?.source ?? null)}</p>
-              {deadlineError && <p className="settings__error" role="alert">{deadlineError}</p>}
+              <p className={fieldHelpClass} id="deadline-hint">{sourceHint(resolved?.source ?? null)}</p>
+              {deadlineError && <p className="text-error" role="alert">{deadlineError}</p>}
             </form>
           )}
         </Card>

@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import type { MemberSummary } from '../api/types.ts';
 import { categoryShares } from '../workTypes.ts';
 import { Legend, StackedBar } from './ui.tsx';
-import './ContributionMap.scss';
 
 function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
@@ -27,14 +26,14 @@ export default function ContributionMap({ teamId, members }: { teamId: number; m
   const maxWeight = Math.max(1, ...members.map(m => m.totalWeight));
 
   return (
-    <div className="cmap">
+    <div className="flex flex-col gap-4">
       <Legend />
-      <ul className="cmap__rows">
+      <ul className="flex list-none flex-col gap-4">
         {members.map(m => (
-          <li key={m.memberId} className="cmap__row">
-            <Link to={`/teams/${teamId}/members/${m.memberId}`} className="cmap__name">{m.displayName}</Link>
-            <StackedBar segments={categoryShares(m.substanceShares)} length={m.totalWeight / maxWeight} label={memberBarLabel(m)} />
-            <span className="cmap__meta">{itemsSummary(m)}</span>
+          <li key={m.memberId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 md:grid-cols-[120px_minmax(0,1fr)_auto] md:gap-4">
+            <Link to={`/teams/${teamId}/members/${m.memberId}`} className="block min-w-0 truncate text-label underline decoration-[rgba(237,237,239,0.35)] underline-offset-[3px] [&:hover]:decoration-[rgb(237,237,239)] max-md:col-start-1 max-md:row-start-1">{m.displayName}</Link>
+            <StackedBar className="max-md:col-span-2 max-md:row-start-2" segments={categoryShares(m.substanceShares)} length={m.totalWeight / maxWeight} label={memberBarLabel(m)} />
+            <span className="text-right whitespace-nowrap text-muted max-md:col-start-2 max-md:row-start-1">{itemsSummary(m)}</span>
           </li>
         ))}
       </ul>

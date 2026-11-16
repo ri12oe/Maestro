@@ -1,4 +1,4 @@
-import { useId, useState, type CSSProperties } from 'react';
+import { useId, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client.ts';
 import type { Contribution, MemberSummary, Risk, Task } from '../../api/types.ts';
@@ -6,11 +6,10 @@ import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
 import { itemsSummary, memberBarLabel } from '../../components/ContributionMap.tsx';
 import {
-  Card, EmptyState, ErrorState, Legend, Loading, OptionCard, RiskBadge, StackedBar, StatCard, Tag,
+  Card, EmptyState, ErrorState, Legend, Loading, OptionCard, primaryBtnClass, RiskBadge, secondaryBtnClass, srOnlyClass, StackedBar, StatCard, Tag, textareaClass, textBtnClass,
 } from '../../components/ui.tsx';
 import { WORK_TYPE_LABEL, categoryShares, substanceLabel, workTypeColor } from '../../workTypes.ts';
 import { daysAgo, shortDate } from '../../dates.ts';
-import './MemberEvidence.scss';
 
 const REASONS = ['Wrong work type', 'Wrong task', 'Credit belongs to someone else', 'Other'];
 
@@ -24,7 +23,7 @@ function DisputePanel({ onSubmit, onCancel }: { onSubmit: (note: string) => Prom
 
   return (
     <form
-      className="dispute"
+      className="mb-4 flex flex-col gap-4 rounded-control border border-neutral bg-base-100 p-4 md:p-5"
       onSubmit={async e => {
         e.preventDefault();
         if (!reason) { setError('Choose what’s wrong with this.'); return; }
@@ -35,18 +34,18 @@ function DisputePanel({ onSubmit, onCancel }: { onSubmit: (note: string) => Prom
         catch (err) { setError(err instanceof Error ? err.message : String(err)); setBusy(false); }
       }}
     >
-      <fieldset className="dispute__options">
-        <legend className="field__label">What&rsquo;s wrong with this?</legend>
+      <fieldset className="flex flex-col gap-2 border-0">
+        <legend className="mb-2 text-label">What&rsquo;s wrong with this?</legend>
         {REASONS.map(r => (
           <OptionCard key={r} name={groupId} value={r} checked={reason === r} onChange={setReason} title={r} />
         ))}
       </fieldset>
-      <label htmlFor={noteId} className="visually-hidden">Add a note (optional)</label>
-      <textarea id={noteId} className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note (optional)" />
-      {error && <p className="dispute__error" role="alert">{error}</p>}
-      <div className="dispute__actions">
-        <button type="submit" className="btn btn--primary" disabled={busy}>{busy ? 'Sending…' : 'Send dispute'}</button>
-        <button type="button" className="btn btn--secondary" onClick={onCancel} disabled={busy}>Cancel</button>
+      <label htmlFor={noteId} className={srOnlyClass}>Add a note (optional)</label>
+      <textarea id={noteId} className={textareaClass} value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note (optional)" />
+      {error && <p className="text-error" role="alert">{error}</p>}
+      <div className="flex flex-wrap gap-3">
+        <button type="submit" className={primaryBtnClass} disabled={busy}>{busy ? 'Sending…' : 'Send dispute'}</button>
+        <button type="button" className={secondaryBtnClass} onClick={onCancel} disabled={busy}>Cancel</button>
       </div>
     </form>
   );
@@ -59,25 +58,28 @@ function ContributionRow({ c, teamId, onDisputed }: { c: Contribution; teamId: n
   const summary = c.summary ?? c.title;
 
   return (
-    <li className={`contrib${disputing ? ' is-open' : ''}`}>
-      <div className="contrib__row">
-        <span className="contrib__date">{shortDate(c.authored_at)}</span>
-        <span className="contrib__type"><span className="contrib__dot" style={{ background: workTypeColor(c.work_type) }} aria-hidden="true" />{typeLabel}</span>
-        <span className="contrib__details">
-          <span className="contrib__summary">
-            {c.url ? <a href={c.url} target="_blank" rel="noreferrer">{summary}</a> : summary}
+    <li className="border-b border-neutral last:border-b-0">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 py-4 md:grid-cols-[80px_110px_minmax(0,1fr)_auto_auto] md:gap-4">
+        <span className="text-muted max-md:col-start-1 max-md:row-start-1">{shortDate(c.authored_at)}</span>
+        <span className="inline-flex items-center gap-2 max-md:col-start-2 max-md:row-start-1">
+          <span className="size-2 shrink-0 rounded-full" style={{ background: workTypeColor(c.work_type) }} aria-hidden="true" />
+          {typeLabel}
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5 max-md:col-span-2 max-md:row-start-2">
+          <span className="text-label">
+            {c.url ? <a href={c.url} target="_blank" rel="noreferrer" className="[&:hover]:underline [&:hover]:underline-offset-[3px]">{summary}</a> : summary}
           </span>
-          <span className="contrib__task">
+          <span className="text-muted">
             {c.task_number != null ? `#${c.task_number} ${c.task_title}` : 'Not linked to a task'}
           </span>
         </span>
-        <span className="contrib__tags">
+        <span className="flex flex-wrap gap-2 max-md:col-start-1 max-md:row-start-3">
           {c.source === 'manual' && c.work_type && <Tag>Logged</Tag>}
           {substance && <Tag>{substance}</Tag>}
           {c.disputed ? <Tag>Disputed</Tag> : null}
         </span>
         {c.work_type && !c.disputed && (
-          <button type="button" className="text-btn contrib__dispute" onClick={() => setDisputing(d => !d)}
+          <button type="button" className={`${textBtnClass} max-md:col-start-2 max-md:row-start-3 max-md:justify-self-end`} onClick={() => setDisputing(d => !d)}
             aria-expanded={disputing} aria-label={`Dispute the label on “${summary}”`}>
             Dispute
           </button>
@@ -104,15 +106,15 @@ function AssignedTasks({ member, tasks, risks }: { member: MemberSummary; tasks:
   const mine = tasks.filter(t => t.status === 'open' && t.assignee_login === member.login);
   return (
     <Card title="Assigned tasks">
-      {mine.length === 0 ? <p className="muted">No open tasks assigned.</p> : (
-        <ul className="assigned">
+      {mine.length === 0 ? <p className="text-muted">No open tasks assigned.</p> : (
+        <ul className="list-none">
           {mine.map(t => {
             const risk = risks.find(r => r.task_id === t.id);
             return (
-              <li key={t.id}>
-                <span className="assigned__title">{t.github_issue_number != null && `#${t.github_issue_number} `}{t.title}</span>
+              <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-neutral py-3">
+                <span className="text-label">{t.github_issue_number != null && `#${t.github_issue_number} `}{t.title}</span>
                 {risk && <RiskBadge level={risk.level} />}
-                <span className="assigned__due">{t.due_date ? `Due ${shortDate(t.due_date)}` : 'No due date'}</span>
+                <span className="text-muted md:ml-auto max-md:basis-full">{t.due_date ? `Due ${shortDate(t.due_date)}` : 'No due date'}</span>
               </li>
             );
           })}
@@ -139,16 +141,16 @@ export default function MemberEvidence() {
 
   return (
     <Page title={member.displayName} back={back}>
-      <div className="stats" style={{ '--cols': 3 } as CSSProperties}>
+      <div className="grid grid-flow-row grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
         <StatCard label="Contributions" value={member.contributionCount} />
         <StatCard label="Open tasks" value={member.openTasks} />
         <StatCard label="Last active" value={lastActive(contributions.data)} />
       </div>
 
-      <div className="work-mix">
-        <div className="work-mix__bar">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-4">
           <StackedBar segments={categoryShares(member.substanceShares)} length={member.totalWeight ? 1 : 0} label={memberBarLabel(member)} />
-          <span className="muted">{itemsSummary(member)}</span>
+          <span className="whitespace-nowrap text-muted">{itemsSummary(member)}</span>
         </div>
         <Legend />
       </div>
@@ -162,7 +164,7 @@ export default function MemberEvidence() {
           <EmptyState heading="No contributions yet" line="Commits and logged work will show up here after the next sync." />
         )}
         {contributions.data && contributions.data.length > 0 && (
-          <ul className="contrib-list">
+          <ul className="list-none">
             {contributions.data.map(c => (
               <ContributionRow key={c.id} c={c} teamId={teamId} onDisputed={contributions.reload} />
             ))}

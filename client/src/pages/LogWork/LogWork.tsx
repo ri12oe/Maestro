@@ -3,9 +3,8 @@ import { api } from '../../api/client.ts';
 import type { ManualKind } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
-import { Card, Chip, ErrorState, Loading, Toast } from '../../components/ui.tsx';
+import { Card, Chip, chipsClass, ErrorState, fieldClass, fieldHelpClass, fieldLabelClass, inputClass, Loading, primaryBtnClass, selectClass, textareaClass, Toast } from '../../components/ui.tsx';
 import { shortDate } from '../../dates.ts';
-import './LogWork.scss';
 
 // The kinds the API accepts for work done outside the repo.
 const KINDS: Array<{ value: ManualKind; label: string; color: string }> = [
@@ -73,79 +72,81 @@ export default function LogWork() {
 
   return (
     <Page title="Log work" subtitle="Meetings, design, research and writing count too.">
-      <div className="logwork">
+      <div className="flex w-full max-w-[560px] flex-col gap-6">
         {members.error && <ErrorState message={members.error} onRetry={members.reload} />}
         {members.loading && !members.data && <Loading />}
 
-        <form className="logform" onSubmit={submit} noValidate>
-          <div className="field">
+        <form className="flex flex-col gap-6" onSubmit={submit} noValidate>
+          <div className={fieldClass}>
             <label htmlFor="who">Who did this?</label>
-            <select id="who" className="input" value={memberId} onChange={e => setMemberId(e.target.value)} required>
+            <select id="who" className={selectClass} value={memberId} onChange={e => setMemberId(e.target.value)} required>
               <option value="">Choose a teammate</option>
               {people.map(m => <option key={m.id} value={m.id}>{m.display_name ?? m.github_login}</option>)}
             </select>
           </div>
 
-          <div className="field">
+          <div className={fieldClass}>
             <label htmlFor="what">What did you do?</label>
-            <textarea id="what" className="input" value={title} onChange={e => setTitle(e.target.value)} required maxLength={120}
+            <textarea id="what" className={textareaClass} value={title} onChange={e => setTitle(e.target.value)} required maxLength={120}
               placeholder="e.g. Designed the onboarding screens in Figma" />
           </div>
 
-          <fieldset className="field logform__kinds">
-            <legend className="field__label">Type</legend>
-            <div className="chips">
+          <fieldset className={`${fieldClass} border-0`}>
+            <legend className={`${fieldLabelClass} mb-2`}>Type</legend>
+            <div className={chipsClass}>
               {KINDS.map(k => (
                 <Chip key={k.value} selected={kind === k.value} onClick={() => setKind(k.value)} dot={k.color}>{k.label}</Chip>
               ))}
             </div>
           </fieldset>
 
-          <div className="field">
+          <div className={fieldClass}>
             <label htmlFor="task">Related task (optional)</label>
-            <select id="task" className="input" value={taskId} onChange={e => setTaskId(e.target.value)}>
+            <select id="task" className={selectClass} value={taskId} onChange={e => setTaskId(e.target.value)}>
               <option value="">Not tied to a task</option>
               {openTasks.map(t => <option key={t.id} value={t.id}>#{t.github_issue_number} {t.title}</option>)}
             </select>
           </div>
 
-          <div className="field">
+          <div className={fieldClass}>
             <label htmlFor="link">Link (optional)</label>
-            <input id="link" type="url" className="input" value={link} onChange={e => setLink(e.target.value)} placeholder="Figma, Google Doc, notes…" />
+            <input id="link" type="url" className={inputClass} value={link} onChange={e => setLink(e.target.value)} placeholder="Figma, Google Doc, notes…" />
           </div>
 
-          <div className="field">
+          <div className={fieldClass}>
             <label htmlFor="when">Date (optional)</label>
             <input
               id="when"
               type="date"
-              className="input"
+              className={`${inputClass} scheme-dark`}
               value={date}
               max={todayInputValue()}
               aria-describedby="when-hint"
               onChange={e => setDate(e.target.value)}
             />
-            <p className="field__help" id="when-hint">Leave this on today, or choose the day the work happened.</p>
+            <p className={fieldHelpClass} id="when-hint">Leave this on today, or choose the day the work happened.</p>
           </div>
 
-          {error && <p className="logform__error" role="alert">{error}</p>}
+          {error && <p className="text-error" role="alert">{error}</p>}
           <div>
-            <button type="submit" className="btn btn--primary" disabled={busy}>{busy ? 'Saving…' : 'Log work'}</button>
+            <button type="submit" className={`${primaryBtnClass} max-md:w-full`} disabled={busy}>{busy ? 'Saving…' : 'Log work'}</button>
           </div>
         </form>
 
         <Card title="Recently logged">
           {entries.loading && !entries.data && <Loading />}
           {entries.error && <ErrorState message={entries.error} onRetry={entries.reload} />}
-          {entries.data && entries.data.length === 0 && <p className="muted">Nothing logged yet.</p>}
+          {entries.data && entries.data.length === 0 && <p className="text-muted">Nothing logged yet.</p>}
           {entries.data && entries.data.length > 0 && (
-            <ul className="logged">
+            <ul className="list-none">
               {entries.data.slice(0, 8).map(e => (
-                <li key={e.id}>
+                <li key={e.id} className="border-t border-neutral py-3">
                   {shortDate(e.authored_at)} · {e.display_name ?? e.github_login}
                   {e.kind && <> · {KIND_LABEL[e.kind] ?? e.kind}</>}
                   {' · '}
-                  {e.link ? <a href={e.link} target="_blank" rel="noreferrer">{e.title}</a> : e.title}
+                  {e.link
+                    ? <a href={e.link} target="_blank" rel="noreferrer" className="underline decoration-[rgba(237,237,239,0.35)] underline-offset-[3px]">{e.title}</a>
+                    : e.title}
                 </li>
               ))}
             </ul>

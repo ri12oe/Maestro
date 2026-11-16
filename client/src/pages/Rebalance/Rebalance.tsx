@@ -3,8 +3,7 @@ import { api } from '../../api/client.ts';
 import type { RiskLevel, Suggestion } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
-import { ArrowRight, Check, EmptyState, ErrorState, Initials, Loading, RiskBadge, Toast } from '../../components/ui.tsx';
-import './Rebalance.scss';
+import { ArrowRight, Check, EmptyState, ErrorState, Initials, linkClass, Loading, primaryBtnClass, RiskBadge, secondaryBtnClass, srOnlyClass, Toast } from '../../components/ui.tsx';
 
 function display(name: string | null, login: string): string {
   return name || login;
@@ -13,9 +12,12 @@ function display(name: string | null, login: string): string {
 // Survives leaving this page, so Undo is still there after checking the new owner.
 const acceptedByTeam = new Map<number, Suggestion[]>();
 
+const suggestionClass = 'flex w-full max-w-[720px] flex-col gap-6 rounded-card border border-neutral bg-base-200 p-5 md:p-6';
+const bodyClass = 'text-[18px] leading-7 tracking-[-0.005em]';
+
 function PersonChip({ name, open }: { name: string; open: number }) {
   return (
-    <span className="person-chip">
+    <span className="inline-flex items-center gap-2 rounded-full border border-neutral bg-base-300 py-1.5 pr-3 pl-1.5 [&_.initials]:size-6! [&_.initials]:bg-base-100! [&_.initials]:text-[12px]! [&_.initials]:[line-height:16px]! [&_.initials]:[font-weight:500]!">
       <Initials name={name} />
       <span>{name} · {open} open</span>
     </span>
@@ -42,14 +44,14 @@ function AcceptedSuggestion({ s, teamId, onUndone }: {
   }
 
   return (
-    <div className="suggestion suggestion--accepted" role="status">
-      <Check className="suggestion__ok" />
-      <div className="suggestion__accepted-copy">
+    <div className="flex w-full max-w-[720px] items-start gap-3 rounded-card border border-neutral bg-base-200 p-5 text-label md:px-6 md:py-5" role="status">
+      <Check className="mt-0.5 shrink-0 text-success" />
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         <p>
           Swap accepted. #{s.task_number} is now {who}&rsquo;s.{' '}
           <button
             type="button"
-            className="link"
+            className={`${linkClass} inline! align-baseline! underline! underline-offset-[3px]! focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-[0.55]`}
             disabled={busy}
             aria-label={busy ? `Undoing swap of #${s.task_number}` : `Undo swap of #${s.task_number}`}
             onClick={() => void undo()}
@@ -57,7 +59,7 @@ function AcceptedSuggestion({ s, teamId, onUndone }: {
             {busy ? 'Undoing…' : 'Undo'}
           </button>
         </p>
-        {error && <p className="suggestion__error" role="alert">{error}</p>}
+        {error && <p className="text-error" role="alert">{error}</p>}
       </div>
     </div>
   );
@@ -80,33 +82,33 @@ function SuggestionCard({ s, level, teamId, onAnswered }: {
   }
 
   return (
-    <section className="suggestion" aria-labelledby={`sug-${s.id}`}>
-      <div className="suggestion__head">
-        <h2 id={`sug-${s.id}`} className="suggestion__title">#{s.task_number} {s.task_title}</h2>
+    <section className={suggestionClass} aria-labelledby={`sug-${s.id}`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 id={`sug-${s.id}`} className="text-card">#{s.task_number} {s.task_title}</h2>
         {level && <RiskBadge level={level} />}
       </div>
 
-      <div className="suggestion__flow" aria-label={`Move from ${from} to ${to}`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label={`Move from ${from} to ${to}`}>
         <PersonChip name={from} open={s.from_open_tasks} />
-        <ArrowRight className="muted" />
+        <ArrowRight className="text-muted" />
         <PersonChip name={to} open={s.to_open_tasks} />
       </div>
 
       {s.rationale.length > 0 && (
-        <div className="suggestion__section">
-          <h3 className="suggestion__label">Why</h3>
-          {s.rationale.map((r, i) => <p key={i} className="suggestion__body">{r}</p>)}
+        <div className="flex flex-col gap-2">
+          <h3 className="text-label font-medium! text-muted">Why</h3>
+          {s.rationale.map((r, i) => <p key={i} className={bodyClass}>{r}</p>)}
         </div>
       )}
 
       {s.checkin_message && (
-        <div className="suggestion__section">
-          <h3 className="suggestion__label">Check-in message</h3>
-          <p className="suggestion__message">{s.checkin_message}</p>
-          <div className="suggestion__copy">
+        <div className="flex flex-col gap-2">
+          <h3 className="text-label font-medium! text-muted">Check-in message</h3>
+          <p className={`${bodyClass} rounded-control border border-neutral bg-base-100 p-4`}>{s.checkin_message}</p>
+          <div className="flex">
             <button
               type="button"
-              className="btn btn--secondary"
+              className={secondaryBtnClass}
               onClick={async () => {
                 try { await navigator.clipboard.writeText(s.checkin_message ?? ''); setCopied(true); }
                 catch { setCopied(false); }
@@ -114,17 +116,17 @@ function SuggestionCard({ s, level, teamId, onAnswered }: {
             >
               {copied ? 'Copied' : 'Copy message'}
             </button>
-            <span className="visually-hidden" role="status">{copied ? 'Message copied to clipboard.' : ''}</span>
+            <span className={srOnlyClass} role="status">{copied ? 'Message copied to clipboard.' : ''}</span>
           </div>
         </div>
       )}
 
-      {error && <p className="suggestion__error" role="alert">{error}</p>}
-      <div className="suggestion__actions">
-        <button type="button" className="btn btn--primary" disabled={!!busy} onClick={() => answer('accepted')}>
+      {error && <p className="text-error" role="alert">{error}</p>}
+      <div className="flex flex-wrap gap-3 border-t border-neutral pt-5">
+        <button type="button" className={primaryBtnClass} disabled={!!busy} onClick={() => answer('accepted')}>
           {busy === 'accepted' ? 'Accepting…' : 'Accept swap'}
         </button>
-        <button type="button" className="btn btn--secondary" disabled={!!busy} onClick={() => answer('dismissed')}>
+        <button type="button" className={secondaryBtnClass} disabled={!!busy} onClick={() => answer('dismissed')}>
           {busy === 'dismissed' ? 'Dismissing…' : 'Dismiss'}
         </button>
       </div>

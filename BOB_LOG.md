@@ -820,3 +820,13 @@ The production service was still running a Nov 13 commit, so `main` `d15947c` (P
 Smoke tests passed. `/` and `/teams/1` return 200 HTML. `/api/teams` returns 200 JSON. `/api/does-not-exist` returns 404 JSON. An unauthenticated request returns 401. Data on the `/data` volume was still there after the deploy.
 
 Auto-deploy is not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is the manual redeploy, and section 4 is the smoke test.
+
+## 2026-11-16 — Session 28: Light palette from the brief (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots, maestro-senior
+
+The client tokens followed the dark Figma palette (`#09090B`, gold `#E8A93A`, Geist). They now follow `docs/BRIEF.md`: page `#F6F6F3`, sidebar `#16181D`, accent `#1F5FBF`, risk orange `#A34A06` on `#FDF0E4`, Space Grotesk for headings, Inter for body. Borders, muted text, and the other status colors are light-theme equivalents with WCAG AA contrast on `#F6F6F3`. Sidebar text stays light so it remains readable on `#16181D`.
+
+`docs/PLAN.md` had no "palette mismatch" line. Milestone 3 todo 13 (brand palette and typography) is marked done.
+
+`npm run build` succeeded in both workspaces (`tsc` in each, then the client Vite build). `npm test`: 15 files, 139 passed.

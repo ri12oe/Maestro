@@ -360,7 +360,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 10. Build Risk Radar screen (risk cards with evidence chips, task progress table).
 11. Build Rebalance Suggestions screen (swap cards with accept/discuss/dismiss).
 12. Build Log Work screen (manual log form + recently logged list).
-13. Define Sass variables for the brand palette and typography from the brief.
+13. Define Sass variables for the brand palette and typography from the brief. — done
 14. Wire client `api/` fetch wrappers to every endpoint used by the screens.
 
 **Relevant context:** `docs/BRIEF.md` §Screens, §Fairness rules; `server/src/routes/`; `client/src/pages/`.

@@ -810,3 +810,13 @@ Checked in the browser against the seeded StudyBuddy team. Logged "Sketched the 
 ```
 
 `.env` and `dev.db` stayed untracked.
+
+## 2026-11-16 — Session 27: Railway production check and deploy (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots (maestro-senior)
+
+The production service was still running a Nov 13 commit, so `main` `d15947c` (PR #18) was deployed. The dashboard build command is `npm run build` and the start command is `npm start`.
+
+Smoke tests passed. `/` and `/teams/1` return 200 HTML. `/api/teams` returns 200 JSON. `/api/does-not-exist` returns 404 JSON. An unauthenticated request returns 401. Data on the `/data` volume was still there after the deploy.
+
+Auto-deploy is not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is the manual redeploy, and section 4 is the smoke test.

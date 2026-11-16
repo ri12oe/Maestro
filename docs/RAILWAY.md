@@ -118,6 +118,16 @@ curl -sS -D - "$BASE/api/teams/1"
 
 With `AI_PROVIDER=mock` the seed stays offline. With `AI_PROVIDER=grok` the same command calls xAI and needs `XAI_API_KEY` and `GROK_MODEL`.
 
+## 5. Deploy a change
+
+This project deploys manually. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy.
+
+`railway redeploy` and the dashboard's Redeploy button rebuild the commit that is already deployed.
+
+After a merge, pull `main` locally and run `railway up` from the repo root with the project linked. That uploads the checked-out code and deploys it. Then run the smoke test in section 4.
+
+The dashboard build command is now `npm run build` and the start command is `npm start`, so the deploy no longer depends on `railway.json` being read. Services that already use that file stop reading it on 2026-12-01.
+
 ## What stayed out of railway.json
 
 `railway.json` already has the restart policy `ON_FAILURE`. It has no healthcheck path, and none was added. Railway calls a healthcheck URL and accepts only a 2xx response. With `SITE_PASSWORD` set, `/` and `/api/teams` both return 401, and there is no route that stays 200 in that case. A healthcheck on either path would fail a password-protected deploy. A volume also means the next deploy has a short gap anyway: Railway will not run two deployments on the same volume.

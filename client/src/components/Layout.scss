@@ -19,12 +19,15 @@
   flex-direction: column;
   gap: $space-24;
   padding: $space-24 $space-16;
-  background: $bg;
-  border-right: 1px solid $border;
+  background: $sidebar;
+  color: $sidebar-text;
+  border-right: 1px solid $sidebar-border;
+
+  a:focus-visible { outline-color: $sidebar-text; }
 
   &__brand { display: flex; flex-direction: column; gap: 4px; padding: 0 $space-12; }
   &__wordmark { display: inline-flex; align-items: center; gap: $space-12; @include t-wordmark; }
-  &__team { color: $text-muted; }
+  &__team { color: $sidebar-muted; }
 
   &__nav { flex: 1; display: flex; flex-direction: column; gap: $space-4; }
 
@@ -34,7 +37,7 @@
     padding: $space-12 0 0;
     gap: $space-12;
     border-right: 0;
-    border-bottom: 1px solid $border;
+    border-bottom: 1px solid $sidebar-border;
 
     &__brand { flex-direction: row; align-items: center; gap: $space-12; padding: 0 $space-20; }
     &__nav {
@@ -56,11 +59,11 @@
   align-items: center;
   justify-content: space-between;
   gap: $space-8;
-  color: $text-muted;
+  color: $sidebar-muted;
   @include t-label;
   @include focus-ring;
-  &:hover { color: $text; }
-  &.is-active { background: $surface-raised; color: $text; }
+  &:hover { color: $sidebar-text; }
+  &.is-active { background: $sidebar-raised; color: $sidebar-text; }
   &--bottom { margin-top: auto; }
 
   &__count {
@@ -78,7 +81,7 @@
     min-height: 36px;
     padding: 0 14px;
     border-radius: 999px;
-    border: 1px solid $border;
+    border: 1px solid $sidebar-border;
     &--bottom { margin-top: 0; }
   }
 }

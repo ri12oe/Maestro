@@ -3,8 +3,9 @@
  *
  * Risk signals (computed without AI):
  *   1. Stalled task: an open task whose most recent matched contribution is more than
- *      5 days old (or has no matched contribution at all). High if due within 7 days;
- *      medium if no due date or due later.
+ *      5 days old (or has no matched contribution at all). The due date is the team's
+ *      stored deadline when one is set, otherwise the task's milestone date.
+ *      High within 7 days, medium within 14; low when there is no date and it has been idle 14+ days.
  *   2. Single point of failure: a top-level directory where one member made ≥90% of
  *      the last 20 commits touching it, with ≥5 commits total. Medium.
  *   3. Overload: a member holding ≥2 open tasks where at least one is at risk, while
@@ -107,6 +108,14 @@ function detectStalledTasks(
     WHERE team_id = ? AND status = 'open'
   `).all(teamId) as OpenTaskRow[];
 
+  // A date the team stored replaces every task's milestone date. Null keeps
+  // today's behavior: each task is judged by its own milestone due_date.
+  const storedDeadline = (
+    db.prepare('SELECT deadline FROM teams WHERE id = ?').get(teamId) as
+      | { deadline: string | null }
+      | undefined
+  )?.deadline ?? null;
+
   const risks: DetectedRisk[] = [];
 
   for (const task of openTasks) {
@@ -130,9 +139,10 @@ function detectStalledTasks(
     //   no due date, idle 14+ days     → low
     //   otherwise                      → not a risk
     const idleDays = recent ? daysDiff(new Date(recent.authored_at), today) : Infinity;
+    const dueDate = storedDeadline ?? task.due_date;
     let level: 'high' | 'medium' | 'low';
-    if (task.due_date) {
-      const daysUntilDue = daysDiff(today, new Date(task.due_date));
+    if (dueDate) {
+      const daysUntilDue = daysDiff(today, new Date(dueDate));
       if (daysUntilDue <= 7) level = 'high';
       else if (daysUntilDue <= 14) level = 'medium';
       else continue;
@@ -153,8 +163,8 @@ function detectStalledTasks(
       signal: {
         taskTitle: task.title,
         taskNumber: task.github_issue_number,
-        dueDate: task.due_date,
-        daysUntilDue: task.due_date ? Math.ceil(daysDiff(today, new Date(task.due_date))) : null,
+        dueDate,
+        daysUntilDue: dueDate ? Math.ceil(daysDiff(today, new Date(dueDate))) : null,
         daysSinceLastActivity: recent
           ? Math.floor(daysDiff(new Date(recent.authored_at), today))
           : null,

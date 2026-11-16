@@ -1,5 +1,5 @@
 import type {
-  Contribution, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, TeamListItem, TeamSummary,
+  ClassifyResult, Contribution, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
 } from './types.ts';
 
 export class ApiError extends Error {
@@ -54,6 +54,17 @@ export const api = {
   teams: () =>
     request<TeamListItem[]>('/teams'),
 
+  team: (teamId: number) =>
+    request<Team>(`/teams/${teamId}`),
+
+  /** Set or clear the stored deadline. `null` falls back to milestone dates. */
+  setDeadline: (teamId: number, deadline: string | null) =>
+    request<Team>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ deadline }) }),
+
+  /** Classify anything still unlabeled, then recompute risks. */
+  classify: (teamId: number) =>
+    request<ClassifyResult>(`/teams/${teamId}/classify`, { method: 'POST' }),
+
   createTeam: (input: { name: string; repo_owner: string; repo_name: string }) =>
     request<{ id: number }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
 
@@ -66,7 +77,7 @@ export const api = {
   dismissRisk: (teamId: number, riskId: number) =>
     request<{ ok: true }>(`/teams/${teamId}/risks/${riskId}/dismiss`, { method: 'POST' }),
 
-  respond: (teamId: number, suggestionId: number, status: 'accepted' | 'discuss' | 'dismissed') =>
+  respond: (teamId: number, suggestionId: number, status: Suggestion['status']) =>
     request<{ ok: true }>(`/teams/${teamId}/suggestions/${suggestionId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ status }),
@@ -77,6 +88,8 @@ export const api = {
 
   logWork: (teamId: number, input: {
     member_id: number; title: string; body?: string; kind: ManualKind; link?: string; task_id?: number;
+    /** Calendar day the work happened, `YYYY-MM-DD`. Omit to stamp the current time. */
+    date?: string;
   }) =>
     request<ManualEntry>(`/teams/${teamId}/manual`, { method: 'POST', body: JSON.stringify(input) }),
 

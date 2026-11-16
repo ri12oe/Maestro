@@ -17,6 +17,13 @@ const KINDS: Array<{ value: ManualKind; label: string; color: string }> = [
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map(k => [k.value, k.label])) as Record<ManualKind, string>;
 
+/** Local calendar day for `<input type="date">`. */
+function todayInputValue(now = new Date()): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export default function LogWork() {
   const { teamId, version } = useTeam();
   const members = useApi(() => api.members(teamId), [teamId, version]);
@@ -28,6 +35,7 @@ export default function LogWork() {
   const [taskId, setTaskId] = useState('');
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
+  const [date, setDate] = useState(todayInputValue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -51,6 +59,7 @@ export default function LogWork() {
         title: title.trim(),
         link: link.trim() || undefined,
         task_id: taskId ? Number(taskId) : undefined,
+        date: date || undefined,
       });
       setToast('Logged. It’ll appear on the overview after the next refresh.');
       setTitle(''); setLink(''); setTaskId('');
@@ -103,6 +112,20 @@ export default function LogWork() {
           <div className="field">
             <label htmlFor="link">Link (optional)</label>
             <input id="link" type="url" className="input" value={link} onChange={e => setLink(e.target.value)} placeholder="Figma, Google Doc, notes…" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="when">Date (optional)</label>
+            <input
+              id="when"
+              type="date"
+              className="input"
+              value={date}
+              max={todayInputValue()}
+              aria-describedby="when-hint"
+              onChange={e => setDate(e.target.value)}
+            />
+            <p className="field__help" id="when-hint">Leave this on today, or choose the day the work happened.</p>
           </div>
 
           {error && <p className="logform__error" role="alert">{error}</p>}

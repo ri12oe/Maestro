@@ -17,7 +17,7 @@ A team connects its GitHub repo and task list once. From then on, the Referee ke
 | Feature | What it does | Why it matters |
 | --- | --- | --- |
 | Contribution map | Breaks down each member's work by substance, not line count: features, fixes, tests, docs, design | Shows real effort, including work that counts poorly in raw stats |
-| Risk radar | Compares the plan to actual activity; flags stalled tasks, single points of failure and deadline risk | Catches problems while there is still time |
+| Risk radar | Compares the plan to actual activity; flags stalled tasks, single points of failure and deadline risk. Uses a deadline the team stored when one is set, otherwise GitHub milestone due dates | Catches problems while there is still time |
 | Rebalance suggestions | Proposes concrete task swaps based on the skills each member has shown in their work | Turns "this isn't fair" into a specific, actionable fix |
 | Weekly digest (stretch) | Plain-language team summary, plus a neutral check-in message the team can send | Lowers the social cost of raising problems |
 | End-of-project report (stretch) | Evidence-linked contribution summary for peer evaluations (team opt-in) | Replaces memory and bias with a record |
@@ -30,7 +30,7 @@ AI does the judging that raw stats can't: what a change actually was, which task
 
 1. **Classify each contribution.** An LLM reads each commit and PR diff with its message and labels it with structured JSON output: type (feature, fix, test, refactor, docs, formatting, generated/boilerplate), estimated substance (low, medium or high) and a one-line summary. Cache results by commit SHA.
 2. **Match work to the plan.** Embeddings match each contribution to the GitHub Issue it serves, so the Referee knows how far along each task is, not just who committed.
-3. **Reason about risk.** A reasoning step compares task status, due dates and who has touched which part of the codebase. It returns flagged risks, each with evidence links (e.g. "Auth task: no activity for 6 days, due Friday, only Sam has touched the backend").
+3. **Reason about risk.** A reasoning step compares task status, the deadline, and who has touched which part of the codebase. The deadline is a date the team stored; when the team has not stored one, it is the GitHub milestone due date. It returns flagged risks, each with evidence links (e.g. "Auth task: no activity for 6 days, due Friday, only Sam has touched the backend").
 4. **Suggest a rebalance.** Using the skills each member has shown, the model proposes specific reassignments and drafts a neutral check-in message.
 
 Every AI judgment links back to the commits or tasks behind it, so students can check it and dispute it.

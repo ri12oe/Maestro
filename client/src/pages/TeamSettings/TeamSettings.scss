@@ -24,9 +24,26 @@
     flex-wrap: wrap;
   }
 
-  &__danger .btn--danger {
-    background: $risk-high-bg;
-    border-color: $risk-high;
-    &:hover:not(:disabled) { background: $risk-high; color: $text; }
+  &__deadline {
+    input[type='date'] { color-scheme: light; }
+    // The date field is wide; on a phone the buttons drop to the next line.
+    @include phone { .field__row { flex-wrap: wrap; } }
+  }
+
+  // Light palette only. The card stays on the page surface; the action uses the risk pair.
+  &__danger {
+    background: $surface;
+    border: 1px solid $border;
+
+    .btn--danger {
+      background: $risk-high-bg;
+      color: $risk-high;
+      border: 1px solid $risk-high;
+      &:hover:not(:disabled) {
+        background: $risk-high;
+        border-color: $risk-high;
+        color: $surface;
+      }
+    }
   }
 }

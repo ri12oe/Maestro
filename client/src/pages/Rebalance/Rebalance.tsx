@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api/client.ts';
 import type { RiskLevel, Suggestion } from '../../api/types.ts';
 import { useApi } from '../../hooks/useApi.ts';
@@ -10,12 +10,56 @@ function display(name: string | null, login: string): string {
   return name || login;
 }
 
+// Survives leaving this page, so Undo is still there after checking the new owner.
+const acceptedByTeam = new Map<number, Suggestion[]>();
+
 function PersonChip({ name, open }: { name: string; open: number }) {
   return (
     <span className="person-chip">
       <Initials name={name} />
       <span>{name} · {open} open</span>
     </span>
+  );
+}
+
+function AcceptedSuggestion({ s, teamId, onUndone }: {
+  s: Suggestion; teamId: number; onUndone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const who = display(s.to_name, s.to_login);
+
+  async function undo() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.respond(teamId, s.id, 'pending');
+      onUndone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="suggestion suggestion--accepted" role="status">
+      <Check className="suggestion__ok" />
+      <div className="suggestion__accepted-copy">
+        <p>
+          Swap accepted. #{s.task_number} is now {who}&rsquo;s.{' '}
+          <button
+            type="button"
+            className="link"
+            disabled={busy}
+            aria-label={busy ? `Undoing swap of #${s.task_number}` : `Undo swap of #${s.task_number}`}
+            onClick={() => void undo()}
+          >
+            {busy ? 'Undoing…' : 'Undo'}
+          </button>
+        </p>
+        {error && <p className="suggestion__error" role="alert">{error}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -92,9 +136,19 @@ export default function Rebalance() {
   const { teamId, version, refresh } = useTeam();
   const suggestions = useApi(() => api.suggestions(teamId), [teamId, version]);
   const risks = useApi(() => api.risks(teamId), [teamId, version]);
-  const [accepted, setAccepted] = useState<Suggestion[]>([]);
+  const [accepted, setAccepted] = useState<Suggestion[]>(() => acceptedByTeam.get(teamId) ?? []);
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
+
+  useEffect(() => { setAccepted(acceptedByTeam.get(teamId) ?? []); }, [teamId]);
+
+  function remember(update: (prev: Suggestion[]) => Suggestion[]) {
+    setAccepted(prev => {
+      const next = update(prev);
+      acceptedByTeam.set(teamId, next);
+      return next;
+    });
+  }
 
   const pending = suggestions.data ?? [];
   const levelFor = (taskId: number) => risks.data?.find(r => r.task_id === taskId)?.level;
@@ -102,10 +156,16 @@ export default function Rebalance() {
   return (
     <Page title="Rebalance" subtitle="Suggestions are based on recent activity and open tasks. Nothing changes until your team agrees.">
       {accepted.map(s => (
-        <div key={s.id} className="suggestion suggestion--accepted" role="status">
-          <Check className="suggestion__ok" />
-          <p>Swap accepted. #{s.task_number} is now {display(s.to_name, s.to_login)}&rsquo;s.</p>
-        </div>
+        <AcceptedSuggestion
+          key={s.id}
+          s={s}
+          teamId={teamId}
+          onUndone={() => {
+            remember(prev => prev.filter(item => item.id !== s.id));
+            suggestions.reload();
+            refresh();
+          }}
+        />
       ))}
 
       {suggestions.loading && !suggestions.data && <Loading label="Loading suggestions…" />}
@@ -120,7 +180,10 @@ export default function Rebalance() {
           level={levelFor(s.task_id)}
           teamId={teamId}
           onAnswered={(sug, a) => {
-            if (a === 'accepted') { setAccepted(prev => [...prev, sug]); setToast('Swap saved'); }
+            if (a === 'accepted') {
+              remember(prev => (prev.some(item => item.id === sug.id) ? prev : [...prev, sug]));
+              setToast('Swap saved');
+            }
             else setToast('Suggestion dismissed');
             suggestions.reload();
             refresh();

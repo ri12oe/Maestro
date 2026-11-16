@@ -4,28 +4,47 @@ import { api } from '../../api/client.ts';
 import { useApi } from '../../hooks/useApi.ts';
 import { Page, useTeam } from '../../components/Layout.tsx';
 import { Card, ErrorState, Loading, PersonRow } from '../../components/ui.tsx';
-import { projectDeadline } from '../Overview/Overview.tsx';
+import { effectiveDeadline, type DeadlineSource } from '../../deadline.ts';
 import './TeamSettings.scss';
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 
-function deadlineText(iso: string): string {
-  return dateFmt.format(iso.length === 10 ? new Date(`${iso}T12:00:00Z`) : new Date(iso));
+function message(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function sourceHint(source: DeadlineSource | null): string {
+  if (source === 'team') return 'Set by the team.';
+  if (source === 'milestones') return 'From GitHub milestones.';
+  return 'No milestone due date.';
 }
 
 export default function TeamSettings() {
-  const { teamId, summary, version, refresh } = useTeam();
+  const { teamId, summary, version, refresh, reload } = useTeam();
   const members = useApi(() => api.members(teamId), [teamId, version]);
   const tasks = useApi(() => api.tasks(teamId), [teamId, version]);
+  const teamRecord = useApi(() => api.team(teamId), [teamId, version]);
   const [login, setLogin] = useState('');
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null follows the date in effect (stored, or the milestone date). A string is an edit.
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState<'save' | 'clear' | null>(null);
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
+  // Keeps the field in sync after a save before the refetch lands.
+  const [localDeadline, setLocalDeadline] = useState<string | null | undefined>(undefined);
 
   const team = summary?.team;
   const people = (members.data ?? []).filter(m => m.github_login);
-  const deadline = tasks.data ? projectDeadline(tasks.data) : null;
+  const stored = localDeadline !== undefined ? localDeadline : (teamRecord.data?.deadline ?? null);
+  const canResolve = teamRecord.data != null || localDeadline !== undefined;
+  const resolved = canResolve
+    ? effectiveDeadline(stored, (tasks.data ?? []).map(t => t.due_date))
+    : null;
+  const baseline = resolved?.date ? resolved.date.slice(0, 10) : '';
+  const dateValue = draft ?? baseline;
 
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -34,7 +53,7 @@ export default function TeamSettings() {
     setBusy(true);
     setError(null);
     try { await api.addMember(teamId, value); setLogin(''); members.reload(); refresh(); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    catch (err) { setError(message(err)); }
     finally { setBusy(false); }
   }
 
@@ -42,8 +61,34 @@ export default function TeamSettings() {
     setRemoving(id);
     setError(null);
     try { await api.removeMember(teamId, id); members.reload(); refresh(); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    catch (err) { setError(message(err)); }
     finally { setRemoving(null); }
+  }
+
+  async function persist(deadline: string | null, action: 'save' | 'clear') {
+    setSaving(action);
+    setDeadlineError(null);
+    try {
+      const updated = await api.setDeadline(teamId, deadline);
+      setLocalDeadline(updated.deadline);
+      setDraft(null);
+      try {
+        await api.classify(teamId);
+        reload();
+      } catch (err) {
+        setDeadlineError(message(err));
+      }
+    } catch (err) {
+      setDeadlineError(message(err));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function save(e: FormEvent) {
+    e.preventDefault();
+    if (!dateValue || dateValue === baseline || saving) return;
+    void persist(dateValue, 'save');
   }
 
   return (
@@ -83,11 +128,41 @@ export default function TeamSettings() {
         </Card>
 
         <Card title="Deadline">
-          <div className="field">
-            <label htmlFor="deadline" className="visually-hidden">Deadline</label>
-            <input id="deadline" className="input" readOnly value={deadline ? deadlineText(deadline) : 'No milestone due date'} />
-            <p className="field__help">Taken from the GitHub milestone.</p>
-          </div>
+          {teamRecord.loading && !teamRecord.data && localDeadline === undefined && <Loading />}
+          {teamRecord.error && !teamRecord.data && localDeadline === undefined && (
+            <ErrorState message={teamRecord.error} onRetry={teamRecord.reload} />
+          )}
+          {canResolve && (
+            <form className="field settings__deadline" onSubmit={save} noValidate>
+              <div className="field__row">
+                <label htmlFor="deadline" className="visually-hidden">Deadline</label>
+                <input
+                  id="deadline"
+                  className="input"
+                  type="date"
+                  value={dateValue}
+                  aria-describedby="deadline-hint"
+                  onChange={e => setDraft(e.target.value || null)}
+                />
+                <button type="submit" className="btn btn--secondary" disabled={!!saving || !dateValue || dateValue === baseline}>
+                  {saving === 'save' ? 'Saving…' : 'Save'}
+                </button>
+                {stored && (
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={!!saving}
+                    aria-label="Clear the date and use the milestone date"
+                    onClick={() => void persist(null, 'clear')}
+                  >
+                    {saving === 'clear' ? 'Clearing…' : 'Clear'}
+                  </button>
+                )}
+              </div>
+              <p className="field__help" id="deadline-hint">{sourceHint(resolved?.source ?? null)}</p>
+              {deadlineError && <p className="settings__error" role="alert">{deadlineError}</p>}
+            </form>
+          )}
         </Card>
 
         <DangerZone teamId={teamId} teamName={team?.name ?? ''} />

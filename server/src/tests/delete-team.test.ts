@@ -1,6 +1,7 @@
 /**
  * delete-team.test.ts — DELETE /api/teams/:teamId
  *  - removes the team and every row that belongs to it
+ *  - cascades the deadline column, suggestions, and dated manual contributions
  *  - leaves other teams and their rows untouched
  *  - 404s for an unknown id, and treats a non-numeric id like GET
  */
@@ -27,10 +28,11 @@ function count(sql: string, ...params: unknown[]): number {
   return (db.prepare(sql).get(...params) as { n: number }).n;
 }
 
-function seedTeam(name: string) {
+function seedTeam(name: string, deadline: string, manualDay: string) {
   const teamId = db.prepare(
-    'INSERT INTO teams (name, repo_owner, repo_name) VALUES (?, ?, ?)',
-  ).run(name, 'acme', name.toLowerCase()).lastInsertRowid as number;
+    'INSERT INTO teams (name, repo_owner, repo_name, deadline) VALUES (?, ?, ?, ?)',
+  ).run(name, 'acme', name.toLowerCase(), deadline).lastInsertRowid as number;
+  const manualAt = `${manualDay}T12:00:00Z`;
 
   const memberA = db.prepare(
     'INSERT INTO members (team_id, github_login, email, display_name) VALUES (?, ?, ?, ?)',
@@ -50,8 +52,8 @@ function seedTeam(name: string) {
 
   const manualId = db.prepare(
     `INSERT INTO contributions (team_id, member_id, source, title, body, kind, authored_at)
-     VALUES (?, ?, 'manual', ?, ?, 'meeting', '2026-01-02T00:00:00Z')`,
-  ).run(teamId, memberB, `${name} log`, 'notes').lastInsertRowid as number;
+     VALUES (?, ?, 'manual', ?, ?, 'meeting', ?)`,
+  ).run(teamId, memberB, `${name} log`, 'notes', manualAt).lastInsertRowid as number;
 
   db.prepare(
     `INSERT INTO classifications (contribution_id, work_type, substance, summary)
@@ -76,11 +78,11 @@ function seedTeam(name: string) {
      VALUES (?, ?, ?, ?, ?, 'pending')`,
   ).run(teamId, memberA, memberB, taskId, `${name} suggestion`);
 
-  return { teamId, commitId, manualId };
+  return { teamId, commitId, manualId, deadline, manualAt };
 }
 
-const drop = seedTeam('Drop');
-const keep = seedTeam('Keep');
+const drop = seedTeam('Drop', '2026-11-20', '2026-10-02');
+const keep = seedTeam('Keep', '2026-12-09', '2026-09-15');
 
 afterAll(() => {
   db.close();
@@ -93,17 +95,24 @@ describe('DELETE /api/teams/:teamId', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
 
-    expect(db.prepare('SELECT id FROM teams WHERE id = ?').get(drop.teamId)).toBeUndefined();
+    expect(db.prepare('SELECT id, deadline FROM teams WHERE id = ?').get(drop.teamId)).toBeUndefined();
     expect(count('SELECT COUNT(*) AS n FROM members WHERE team_id = ?', drop.teamId)).toBe(0);
     expect(count('SELECT COUNT(*) AS n FROM tasks WHERE team_id = ?', drop.teamId)).toBe(0);
     expect(count('SELECT COUNT(*) AS n FROM contributions WHERE team_id = ?', drop.teamId)).toBe(0);
     expect(count("SELECT COUNT(*) AS n FROM contributions WHERE team_id = ? AND source = 'manual'", drop.teamId)).toBe(0);
+    expect(db.prepare('SELECT id FROM contributions WHERE authored_at = ?').get(drop.manualAt)).toBeUndefined();
     expect(count('SELECT COUNT(*) AS n FROM risks WHERE team_id = ?', drop.teamId)).toBe(0);
     expect(count('SELECT COUNT(*) AS n FROM suggestions WHERE team_id = ?', drop.teamId)).toBe(0);
     expect(count('SELECT COUNT(*) AS n FROM classifications WHERE contribution_id IN (?, ?)', drop.commitId, drop.manualId)).toBe(0);
     expect(count('SELECT COUNT(*) AS n FROM task_matches WHERE contribution_id = ?', drop.commitId)).toBe(0);
 
-    expect(db.prepare('SELECT name FROM teams WHERE id = ?').get(keep.teamId)).toEqual({ name: 'Keep' });
+    expect(db.prepare('SELECT name, deadline FROM teams WHERE id = ?').get(keep.teamId)).toEqual({
+      name: 'Keep',
+      deadline: keep.deadline,
+    });
+    expect(db.prepare('SELECT authored_at FROM contributions WHERE id = ?').get(keep.manualId)).toEqual({
+      authored_at: keep.manualAt,
+    });
     expect(count('SELECT COUNT(*) AS n FROM members WHERE team_id = ?', keep.teamId)).toBe(2);
     expect(count('SELECT COUNT(*) AS n FROM tasks WHERE team_id = ?', keep.teamId)).toBe(1);
     expect(count('SELECT COUNT(*) AS n FROM contributions WHERE team_id = ?', keep.teamId)).toBe(2);

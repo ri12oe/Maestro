@@ -894,3 +894,81 @@ The status lines in `docs/PLAN.md` follow the code on main, including the delete
 | 3 Product / Dashboard | `[x] done`. The brief colours and fonts are the Sass tokens (session 29). |
 | 4 Demo-ready | `[ ] in progress`. The seed check, `railway.json`, the volume steps, production static serving, the README, the secrets audit, and a manual deploy of `d15947c` are in place. The README demo link is still a placeholder, and that deploy is from before the light palette. |
 | 5 Submit | `[ ] pending` |
+
+## 2026-11-16 — Session 33: Client redesign around Today, Plan, People and Report (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+PR #21, merge `9b4cf4a`. The five dashboard pages are replaced by the Score shell. Routes are `/t/:teamId/...`. Old `/teams/:id/...` links redirect.
+
+Today is Maestro's brief plus one "Needs the team" queue: each risk and its suggested swap share a card (Accept swap, Copy check-in, Not a problem, Undo). Plan is the task list with a deadline strip, filters including Mine, and a task panel. People is the shared-scale work bars and a person panel with in-place disputes. Report is weekly team activity and a per-person record, printable to PDF, and it stays off until the team turns it on. Maestro lists labels, disputes, and changes still waiting for a label. Start is one screen: paste `owner/repo` or a GitHub URL, sync, and the team is filled in from commit authors and the deadline from milestones. Settings keeps members, the deadline, the report switch, theme, and deleting the team.
+
+The shell adds a sidebar, an icon rail, and a mobile tab bar, a command palette (`⌘K` / `Ctrl K`), a Log work sheet (`L`), keyboard navigation (`G` then a letter), and toasts. Each device can pick "I'm <name>" once. Tokens are a warm graphite dark default, plus light and system themes. Amber is reserved for Maestro. daisyUI is gone; styles are CSS variables and Tailwind CSS v4, with lucide-react icons.
+
+`teams.report_enabled` is the team-wide opt-in for that report. migration_006 (`migration_006_teams_report_enabled`) adds the column. Existing rows and new teams start at 0. `PATCH /api/teams/:teamId` accepts `{ report_enabled: true | false }` alongside `{ deadline }`. Either key, or both, may be sent. A report-only patch leaves the deadline alone. A non-boolean `report_enabled`, or a body with neither key, returns 400.
+
+| File | Change |
+|---|---|
+| `client/src/pages/Today.tsx`, `Plan.tsx`, `People.tsx`, `Report.tsx`, `MaestroPage.tsx`, `Settings.tsx`, `Start.tsx` | New screens. Overview, Member evidence, Risk radar, Rebalance, Log work, Setup, and Team settings are removed. |
+| `client/src/app/CommandPalette.tsx`, `LogWorkSheet.tsx`, `Shell.tsx` | Command palette, global log-work sheet, and the new shell. |
+| `client/src/styles/theme.css` | Score tokens. |
+| `server/src/db/schema.sql`, `server/src/db/migrate.ts` | `teams.report_enabled`, migration_006, default 0. |
+| `server/src/routes/teams.ts` | PATCH accepts `report_enabled` with `deadline`. |
+| `server/src/tests/team-report.test.ts` | On, off, both keys, 400s, and migration_006 on a database that lacks the column. |
+
+The Danger zone, Undo, the stored deadline, and the log-work date stay. The PR records `npm run build` passing and server tests 150/150. No secrets.
+
+## 2026-11-17 — Session 34: Ask Maestro, the deadline check, and the week in review (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+PR #22, merge `e23e484`. Three AI features on the redesign. The server computes the facts and the verdict. The model only writes sentences about them. No schema change.
+
+| Route | What it is |
+|---|---|
+| `POST /api/teams/:teamId/ask` | Ask Maestro. Body `{ question }`. Answered from the team's commits, Issues, and logged work, with linked sources. An empty question, or one over 300 characters, returns 400. An unknown team returns 404. More than 20 asks in a minute returns 429. |
+| `GET /api/teams/:teamId/digest` | Week in review. Default `days=7` (clamped to 1–30): moved, shipped, stuck, and next. |
+| `GET /api/teams/:teamId/plan-check` | Deadline check. Open tasks against days left and the recent pace of closing tasks. Verdict is on track, tight, behind, too early, done, or no deadline. The model adds up to three task-specific next steps. |
+
+When `AI_PROVIDER` is not `grok`, all three return deterministic template text from those facts (`mockAnswer`, `mockPlan`, `mockDigest`). The plan check and the digest also fall back to that template if the provider call fails, and they are cached until the team's data changes. Ranking and comparison questions are refused before any model call. Cited ids are checked against real tasks and contributions. Commit text goes to the model inside `<data>` as untrusted input.
+
+| File | Change |
+|---|---|
+| `server/src/ai/assistant.ts` | Ask, plan check, and digest, including the mock fallback. |
+| `server/src/routes/assistant.ts` | The three routes, mounted at `/api/teams/:teamId`. |
+| `server/src/tests/assistant.test.ts` | 24 cases, including a stubbed Grok response. |
+| `client/src/app/AskSheet.tsx`, `AiCards.tsx`, `Sources.tsx`, `CommandPalette.tsx`, `client/src/pages/Today.tsx` | Ask sheet, AI cards on Today, the sources list, and an Ask entry in the command palette. |
+
+The PR records `npm run build` passing and server tests 174/174. No secrets.
+
+## 2026-11-17 — Session 35: StudyBuddy demo on the redesigned pages (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+PR #23, merge `efdd5c9`. Docs only (`docs/PLAN.md`). The seed was run again on the new UI with `AI_PROVIDER=mock` (`npm run seed --workspace=server`), which runs the classifier and the risk reasoner, and the app was walked in a browser. Nothing in the app was broken.
+
+| Check | Result |
+|---|---|
+| Members | 4 (Rio, Sam, Priya, Jordan) |
+| Contributions | 31 |
+| Stalled task | #12 Auth flow: no matched activity for 7 days, due in 7 days. High risk on Today. Plan lists it under At risk. |
+| Overloaded member | Sam holds 2 open tasks. Jordan has 0. Today suggests moving #14 Backend API endpoints from Sam to Jordan. |
+| Accept, then Undo | The suggestion returns to pending and #14 returns to Sam. |
+| Settings deadline | Saving a date stores it. Use milestone dates clears it. |
+| Danger zone | Stays disabled until the team name is typed. Cancel leaves the team in place. |
+| Dated log work | An entry dated yesterday shows under Priya as Yesterday. |
+| People | Lists the 4 members. |
+
+`npm run build` and the server tests (174) passed.
+
+Milestone 4 todo 1 is marked done with that check. The Milestone 5 demo path now follows the current pages: open the team on Start, Today (the brief, who is carrying the work, and what is due), People (one member's evidence), the high-priority stalled task on Today and on Plan, then the rebalance suggestion on Today (Accept swap, then Undo).
+
+## 2026-11-17 — Session 36: Production deploys of PRs #21 and #22 (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Only `9b4cf4a` (PR #21) and `e23e484` (PR #22) were deployed to production, with manual `railway up` from the repo root. PR #23 (`efdd5c9`) is docs only and was not deployed. Auto-deploy is still not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is that manual deploy.
+
+Smoke tests passed.
+
+The live site is https://maestro-production-70bb78b5.up.railway.app. It is behind a site password (HTTP basic auth via `SITE_USER` / `SITE_PASSWORD`). Judges get the credentials separately.

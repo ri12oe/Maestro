@@ -199,6 +199,12 @@ Rebalance task-swap proposals. Swap logic is AI-generated based on skill signals
 
 All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: string }`.
 
+### Health
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Liveness probe. Runs `SELECT 1`. `200` `{ "ok": true }` when the query succeeds. `503` `{ "ok": false, "error": "Database check failed" }` when it throws. The body does not include the database path, environment values, or secrets. This path is reachable with no site password. |
+
 ### Teams
 
 | Method | Path | Description |

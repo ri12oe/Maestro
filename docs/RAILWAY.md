@@ -8,7 +8,7 @@ The server listens on `PORT`, opens the SQLite file at `DB_PATH`, and runs migra
 
 Create a project and add a service from the GitHub repo `ri12oe/Maestro`.
 
-`.railway/railway.ts` is the output of `railway config migrate --show --variables=unmanaged` on the linked production project, plus `deploy.restartPolicyType`. The service is `Maestro`. The project is `lucid-courtesy`. The file exports `partial = "Maestro"`. Migrate also wrote the GitHub source, `buildEnvironment: "V3"`, one replica in `sfo`, and the private network endpoint `maestro`. `variables.managed` is `false`, so the file does not write service variables. It does not declare the volume or a healthcheck.
+`.railway/railway.ts` is the output of `railway config migrate --show --variables=unmanaged` on the linked production project, plus `deploy.restartPolicyType` and `healthcheck`. The service is `Maestro`. The project is `lucid-courtesy`. The file exports `partial = "Maestro"`. Migrate also wrote the GitHub source, `buildEnvironment: "V3"`, one replica in `sfo`, and the private network endpoint `maestro`. `variables.managed` is `false`, so the file does not write service variables. It does not declare the volume. The Maestro service sets `healthcheck` to `/api/health`.
 
 | Setting | Value | Field in `.railway/railway.ts` |
 |---|---|---|
@@ -16,12 +16,13 @@ Create a project and add a service from the GitHub repo `ri12oe/Maestro`.
 | Build command | `npm run build` | `build.buildCommand` |
 | Start command | `npm start` | `start` |
 | Restart policy | On failure (`ON_FAILURE`) | `deploy.restartPolicyType` |
+| Healthcheck path | `/api/health` | `healthcheck` |
 
-`railway.json` keeps those four settings. Migrate does not copy `restartPolicyType`, so that one field was added to the service after the CLI output. `railway.json` stays in the repo. The migration guide, checked 2026-11-17, says to delete it only after cutover. Cutover is `railway config migrate cutover`. It clears the service's Config File path. It is a separate manual step, and this change does not run it. A deploy with that path still set fails if the file is missing from the commit. With no path stored, the builder still reads a root `railway.json` until the file is gone from the deployed commit, or until 2026-12-01. Railway does not read `.railway/` on deploy. `railway config plan` and `railway config apply` are what send the new file.
+`railway.json` keeps those settings. `deploy.healthcheckPath` is `/api/health`, which is the path a deploy reads today. The Infrastructure as Code field is `healthcheck` on the Maestro service. `healthcheckTimeout` is optional in the schema and in the [Infrastructure as Code reference](https://docs.railway.com/infrastructure-as-code/reference), so it is left unset. Migrate does not copy `restartPolicyType`, so that field was added to the service after the CLI output. `healthcheck` was added the same way. `railway.json` stays in the repo. The migration guide, checked 2026-11-17, says to delete it only after cutover. Cutover is `railway config migrate cutover`. It clears the service's Config File path. It is a separate manual step, and this change does not run it. A deploy with that path still set fails if the file is missing from the commit. With no path stored, the builder still reads a root `railway.json` until the file is gone from the deployed commit, or until 2026-12-01. Railway does not read `.railway/` on deploy. `railway config plan` and `railway config apply` are what send the new file.
 
 `npm run build` builds the client, then the server. `npm start` runs `node dist/index.js` in the server workspace. The root `package.json` asks for Node `22.x`, which Railpack reads from `engines.node`. The `railway` package is a dev dependency so the CLI can evaluate `.railway/railway.ts`. The production build does not import it.
 
-Copy those four settings into the service settings. Railway's docs, checked 2026-11-17, say config-as-code is deprecated: a new service does not read `railway.json`, and services that already use the file stop reading it on 2026-12-01. A file icon on the deployment details page means that deploy did read the file. The settings you type in stay after that date.
+Copy those settings, including the healthcheck path `/api/health`, into the service settings. Railway's docs, checked 2026-11-17, say config-as-code is deprecated: a new service does not read `railway.json`, and services that already use the file stop reading it on 2026-12-01. A file icon on the deployment details page means that deploy did read the file. The settings you type in stay after that date.
 
 Set the start command even if the build command looks optional. The client is a Vite app. Railpack serves a Vite project as a static site unless a start command is set. `npm start` is the Express server, which is what serves the API and the built pages.
 
@@ -66,7 +67,7 @@ Railpack also sets `NODE_ENV=production` on the running container, and it still 
 | `XAI_API_KEY` | Required when `AI_PROVIDER=grok` | Bearer token for `https://api.x.ai`. The server throws if it is missing when a Grok call runs, and it does not log the key. Read in `server/src/ai/provider.ts`. | secret, set in Railway |
 | `GROK_MODEL` | Required when `AI_PROVIDER=grok` | Model name sent to xAI and stored on each classification. Read in `server/src/ai/provider.ts` and `server/src/ai/classifier.ts`. | `grok-4.20-0309-non-reasoning` |
 | `GITHUB_TOKEN` | Optional | Read-only GitHub token used by Sync. The demo seed does not call GitHub. Sync responds 503 when the token is missing. Read in `server/src/ingestion/sync.ts` and `server/src/routes/teams.ts`. | secret, set in Railway |
-| `SITE_PASSWORD` | Optional | When set, every page and API route asks for HTTP Basic auth. Read in `server/src/middleware/sitePassword.ts`. | secret, set in Railway |
+| `SITE_PASSWORD` | Optional | When set, pages and API routes ask for HTTP Basic auth. `GET /api/health` stays open so Railway can probe it. Read in `server/src/middleware/sitePassword.ts`. | secret, set in Railway |
 | `SITE_USER` | Optional | Basic-auth username, used only when `SITE_PASSWORD` is set. Default `maestro`. Read in `server/src/middleware/sitePassword.ts`. | `maestro` |
 
 `mock` is the provider the StudyBuddy demo was checked with. Use `grok` only when both `XAI_API_KEY` and `GROK_MODEL` are set.
@@ -82,6 +83,7 @@ Deploy after the variables are saved.
 ```bash
 BASE=https://your-service.up.railway.app
 
+curl -sS -D - "$BASE/api/health"
 curl -sS -D - -o /dev/null "$BASE/"
 curl -sS -D - -o /dev/null "$BASE/teams/1"
 curl -sS -D - "$BASE/api/teams"
@@ -90,12 +92,13 @@ curl -sS -D - "$BASE/api/does-not-exist"
 
 Expect:
 
+- `GET /api/health` — `200` and `{"ok":true}`. This stays `200` when `SITE_PASSWORD` is set, with no credentials. A database the process cannot query returns `503` and `{"ok":false,"error":"Database check failed"}`.
 - `GET /` — `200`, `content-type` contains `text/html`.
 - `GET /teams/1` — `200`, `content-type` contains `text/html`. This is the Overview route. The HTML is served even before a team exists.
 - `GET /api/teams` — `200` and a JSON array. On an empty database the body is `[]`.
 - `GET /api/does-not-exist` — `404` and `{"error":"Not found"}`.
 
-When `SITE_PASSWORD` is set, add `-u maestro:YOUR_PASSWORD` (or whatever `SITE_USER` is) to each curl. Without it, every check returns `401`.
+When `SITE_PASSWORD` is set, `/api/health` still returns `200` with no credentials. Add `-u maestro:YOUR_PASSWORD` (or whatever `SITE_USER` is) to the other curls. Those return `401` until the credentials are sent.
 
 ### Seed the demo team
 
@@ -128,8 +131,12 @@ This project deploys manually. Railway's GitHub app has no access to `ri12oe/Mae
 
 After a merge, pull `main` locally and run `railway up` from the repo root with the project linked. That uploads the checked-out code and deploys it. Then run the smoke test in section 4.
 
-The dashboard build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` came from `railway config migrate` and also records the Railpack builder and restart policy `ON_FAILURE`. A deploy does not read that file. `railway.json` is still read until cutover or 2026-12-01, whichever comes first. Cutover (`railway config migrate cutover`) is a separate manual step. This change does not run it.
+The dashboard build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` came from `railway config migrate` and also records the Railpack builder, restart policy `ON_FAILURE`, and `healthcheck` `/api/health`. A deploy does not read that file. `railway.json` is still read until cutover or 2026-12-01, whichever comes first, and its `deploy.healthcheckPath` is `/api/health`. Cutover (`railway config migrate cutover`) is a separate manual step. This change does not run it.
 
 ## What stayed out of the Railway config
 
-`.railway/railway.ts` and `railway.json` both set restart policy `ON_FAILURE`. Neither has a healthcheck path, and none was added. Railway calls a healthcheck URL and accepts only a 2xx response. With `SITE_PASSWORD` set, `/` and `/api/teams` both return 401, and there is no route that stays 200 in that case. A healthcheck on either path would fail a password-protected deploy. A volume also means the next deploy has a short gap anyway: Railway will not run two deployments on the same volume.
+`.railway/railway.ts` does not declare the volume, and `railway.json` cannot create one. The volume is attached in the dashboard at `/data`.
+
+Both files set the healthcheck to `/api/health`. Railway calls that URL after start and accepts only a 2xx response. `GET /api/health` runs `SELECT 1` and returns `200` `{"ok":true}`. A thrown query returns `503` `{"ok":false,"error":"Database check failed"}`. That path is the one the site-password middleware allows through with no credentials, so the probe succeeds while `SITE_PASSWORD` is set. `/` and `/api/teams` still return `401` without credentials.
+
+A volume means the next deploy has a short gap: Railway will not run two deployments on the same volume. Railway marks that deploy healthy only after `GET /api/health` returns 2xx.

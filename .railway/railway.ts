@@ -8,6 +8,7 @@ export default defineRailway(() => {
     source: github("ri12oe/Maestro", { upstreamUrl: "https://github.com/ri12oe/Maestro" }),
     build: { buildCommand: "npm run build", buildEnvironment: "V3", builder: "RAILPACK" },
     start: "npm start",
+    healthcheck: "/api/health",
     replicas: { "sfo": 1 },
     deploy: { restartPolicyType: "ON_FAILURE" },
     networking: { privateNetworkEndpoint: "maestro" },

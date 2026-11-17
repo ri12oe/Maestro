@@ -4,7 +4,9 @@ Maestro is the shared view of a student team project. It used to be called Group
 
 A team connects its GitHub repository. Maestro reads commits and Issues, labels each contribution (work type, substance, and a one-line summary), and shows every member the same picture: who did what, which tasks have gone quiet, and a suggested task swap. Off-repo work can be logged. An AI label can be disputed from the member page.
 
-Demo: _coming soon_ (TODO: add Railway URL)
+Demo: https://maestro-production-70bb78b5.up.railway.app
+
+The live demo is behind a site password. That is HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`. Judges get the credentials separately.
 
 ## Screens
 

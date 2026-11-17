@@ -8,7 +8,7 @@ The server listens on `PORT`, opens the SQLite file at `DB_PATH`, and runs migra
 
 Create a project and add a service from the GitHub repo `ri12oe/Maestro`.
 
-`.railway/railway.ts` is the Infrastructure as Code record of the build. `railway.json` keeps the same four settings until cutover:
+`.railway/railway.ts` is the output of `railway config migrate --show --variables=unmanaged` on the linked production project, plus `deploy.restartPolicyType`. The service is `Maestro`. The project is `lucid-courtesy`. The file exports `partial = "Maestro"`. Migrate also wrote the GitHub source, `buildEnvironment: "V3"`, one replica in `sfo`, and the private network endpoint `maestro`. `variables.managed` is `false`, so the file does not write service variables. It does not declare the volume or a healthcheck.
 
 | Setting | Value | Field in `.railway/railway.ts` |
 |---|---|---|
@@ -17,11 +17,9 @@ Create a project and add a service from the GitHub repo `ri12oe/Maestro`.
 | Start command | `npm start` | `start` |
 | Restart policy | On failure (`ON_FAILURE`) | `deploy.restartPolicyType` |
 
-The service in that file is `maestro`, taken from the live host `maestro-production-70bb78b5.up.railway.app`. `npx @railway/cli@latest config migrate` stopped with `No linked project found. Run railway link to connect to a project`, so it did not read the dashboard service name. The file also exports `partial = "maestro"`. Railway's migration guide writes that export when one Config as Code file maps to one service, so a later apply owns that service and leaves the volume alone. The file does not declare the volume, variables, or a healthcheck.
+`railway.json` keeps those four settings. Migrate does not copy `restartPolicyType`, so that one field was added to the service after the CLI output. `railway.json` stays in the repo. The migration guide, checked 2026-11-17, says to delete it only after cutover. Cutover is `railway config migrate cutover`. It clears the service's Config File path. It is a separate manual step, and this change does not run it. A deploy with that path still set fails if the file is missing from the commit. With no path stored, the builder still reads a root `railway.json` until the file is gone from the deployed commit, or until 2026-12-01. Railway does not read `.railway/` on deploy. `railway config plan` and `railway config apply` are what send the new file.
 
-`railway.json` stays in the repo. The migration guide, checked 2026-11-17, says to delete it only after cutover, which clears the service's Config File path. Cutover was not run. A deploy with that path still set fails if the file is missing from the commit. With no path stored, the builder still reads a root `railway.json` until the file is gone from the deployed commit, or until 2026-12-01. Railway does not read `.railway/` on deploy. `railway config plan` and `railway config apply` are what send the new file. Apply it only after `service("maestro")` matches the dashboard service and the plan leaves the volume in place.
-
-`npm run build` builds the client, then the server. `npm start` runs `node dist/index.js` in the server workspace. The root `package.json` asks for Node `22.x`, which Railpack reads from `engines.node`. The `railway` package is installed so the CLI can evaluate `.railway/railway.ts`.
+`npm run build` builds the client, then the server. `npm start` runs `node dist/index.js` in the server workspace. The root `package.json` asks for Node `22.x`, which Railpack reads from `engines.node`. The `railway` package is a dev dependency so the CLI can evaluate `.railway/railway.ts`. The production build does not import it.
 
 Copy those four settings into the service settings. Railway's docs, checked 2026-11-17, say config-as-code is deprecated: a new service does not read `railway.json`, and services that already use the file stop reading it on 2026-12-01. A file icon on the deployment details page means that deploy did read the file. The settings you type in stay after that date.
 
@@ -130,7 +128,7 @@ This project deploys manually. Railway's GitHub app has no access to `ri12oe/Mae
 
 After a merge, pull `main` locally and run `railway up` from the repo root with the project linked. That uploads the checked-out code and deploys it. Then run the smoke test in section 4.
 
-The dashboard build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` records those commands, the Railpack builder, and restart policy `ON_FAILURE`. A deploy does not read that file. `railway.json` is still read until cutover or 2026-12-01, whichever comes first.
+The dashboard build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` came from `railway config migrate` and also records the Railpack builder and restart policy `ON_FAILURE`. A deploy does not read that file. `railway.json` is still read until cutover or 2026-12-01, whichever comes first. Cutover (`railway config migrate cutover`) is a separate manual step. This change does not run it.
 
 ## What stayed out of the Railway config
 

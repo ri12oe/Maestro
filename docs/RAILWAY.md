@@ -8,18 +8,22 @@ The server listens on `PORT`, opens the SQLite file at `DB_PATH`, and runs migra
 
 Create a project and add a service from the GitHub repo `ri12oe/Maestro`.
 
-`railway.json` in the repo root is the record of the build:
+`.railway/railway.ts` is the Infrastructure as Code record of the build. `railway.json` keeps the same four settings until cutover:
 
-| Setting | Value |
-|---|---|
-| Builder | Railpack (`RAILPACK`) |
-| Build command | `npm run build` |
-| Start command | `npm start` |
-| Restart policy | On failure (`ON_FAILURE`) |
+| Setting | Value | Field in `.railway/railway.ts` |
+|---|---|---|
+| Builder | Railpack (`RAILPACK`) | `build.builder` |
+| Build command | `npm run build` | `build.buildCommand` |
+| Start command | `npm start` | `start` |
+| Restart policy | On failure (`ON_FAILURE`) | `deploy.restartPolicyType` |
 
-`npm run build` builds the client, then the server. `npm start` runs `node dist/index.js` in the server workspace. The root `package.json` asks for Node `22.x`, which Railpack reads from `engines.node`.
+The service in that file is `maestro`, taken from the live host `maestro-production-70bb78b5.up.railway.app`. `npx @railway/cli@latest config migrate` stopped with `No linked project found. Run railway link to connect to a project`, so it did not read the dashboard service name. The file also exports `partial = "maestro"`. Railway's migration guide writes that export when one Config as Code file maps to one service, so a later apply owns that service and leaves the volume alone. The file does not declare the volume, variables, or a healthcheck.
 
-Copy those four settings into the service settings. Railway's docs, checked 2026-11-14, say config-as-code is deprecated: a new service does not read `railway.json`, and services that already use the file stop reading it on 2026-12-01. A file icon on the deployment details page means that deploy did read the file. The settings you type in stay after that date.
+`railway.json` stays in the repo. The migration guide, checked 2026-11-17, says to delete it only after cutover, which clears the service's Config File path. Cutover was not run. A deploy with that path still set fails if the file is missing from the commit. With no path stored, the builder still reads a root `railway.json` until the file is gone from the deployed commit, or until 2026-12-01. Railway does not read `.railway/` on deploy. `railway config plan` and `railway config apply` are what send the new file. Apply it only after `service("maestro")` matches the dashboard service and the plan leaves the volume in place.
+
+`npm run build` builds the client, then the server. `npm start` runs `node dist/index.js` in the server workspace. The root `package.json` asks for Node `22.x`, which Railpack reads from `engines.node`. The `railway` package is installed so the CLI can evaluate `.railway/railway.ts`.
+
+Copy those four settings into the service settings. Railway's docs, checked 2026-11-17, say config-as-code is deprecated: a new service does not read `railway.json`, and services that already use the file stop reading it on 2026-12-01. A file icon on the deployment details page means that deploy did read the file. The settings you type in stay after that date.
 
 Set the start command even if the build command looks optional. The client is a Vite app. Railpack serves a Vite project as a static site unless a start command is set. `npm start` is the Express server, which is what serves the API and the built pages.
 
@@ -31,7 +35,7 @@ Generate a public domain from the service's Networking settings. The hostname lo
 
 The database is one SQLite file. Railway replaces the container disk on every deploy, so a file written on that disk is gone after the next deploy. A volume is the disk that stays.
 
-Add a volume and attach it to this service. The dashboard is where volumes are created: the command palette, or right-click the project canvas. Railway's config schema has no field that creates a volume. `deploy.requiredMountPath` only checks that a mount is already there.
+Add a volume and attach it to this service. The dashboard is where volumes are created: the command palette, or right-click the project canvas. `.railway/railway.ts` does not declare the volume, and `railway.json` cannot create one. `deploy.requiredMountPath` only checks that a mount is already there.
 
 Mount the volume at `/data`.
 
@@ -126,8 +130,8 @@ This project deploys manually. Railway's GitHub app has no access to `ri12oe/Mae
 
 After a merge, pull `main` locally and run `railway up` from the repo root with the project linked. That uploads the checked-out code and deploys it. Then run the smoke test in section 4.
 
-The dashboard build command is now `npm run build` and the start command is `npm start`, so the deploy no longer depends on `railway.json` being read. Services that already use that file stop reading it on 2026-12-01.
+The dashboard build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` records those commands, the Railpack builder, and restart policy `ON_FAILURE`. A deploy does not read that file. `railway.json` is still read until cutover or 2026-12-01, whichever comes first.
 
-## What stayed out of railway.json
+## What stayed out of the Railway config
 
-`railway.json` already has the restart policy `ON_FAILURE`. It has no healthcheck path, and none was added. Railway calls a healthcheck URL and accepts only a 2xx response. With `SITE_PASSWORD` set, `/` and `/api/teams` both return 401, and there is no route that stays 200 in that case. A healthcheck on either path would fail a password-protected deploy. A volume also means the next deploy has a short gap anyway: Railway will not run two deployments on the same volume.
+`.railway/railway.ts` and `railway.json` both set restart policy `ON_FAILURE`. Neither has a healthcheck path, and none was added. Railway calls a healthcheck URL and accepts only a 2xx response. With `SITE_PASSWORD` set, `/` and `/api/teams` both return 401, and there is no route that stays 200 in that case. A healthcheck on either path would fail a password-protected deploy. A volume also means the next deploy has a short gap anyway: Railway will not run two deployments on the same volume.

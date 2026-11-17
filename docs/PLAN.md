@@ -382,7 +382,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 - All acceptance criteria from Milestones 1–3 still pass against the deployed instance.
 
 **Todo:**
-1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end.
+1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end. — done (`AI_PROVIDER=mock` seed of StudyBuddy: 4 members, 31 contributions, #12 Auth flow stalled with a high risk, Sam overloaded with 2 open tasks while Jordan has 0. On Today the high risk and the pending swap of #14 from Sam to Jordan are visible; Accept swap then Undo returns the suggestion to pending and #14 to Sam. Plan lists #12 under At risk. People lists the 4 members. Settings deadline saves and clears; Danger zone requires the team name and Cancel leaves the team. A log-work entry dated yesterday shows as Yesterday.)
 2. Configure Vite build output and Express static serving for production.
 3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done (`railway.json` has the build, start, and restart settings. The dashboard build command is `npm run build` and the start command is `npm start`. `docs/RAILWAY.md` is the dashboard steps for the volume, variables, and a manual redeploy.)
 4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (manual deploy of `main` `d15947c`, PR #18. Auto-deploy is not connected.)
@@ -401,7 +401,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 **Intent:** Package the project for judges. Produce all required submission artifacts.
 
 **Acceptance Criteria:**
-- A 3-minute screen-capture demo video is recorded showing: team connect flow → overview → member evidence → risk radar → rebalance suggestion.
+- A 3-minute screen-capture demo video is recorded showing the same story through the current pages: open the team on Start → Today (the brief, who is carrying the work, and what is due) → People (one member's evidence) → the high-priority stalled task on Today and on Plan → the rebalance suggestion on Today (Accept swap, then Undo).
 - Slide deck (≤10 slides) covers: problem, solution, AI approach, architecture diagram, demo screenshot, fairness rules.
 - Project page (hackathon submission form) is filled with title, description, public repo URL, demo URL, and video link.
 - `BOB_LOG.md` has an entry for every Bob session throughout the project.

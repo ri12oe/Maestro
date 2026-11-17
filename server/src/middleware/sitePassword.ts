@@ -4,10 +4,13 @@ import { timingSafeEqual } from 'crypto';
 /**
  * Optional password gate for a hosted deploy.
  *
- * When SITE_PASSWORD is set, every request (pages and API) needs HTTP Basic
- * auth. The browser shows its own sign-in prompt. The username is SITE_USER
- * (default "maestro"). When SITE_PASSWORD is unset, the gate does nothing,
- * so local development is unchanged.
+ * When SITE_PASSWORD is set, pages and API routes need HTTP Basic auth.
+ * The browser shows its own sign-in prompt. The username is SITE_USER
+ * (default "maestro"). The one exception is the path `/api/health`: Railway
+ * probes it with no credentials. The middleware is mounted on the app, so
+ * `req.path` is the full path and the comparison is exact. When
+ * SITE_PASSWORD is unset, the gate does nothing, so local development is
+ * unchanged.
  */
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -27,6 +30,8 @@ export function sitePassword(
   if (!password) return (_req, _res, next) => next();
 
   return (req, res, next) => {
+    if (req.path === '/api/health') return next();
+
     const header = req.headers.authorization ?? '';
     if (header.startsWith('Basic ')) {
       const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');

@@ -34,4 +34,19 @@ describe('site password gate', () => {
     expect((await request(appWith('s3cret')).get('/api/ping').set('Authorization', basic('maestro', 's3cret'))).status).toBe(200);
     expect((await request(appWith('pw:with:colons', 'judge')).get('/api/ping').set('Authorization', basic('judge', 'pw:with:colons'))).status).toBe(200);
   });
+
+  it('lets exactly /api/health through with no credentials', async () => {
+    const app = express();
+    app.use(sitePassword('s3cret'));
+    app.get('/api/health', (_req, res) => res.json({ ok: true }));
+    app.get('/api/teams', (_req, res) => res.json([]));
+    app.get('/api/healthz', (_req, res) => res.json({ ok: true }));
+    app.get('/api/health/extra', (_req, res) => res.json({ ok: true }));
+
+    expect((await request(app).get('/api/health')).status).toBe(200);
+    expect((await request(app).get('/api/health').set('Authorization', basic('maestro', 'nope'))).status).toBe(200);
+    expect((await request(app).get('/api/teams')).status).toBe(401);
+    expect((await request(app).get('/api/healthz')).status).toBe(401);
+    expect((await request(app).get('/api/health/extra')).status).toBe(401);
+  });
 });

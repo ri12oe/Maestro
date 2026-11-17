@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import healthRouter from './routes/health.js';
 import teamsRouter from './routes/teams.js';
 import membersRouter from './routes/members.js';
 import contributionsRouter from './routes/contributions.js';
@@ -28,6 +29,7 @@ app.use(cors());
 app.use(express.json());
 
 // API routes
+app.use('/api/health', healthRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/teams/:teamId/members', membersRouter);
 app.use('/api/teams/:teamId/contributions', contributionsRouter);

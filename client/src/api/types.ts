@@ -157,3 +157,36 @@ export interface ClassifyResult {
   classified: number;
   failed: number;
 }
+
+/* ── AI assistant ─────────────────────────────────────────────────────── */
+
+export type SourceRef = { type: 'task' | 'contribution'; id: number };
+
+export interface AskResult {
+  answer: string;
+  sources: SourceRef[];
+  /** True when Maestro declined because the question asked to rank or compare people. */
+  refused: boolean;
+}
+
+export type PlanVerdict = 'on_track' | 'tight' | 'behind' | 'no_deadline' | 'done' | 'too_early';
+
+export interface PlanCheck {
+  verdict: PlanVerdict;
+  daysLeft: number | null;
+  openTasks: number;
+  closedLast21Days: number;
+  pacePerWeek: number;
+  neededPerWeek: number | null;
+  summary: string;
+  recommendations: Array<{ text: string; taskIds: number[] }>;
+  generatedAt: string;
+}
+
+export interface Digest {
+  days: number;
+  stats: { contributions: number; logged: number; tasksTouched: number; tasksClosed: number; people: number };
+  headline: string;
+  points: Array<{ kind: 'moved' | 'shipped' | 'stuck' | 'next'; text: string; sources: SourceRef[] }>;
+  generatedAt: string;
+}

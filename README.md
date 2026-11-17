@@ -19,6 +19,14 @@ Demo: _coming soon_ (TODO: add Railway URL)
 
 Old `/teams/:id/...` links redirect to the new routes.
 
+### Maestro AI
+
+- **Ask Maestro.** Ask in plain words from the sidebar, the Today page or ⌘K ("What's blocking #12?", "What has Priya worked on?"). Answers use only the team's commits, Issues and logged work, and every answer links to its sources.
+- **Deadline check.** On Today. The verdict (on track, tight, behind) is arithmetic: open tasks against days left and the recent pace of closing tasks. Maestro then writes up to three next steps about specific tasks.
+- **Week in review.** On Today. What moved, what shipped, what's stuck and what's next, with a button to copy it for the group chat.
+
+The same guardrails apply to all three. Maestro never ranks, grades or compares people, and it never guesses why someone was quiet. Questions like "who's the laziest?" are refused before any model call. Sources the model cites are checked against real data, and commit messages are passed to the model as data, not instructions. The deadline check and week in review are cached until the team's data changes. With `AI_PROVIDER=mock` they return template text built from the same facts.
+
 ### Keyboard
 
 `⌘K` / `Ctrl K` search and commands · `L` log work · `S` sync · `G` then `T` `P` `E` `R` `M` `S` to go to Today, Plan, People, Report, Maestro or Settings · `/` search tasks on Plan · `[` `]` previous and next task · `⌘\` collapse the sidebar.

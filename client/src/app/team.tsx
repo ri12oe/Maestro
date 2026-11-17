@@ -22,6 +22,8 @@ export interface TeamContextValue {
   setMe: (id: number | null) => void;
   openLog: (memberId?: number) => void;
   openIdentity: () => void;
+  /** Open Ask Maestro, optionally asking a question straight away. */
+  openAsk: (question?: string) => void;
 }
 
 export const TeamContext = createContext<TeamContextValue | null>(null);

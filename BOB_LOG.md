@@ -963,11 +963,11 @@ PR #23, merge `efdd5c9`. Docs only (`docs/PLAN.md`). The seed was run again on t
 
 Milestone 4 todo 1 is marked done with that check. The Milestone 5 demo path now follows the current pages: open the team on Start, Today (the brief, who is carrying the work, and what is due), People (one member's evidence), the high-priority stalled task on Today and on Plan, then the rebalance suggestion on Today (Accept swap, then Undo).
 
-## 2026-11-17 — Session 36: Production deploys of PRs #21, #22, and #23 (written with Grok bots, not IBM Bob)
+## 2026-11-17 — Session 36: Production deploys of PRs #21 and #22 (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
-Those three merges were deployed to the production Railway service with manual `railway up` from the repo root: `9b4cf4a` (PR #21), `e23e484` (PR #22), and `efdd5c9` (PR #23). Auto-deploy is still not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is that manual deploy.
+Only `9b4cf4a` (PR #21) and `e23e484` (PR #22) were deployed to production, with manual `railway up` from the repo root. PR #23 (`efdd5c9`) is docs only and was not deployed. Auto-deploy is still not connected. Railway's GitHub app has no access to `ri12oe/Maestro`, so a push to `main` does not deploy. `docs/RAILWAY.md` section 5 is that manual deploy.
 
 Smoke tests passed.
 

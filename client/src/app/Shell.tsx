@@ -12,6 +12,7 @@ import { TeamContext, useTeam, daysUntil, firstName, sortedMembers, teamDeadline
 import { buildDecisions } from './decisions.ts';
 import LogWorkSheet from './LogWorkSheet.tsx';
 import CommandPalette from './CommandPalette.tsx';
+import AskSheet, { type AskTurn } from './AskSheet.tsx';
 
 const AUTO_SYNC_AFTER_MS = 30 * 60_000;
 
@@ -36,6 +37,8 @@ export default function Shell() {
   const [identityOpen, setIdentityOpen] = useState(false);
   const [logMember, setLogMember] = useState<number | undefined>();
   const [collapsed, setCollapsed] = useState(false);
+  const [ask, setAsk] = useState<{ open: boolean; initial?: string }>({ open: false });
+  const [turns, setTurns] = useState<AskTurn[]>([]);
 
   const team = useApi(() => api.team(teamId), [teamId, version]);
   const summary = useApi(() => api.summary(teamId), [teamId, version]);
@@ -53,6 +56,8 @@ export default function Shell() {
   }, [teamId]);
 
   // Sync on open when the last sync is old, so nobody has to press a button.
+  useEffect(() => { setTurns([]); }, [teamId]);
+
   const autoSynced = useRef<number | null>(null);
   useEffect(() => {
     const t = team.data;
@@ -74,6 +79,7 @@ export default function Shell() {
   }, [setParams]);
   const closeLog = useCallback(() => setParams(p => { const n = new URLSearchParams(p); n.delete('log'); return n; }, { replace: true }), [setParams]);
   const openIdentity = useCallback(() => setIdentityOpen(true), []);
+  const openAsk = useCallback((question?: string) => setAsk({ open: true, initial: question }), []);
 
   // Global shortcuts: ⌘K, L, S, G then a letter, ⌘\.
   useEffect(() => {
@@ -102,7 +108,7 @@ export default function Shell() {
 
   const ctx: TeamContextValue = {
     teamId, base, team: team.data, summary: summary.data, tasks: tasks.data, risks: risks.data, suggestions: suggestions.data,
-    loading, error, version, reload, syncing, syncError, syncNow, me, setMe, openLog, openIdentity,
+    loading, error, version, reload, syncing, syncError, syncNow, me, setMe, openLog, openIdentity, openAsk,
   };
 
   const decisions = buildDecisions(risks.data, suggestions.data);
@@ -135,6 +141,7 @@ export default function Shell() {
       </div>
       <LogWorkSheet open={logOpen} onClose={closeLog} initialMember={logMember} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} theme={theme} setTheme={setTheme} />
+      <AskSheet open={ask.open} initial={ask.initial} onClose={() => setAsk({ open: false })} turns={turns} setTurns={setTurns} />
       <IdentityDialog open={identityOpen} onClose={() => { markAsked(teamId); setIdentityOpen(false); }} />
     </TeamContext.Provider>
   );
@@ -158,7 +165,7 @@ const NAV = [
 function Sidebar({ collapsed, decisions, anyHigh, theme, setTheme, openPalette }: {
   collapsed: boolean; decisions: number; anyHigh: boolean; theme: ThemePref; setTheme: (t: ThemePref) => void; openPalette: () => void;
 }) {
-  const { base, team, summary, tasks, me, openLog, syncing, syncNow } = useTeam();
+  const { base, team, summary, tasks, me, openLog, openAsk, syncing, syncNow } = useTeam();
   const wide = collapsed ? 'hidden' : 'hidden lg:inline';
   const width = collapsed ? 'md:w-14' : 'md:w-14 lg:w-[232px]';
   const deadline = teamDeadline(team, tasks);
@@ -175,7 +182,12 @@ function Sidebar({ collapsed, decisions, anyHigh, theme, setTheme, openPalette }
         <Kbd className={wide}>L</Kbd>
       </button>
 
-      <nav aria-label="Main" className="mt-4 flex flex-col gap-0.5">
+      <button type="button" onClick={() => openAsk()} title="Ask Maestro"
+        className="mt-1.5 flex h-9 w-full items-center justify-center gap-2 rounded-md px-2.5 text-label text-fg-muted hover:bg-surface-2 hover:text-fg lg:justify-start">
+        <LogoMark size={16} /><span className={wide}>Ask Maestro</span>
+      </button>
+
+      <nav aria-label="Main" className="mt-3 flex flex-col gap-0.5">
         {NAV.map(n => (
           <NavLink key={n.label} to={`${base}${n.to}`} end={n.end} title={n.label}
             className={({ isActive }) => `flex h-8 items-center justify-center gap-2.5 rounded-md px-2 text-label lg:justify-start ${collapsed ? '!justify-center' : ''} ${isActive ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:bg-surface-2 hover:text-fg'}`}>

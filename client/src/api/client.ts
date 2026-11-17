@@ -1,5 +1,5 @@
 import type {
-  ClassifyResult, Contribution, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
+  AskResult, ClassifyResult, Contribution, Digest, PlanCheck, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
 } from './types.ts';
 
 export class ApiError extends Error {
@@ -60,6 +60,18 @@ export const api = {
   /** Set or clear the stored deadline. `null` falls back to milestone dates. */
   setDeadline: (teamId: number, deadline: string | null) =>
     request<Team>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ deadline }) }),
+
+  /** Ask Maestro a question about the team's work. */
+  ask: (teamId: number, question: string) =>
+    request<AskResult>(`/teams/${teamId}/ask`, { method: 'POST', body: JSON.stringify({ question }) }),
+
+  /** Will the team finish by the deadline? Cached on the server until the data changes. */
+  planCheck: (teamId: number, refresh = false) =>
+    request<PlanCheck>(`/teams/${teamId}/plan-check${refresh ? '?refresh=1' : ''}`),
+
+  /** The week in review. */
+  digest: (teamId: number, days = 7, refresh = false) =>
+    request<Digest>(`/teams/${teamId}/digest?days=${days}${refresh ? '&refresh=1' : ''}`),
 
   /** Turn the project report on or off for the whole team. */
   setReportEnabled: (teamId: number, enabled: boolean) =>

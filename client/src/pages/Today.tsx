@@ -9,6 +9,8 @@ import { WORK_CATEGORIES } from '../workTypes.ts';
 import { buildDecisions, type Decision } from '../app/decisions.ts';
 import { daysUntil, firstName, longDate, sortedMembers, teamDeadline, useTeam } from '../app/team.tsx';
 import { useToast } from '../ui/overlays.tsx';
+import { DigestCard, PlanCheckCard } from '../app/AiCards.tsx';
+import { LogoMark } from '../components/Bulb.tsx';
 import {
   Avatar, Badge, Button, Card, ContributionBar, EmptyState, ErrorState, MaestroNote, Page, PageHeader, RiskBadge, Segmented, Skeleton, riskColor,
 } from '../ui/primitives.tsx';
@@ -26,7 +28,7 @@ function loadResolved(teamId: number): Array<Omit<Resolved, 'undo'>> {
 }
 
 export default function Today() {
-  const { teamId, base, team, summary, tasks, risks, suggestions, loading, error, reload, me } = useTeam();
+  const { teamId, base, team, summary, tasks, risks, suggestions, loading, error, reload, me, openAsk } = useTeam();
   const toast = useToast();
   const [filter, setFilter] = useState<Filter>('all');
   const [resolvedOpen, setResolvedOpen] = useState(false);
@@ -59,16 +61,21 @@ export default function Today() {
         title="Today"
         badge={team?.is_demo ? <Badge>Demo data</Badge> : undefined}
         subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-        actions={deadline.date && (
-          <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line px-2.5 text-caption">
-            <CalendarClock size={14} aria-hidden="true" />Due {longDate(deadline.date)} · {daysUntil(deadline.date)} days
-          </span>
-        )}
+        actions={<>
+          {deadline.date && (
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line px-2.5 text-caption">
+              <CalendarClock size={14} aria-hidden="true" />Due {longDate(deadline.date)} · {daysUntil(deadline.date)} days
+            </span>
+          )}
+          <Button size="sm" onClick={() => openAsk()}><LogoMark size={16} />Ask Maestro</Button>
+        </>}
       />
 
       <div className="flex flex-wrap items-start gap-8">
         <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-8">
           {loading ? <BriefSkeleton /> : <Brief decisions={decisions} />}
+
+          {!loading && <PlanCheckCard />}
 
           <section aria-labelledby="queue-h" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -133,6 +140,8 @@ export default function Today() {
               </div>
             )}
           </section>
+
+          {!loading && <DigestCard />}
         </div>
 
         <aside className="flex w-full min-w-0 flex-[1_1_300px] flex-col gap-4 xl:sticky xl:top-8 xl:max-w-[320px]">

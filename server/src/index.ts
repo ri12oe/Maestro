@@ -12,6 +12,7 @@ import risksRouter from './routes/risks.js';
 import suggestionsRouter from './routes/suggestions.js';
 import manualRouter from './routes/manual.js';
 import summaryRouter from './routes/summary.js';
+import assistantRouter from './routes/assistant.js';
 import { sitePassword } from './middleware/sitePassword.js';
 import { serveProductionClient } from './serveClient.js';
 
@@ -35,6 +36,7 @@ app.use('/api/teams/:teamId/risks', risksRouter);
 app.use('/api/teams/:teamId/suggestions', suggestionsRouter);
 app.use('/api/teams/:teamId/manual', manualRouter);
 app.use('/api/teams/:teamId/summary', summaryRouter);
+app.use('/api/teams/:teamId', assistantRouter);
 
 // Serve built client in production
 // Works from both src/ (dev/tsx) and dist/ (compiled):

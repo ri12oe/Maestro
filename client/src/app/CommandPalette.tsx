@@ -13,7 +13,7 @@ interface Command { id: string; group: string; label: string; icon: ReactNode; k
 export default function CommandPalette({ open, onClose, theme, setTheme }: {
   open: boolean; onClose: () => void; theme: ThemePref; setTheme: (t: ThemePref) => void;
 }) {
-  const { base, summary, tasks, risks, suggestions, syncNow, openLog, openIdentity, team } = useTeam();
+  const { base, summary, tasks, risks, suggestions, syncNow, openLog, openIdentity, openAsk, team } = useTeam();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -33,6 +33,7 @@ export default function CommandPalette({ open, onClose, theme, setTheme }: {
     const list: Command[] = [];
     if (open) list.push({ id: 'review', group: 'Suggested', label: `Review ${open} decision${open === 1 ? '' : 's'}`, icon: <CircleDot size={16} />, run: go(base) });
     list.push(
+      { id: 'ask', group: 'Actions', label: 'Ask Maestro', icon: <LogoMark size={16} />, run: () => openAsk() },
       { id: 'log', group: 'Actions', label: 'Log work', icon: <Plus size={16} />, keys: 'L', run: () => openLog() },
       ...(team && !team.is_demo ? [{ id: 'sync', group: 'Actions', label: 'Sync with GitHub', icon: <RefreshCw size={16} />, keys: 'S', run: () => { void syncNow(); } }] : []),
       { id: 'me', group: 'Actions', label: 'Change who I am on this device', icon: <User size={16} />, run: openIdentity },
@@ -52,10 +53,14 @@ export default function CommandPalette({ open, onClose, theme, setTheme }: {
       list.push({ id: `t-${t.id}`, group: 'Tasks', label: `#${t.github_issue_number} ${t.title}`, icon: <CircleDot size={16} />, run: go(`${base}/plan/${t.github_issue_number}`) });
     }
     return list;
-  }, [base, summary, tasks, risks, suggestions, navigate, openLog, openIdentity, syncNow, theme, setTheme, team]);
+  }, [base, summary, tasks, risks, suggestions, navigate, openLog, openIdentity, openAsk, syncNow, theme, setTheme, team]);
 
   const q = query.trim().toLowerCase();
-  const results = q ? commands.filter(c => c.label.toLowerCase().includes(q)) : commands.filter(c => c.group !== 'Tasks');
+  const matches = q ? commands.filter(c => c.label.toLowerCase().includes(q)) : commands.filter(c => c.group !== 'Tasks');
+  // Anything typed can be asked. Questions go first; plain searches keep their matches first.
+  const askCmd: Command | null = q ? { id: 'ask-q', group: 'Ask Maestro', label: `Ask: “${query.trim()}”`, icon: <LogoMark size={16} />, run: () => openAsk(query.trim()) } : null;
+  const looksLikeQuestion = /\?$/.test(q) || /^(who|what|why|how|when|where|which|is|are|did|does|can|should)\b/.test(q) || q.split(/\s+/).length >= 4;
+  const results = askCmd ? (looksLikeQuestion || !matches.length ? [askCmd, ...matches.filter(c => c.id !== 'ask')] : [...matches, askCmd]) : matches;
   const shown = results.slice(0, 40);
 
   function run(c: Command | undefined) {
@@ -81,13 +86,13 @@ export default function CommandPalette({ open, onClose, theme, setTheme }: {
         <div className="flex h-12 items-center gap-3 border-b border-line px-4">
           <Search size={16} className="text-fg-muted" aria-hidden="true" />
           <input ref={inputRef} value={query} onChange={e => { setQuery(e.target.value); setActive(0); }}
-            placeholder="Search tasks, people and actions" aria-label="Search tasks, people and actions"
+            placeholder="Search, run a command, or ask Maestro" aria-label="Search, run a command, or ask Maestro"
             role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={shown[active] ? `cmd-${shown[active].id}` : undefined}
             className="h-full flex-1 bg-transparent text-[15px] outline-none placeholder:text-fg-subtle" />
           <Kbd>Esc</Kbd>
         </div>
         <ul id="palette-list" role="listbox" className="max-h-[50vh] overflow-y-auto p-2">
-          {shown.length === 0 && <li className="px-3 py-6 text-center text-fg-muted">Nothing matches “{query}”.</li>}
+          
           {shown.map((c, i) => {
             const header = c.group !== lastGroup ? c.group : null;
             lastGroup = c.group;

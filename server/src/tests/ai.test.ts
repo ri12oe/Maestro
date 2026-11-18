@@ -135,6 +135,58 @@ describe('buildPrompt prompt injection resistance', () => {
   });
 });
 
+// ── Mock task matcher: generic words do not link a commit ────────────────────
+
+describe('mock task matcher', () => {
+  const tasks = [
+    { id: 1, github_issue_number: 12, title: 'Auth flow', status: 'open' },
+    { id: 2, github_issue_number: 13, title: 'User dashboard UI', status: 'open' },
+    { id: 3, github_issue_number: 14, title: 'Backend API endpoints', status: 'open' },
+    { id: 4, github_issue_number: 15, title: 'Database schema design', status: 'open' },
+    { id: 5, github_issue_number: 16, title: 'End-to-end test suite', status: 'open' },
+    { id: 6, github_issue_number: 17, title: 'Documentation and README', status: 'open' },
+  ];
+
+  it('does not link a commit that only shares the generic word "user" with task #13', async () => {
+    process.env.AI_PROVIDER = 'mock';
+    const onlyUser = [
+      'Add REST API endpoint for user registration',
+      'Create user profile settings page',
+      'Add Vitest unit tests for user model validation',
+    ];
+    for (const title of onlyUser) {
+      const result = await classifyOne(title, null, tasks);
+      expect(result.task_number, title).toBeNull();
+      expect(result.match_confidence, title).toBe('low');
+    }
+
+    // "user" used to win this tie against "database" because #13 is listed first.
+    const migration = await classifyOne('Add database migrations for user preferences table', null, tasks);
+    expect(migration.task_number).not.toBe(13);
+    expect(migration.task_number).toBe(15);
+  });
+
+  it('still links commits that share a specific word with the task', async () => {
+    process.env.AI_PROVIDER = 'mock';
+
+    const dashboard = await classifyOne('Design user dashboard UI wireframes and component plan', null, tasks);
+    expect(dashboard.task_number).toBe(13);
+    expect(dashboard.match_confidence).not.toBe('low');
+
+    const layout = await classifyOne('Refactor dashboard layout to use CSS Grid', null, tasks);
+    expect(layout.task_number).toBe(13);
+    expect(layout.match_confidence).not.toBe('low');
+
+    const auth = await classifyOne('Implement redirect after auth flow completes', null, tasks);
+    expect(auth.task_number).toBe(12);
+    expect(auth.match_confidence).not.toBe('low');
+
+    const docs = await classifyOne('Write README and project documentation', null, tasks);
+    expect(docs.task_number).toBe(17);
+    expect(docs.match_confidence).not.toBe('low');
+  });
+});
+
 // ── Test 2: completeJSON retries on invalid JSON from fake Grok ──────────────
 
 describe('completeJSON retry on invalid JSON', () => {

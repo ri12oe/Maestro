@@ -13,8 +13,8 @@
  *     (skip if a row already exists for the contribution_id).
  *   - model_version = "grok:<model>:prompt-v2"
  *
- * Mock mode: keyword rules for work_type; keyword overlap (4+ letter words)
- * for task matching.
+ * Mock mode: keyword rules for work_type; keyword overlap (4+ letter words,
+ * ignoring generic words such as "user") for task matching.
  *
  * Manual entries (source = 'manual'): no AI work_type classification.
  *   - work_type is derived from kind: design→design, everything else→other
@@ -114,10 +114,24 @@ function mockSubstance(diffSummary: string | null): Classification['substance'] 
   return 'low';
 }
 
-/** Words of 4+ letters shared between commit title and task title */
+/**
+ * Words that show up in almost any title and do not identify a task.
+ * One of these on its own must not link a commit. A specific shared word
+ * ("dashboard", "auth", "backend") still does, so a real overlap of one
+ * topical word stays a medium match.
+ */
+const GENERIC_WORDS = new Set([
+  'about', 'after', 'before', 'code', 'data', 'file', 'files', 'from',
+  'into', 'item', 'just', 'list', 'only', 'other', 'page', 'pages',
+  'that', 'this', 'user', 'users', 'using', 'view', 'with', 'work',
+]);
+
+/** Meaningful 4+ letter words shared between a commit title and a task title. */
 function sharedLongWords(a: string, b: string): number {
   const words = (s: string) =>
-    new Set(s.toLowerCase().match(/[a-z]{4,}/g) ?? []);
+    new Set(
+      (s.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter(w => !GENERIC_WORDS.has(w)),
+    );
   const wa = words(a);
   const wb = words(b);
   let count = 0;

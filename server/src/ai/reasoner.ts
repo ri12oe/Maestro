@@ -467,7 +467,7 @@ function mockReasonerResponse(
           : `${toProfile.displayName} has room for more work (${toProfile.openTasks.length} open tasks).`,
         'Redistributing this task would help the project maintain momentum.',
       ],
-      checkin_message: `Hey team, a few of our tasks have gone quiet as the deadline gets closer. Referee suggested ${toProfile.displayName.split(' ')[0]} picks up #${taskRow.github_issue_number} "${taskRow.title}" so ${fromProfile.displayName.split(' ')[0]} has room for the rest. Does that work for everyone?`,
+      checkin_message: `Hey team, a few of our tasks have gone quiet as the deadline gets closer. Maestro suggested ${toProfile.displayName.split(' ')[0]} picks up #${taskRow.github_issue_number} "${taskRow.title}" so ${fromProfile.displayName.split(' ')[0]} has room for the rest. Does that work for everyone?`,
     });
   }
 

@@ -185,6 +185,22 @@ describe('mock task matcher', () => {
     expect(docs.task_number).toBe(17);
     expect(docs.match_confidence).not.toBe('low');
   });
+
+  it('keeps the same task when the list is reversed and two overlaps tie on count', async () => {
+    process.env.AI_PROVIDER = 'mock';
+    // "dashboard" (#13) and "design" (#15) are one shared word each.
+    // "dashboard" is longer, so #13 wins even when #15 is listed first.
+    const reversed = [...tasks].reverse();
+    expect(reversed.findIndex(t => t.github_issue_number === 15))
+      .toBeLessThan(reversed.findIndex(t => t.github_issue_number === 13));
+
+    const title = 'Design user dashboard UI wireframes and component plan';
+    const forward = await classifyOne(title, null, tasks);
+    const backward = await classifyOne(title, null, reversed);
+    expect(forward.task_number).toBe(13);
+    expect(backward.task_number).toBe(13);
+    expect(backward.match_confidence).toBe(forward.match_confidence);
+  });
 });
 
 // ── Test 2: completeJSON retries on invalid JSON from fake Grok ──────────────

@@ -1040,3 +1040,18 @@ The public site cannot run `npm run seed`, because that script uses `tsx` and `t
 | `server/src/tests/migration.test.ts` | A fresh migrated database matches the expected columns and `schema.sql` alone. A second migrate changes nothing. An older database gains the columns and keeps its rows. |
 
 `npm run build` succeeded. `npm test --workspace=server`: 21 files, 202 passed (202). Main had 200. Not deployed.
+
+## 2026-11-18 — Session 41: Classification summary must be non-empty (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`ClassificationSchema.summary` is trimmed, then required to contain at least one character. An empty string or a whitespace-only string fails that parse. `completeJSON` already retries a Zod failure once and then throws, so `classifyTeam` and `rematchNewTasks` count the contribution as failed and leave it for the next run. Nothing writes a replacement summary.
+
+The mock classifier still sets `summary` to `${work_type} work: ${title.slice(0, 80)}`, which is never empty. The mock provider still returns `mock-string` for a string field, including this one. `server/src/db/seed.ts` is unchanged. The StudyBuddy scenario tests still pass.
+
+| File | Change |
+|---|---|
+| `server/src/ai/classifier.ts` | Trim the classification summary and require one or more characters. |
+| `server/src/tests/ai.test.ts` | Empty and whitespace-only summaries are rejected. A normal summary passes. The mock summary is non-empty. |
+
+`npm run build` succeeded. `npm test --workspace=server`: 21 files, 205 passed (205). Main had 202. Not deployed.

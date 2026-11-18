@@ -7,6 +7,7 @@
  *  3. Classifier skips contributions that already have a classifications row.
  *  4. task_number not in the open-task list produces no task_matches row.
  *  5. Seed produces at least 25 contributions.
+ *  6. An empty or whitespace-only classification summary is rejected.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -17,17 +18,7 @@ import Database from 'better-sqlite3';
 import * as z from 'zod';
 import { runMigration } from '../db/migrate.js';
 import { completeJSON, zodToJsonSchema } from '../ai/provider.js';
-import { buildPrompt, classifyOne, sanitizeCommitTag } from '../ai/classifier.js';
-
-// ── Schema used in multiple tests ──────────────────────────────────────────────
-
-const ClassificationSchema = z.object({
-  work_type: z.enum(['feature', 'fix', 'test', 'refactor', 'docs', 'formatting', 'generated', 'design', 'other']),
-  substance: z.enum(['low', 'medium', 'high']),
-  summary: z.string(),
-  task_number: z.number().int().nullable(),
-  match_confidence: z.enum(['low', 'medium', 'high']),
-});
+import { ClassificationSchema, buildPrompt, classifyOne, sanitizeCommitTag } from '../ai/classifier.js';
 
 // ── Test 1: Mock provider returns valid schema-conforming data ─────────────────
 
@@ -38,7 +29,7 @@ describe('mock provider', () => {
     expect(() => ClassificationSchema.parse(result)).not.toThrow();
     expect(['feature','fix','test','refactor','docs','formatting','generated','design','other']).toContain(result.work_type);
     expect(['low','medium','high']).toContain(result.substance);
-    expect(typeof result.summary).toBe('string');
+    expect(result.summary.trim().length).toBeGreaterThan(0);
     expect(['low','medium','high']).toContain(result.match_confidence);
   });
 
@@ -64,6 +55,31 @@ describe('mock provider', () => {
     const types = json.properties.n.anyOf.map((t: { type: string }) => t.type);
     expect(types).toContain('null');
     expect(types).toContain('number');
+  });
+});
+
+// ── Classification summary must be non-empty after trim ──────────────────────
+
+const validClassification = {
+  work_type: 'feature' as const,
+  substance: 'medium' as const,
+  task_number: null,
+  match_confidence: 'low' as const,
+};
+
+describe('classification summary', () => {
+  it('rejects an empty summary', () => {
+    expect(() => ClassificationSchema.parse({ ...validClassification, summary: '' })).toThrow();
+  });
+
+  it('rejects a whitespace-only summary', () => {
+    expect(() => ClassificationSchema.parse({ ...validClassification, summary: '   ' })).toThrow();
+    expect(() => ClassificationSchema.parse({ ...validClassification, summary: ' \n\t ' })).toThrow();
+  });
+
+  it('accepts a normal summary', () => {
+    const parsed = ClassificationSchema.parse({ ...validClassification, summary: 'Adds a login form' });
+    expect(parsed.summary).toBe('Adds a login form');
   });
 });
 

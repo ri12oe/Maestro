@@ -151,7 +151,7 @@ function Connect({ hasTeams }: { hasTeams: boolean }) {
                       <Avatar name={m.display_name ?? m.github_login!} login={m.github_login} size={20} />
                       <span className="font-mono text-[12.5px]">@{m.github_login}</span>
                       <button type="button" aria-label={`Remove ${m.github_login}`} className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-surface-3 hover:text-fg"
-                        onClick={async () => { await api.removeMember(teamId!, m.id); await refreshTeam(teamId!); }}><X size={13} /></button>
+                        onClick={async () => { setMemberError(null); try { await api.removeMember(teamId!, m.id); await refreshTeam(teamId!); } catch (err) { setMemberError(err instanceof Error ? err.message : String(err)); } }}><X size={13} /></button>
                     </li>
                   ))}
                 </ul>

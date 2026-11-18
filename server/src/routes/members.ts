@@ -46,9 +46,30 @@ router.post('/', (req: Request<TeamParams>, res: Response) => {
 
 // DELETE /api/teams/:teamId/members/:memberId
 router.delete('/:memberId', (req: Request<TeamParams & { memberId: string }>, res: Response) => {
+  const memberId = Number(req.params.memberId);
+  const teamId = Number(req.params.teamId);
+
+  // contributions.member_id and suggestions.from/to_member_id reference members
+  // with no ON DELETE action, so deleting a linked member throws a foreign-key error.
+  const hasContributions = db
+    .prepare('SELECT 1 FROM contributions WHERE team_id = ? AND member_id = ? LIMIT 1')
+    .get(teamId, memberId);
+  const hasSuggestions = db
+    .prepare(
+      'SELECT 1 FROM suggestions WHERE team_id = ? AND (from_member_id = ? OR to_member_id = ?) LIMIT 1',
+    )
+    .get(teamId, memberId, memberId);
+
+  if (hasContributions || hasSuggestions) {
+    res.status(409).json({
+      error: 'Cannot remove this member because they still have logged work or suggestions',
+    });
+    return;
+  }
+
   const result = db
     .prepare('DELETE FROM members WHERE id = ? AND team_id = ?')
-    .run(Number(req.params.memberId), Number(req.params.teamId));
+    .run(memberId, teamId);
 
   if (result.changes === 0) {
     res.status(404).json({ error: 'Member not found' });

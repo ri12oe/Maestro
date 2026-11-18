@@ -170,6 +170,44 @@ describe('undo an accepted suggestion', () => {
     expect(assignee(taskId)).toBe('priya-docs');
   });
 
+  it('fresh undo of an accepted suggestion succeeds and reassigns the task', async () => {
+    const taskId = insertTask('sam-builds');
+    const suggestionId = insertSuggestion(taskId);
+    expect((await respond(suggestionId, 'accepted')).status).toBe(200);
+    expect(suggestionStatus(suggestionId)).toBe('accepted');
+    expect(assignee(taskId)).toBe('jordan-qa');
+
+    const undone = await respond(suggestionId, 'pending');
+    expect(undone.status).toBe(200);
+    expect(undone.body).toEqual({ ok: true });
+    expect(suggestionStatus(suggestionId)).toBe('pending');
+    expect(assignee(taskId)).toBe('sam-builds');
+  });
+
+  it('returns 409 and changes nothing when the task was moved off to_member', async () => {
+    const taskId = insertTask('sam-builds');
+    const suggestionId = insertSuggestion(taskId);
+    expect((await respond(suggestionId, 'accepted')).status).toBe(200);
+    db.prepare('UPDATE tasks SET assignee_login = ? WHERE id = ?').run('rio-dev', taskId);
+
+    const undone = await respond(suggestionId, 'pending');
+    expect(undone.status).toBe(409);
+    expect(undone.body).toEqual({ error: 'Cannot undo this suggestion because the task is no longer assigned to the member who received it' });
+    expect(suggestionStatus(suggestionId)).toBe('accepted');
+    expect(assignee(taskId)).toBe('rio-dev');
+  });
+
+  it('returns 409 when undoing a suggestion that is not accepted', async () => {
+    const taskId = insertTask('sam-builds');
+    const suggestionId = insertSuggestion(taskId, 'dismissed');
+
+    const undone = await respond(suggestionId, 'pending');
+    expect(undone.status).toBe(409);
+    expect(undone.body).toEqual({ error: 'Only an accepted suggestion can be set back to pending' });
+    expect(suggestionStatus(suggestionId)).toBe('dismissed');
+    expect(assignee(taskId)).toBe('sam-builds');
+  });
+
   it('returns 409 when the original assignee has no GitHub login', async () => {
     const unknown = db.prepare(
       'INSERT INTO members (team_id, github_login, display_name) VALUES (?, NULL, ?)',

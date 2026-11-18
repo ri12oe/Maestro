@@ -255,7 +255,12 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
   const task = tasks?.find(t => t.id === (r?.task_id ?? s?.task_id));
   const evidenceIds = (r?.evidence ?? []).filter(e => e.type === 'contribution').map(e => e.id);
   const contribs = useApi<Contribution[]>(
-    () => (evidenceIds.length && task ? api.contributions(teamId, { taskId: task.id }) : Promise.resolve([])),
+    () => {
+      if (evidenceIds.length === 0) return Promise.resolve([]);
+      // Task risks stay scoped to that task. A risk with no task can still cite
+      // commits, such as a directory only one person has changed.
+      return task ? api.contributions(teamId, { taskId: task.id }) : api.contributions(teamId);
+    },
     [teamId, task?.id, evidenceIds.join(',')],
   );
   const chips = (contribs.data ?? []).filter(c => evidenceIds.includes(c.id));

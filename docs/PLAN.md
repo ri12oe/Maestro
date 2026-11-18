@@ -1,6 +1,6 @@
 # Group Project Referee — PLAN.md
 
-> MVP scope only. GitHub as the sole contribution source. No code written yet.
+> MVP scope only. GitHub as the sole contribution source. The app is written.
 > Deadline: Dec 10, 5:00 PM ET.
 
 ---
@@ -350,7 +350,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 - Rebalance suggestions are generated and returned by `GET /api/teams/:teamId/suggestions`.
 - Manual work log form submits to `POST /api/teams/:teamId/manual` and appears in the member's contribution list.
 - Dispute button calls `POST .../dispute` and shows the disputed state in the UI.
-- Brand styles (colors, fonts) from the brief are applied via Sass variables.
+- The shipped theme is the dark default in `client/src/styles/theme.css`: Geist and Geist Mono, and Maestro gold `#E8A93A`. A light theme is defined beside it. This differs from the brief's palette and fonts.
 - No leaderboard or numerical ranking of people appears anywhere in the UI.
 
 **Todo:**
@@ -366,7 +366,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 10. Build Risk Radar screen (risk cards with evidence chips, task progress table).
 11. Build Rebalance Suggestions screen (swap cards with accept/discuss/dismiss).
 12. Build Log Work screen (manual log form + recently logged list).
-13. Define Sass variables for the brand palette and typography from the brief. — done
+13. Theme tokens live in `client/src/styles/theme.css`. — done (dark is the default; fonts are Geist and Geist Mono; Maestro gold is `#E8A93A`). This differs from the brief's palette and fonts.
 14. Wire client `api/` fetch wrappers to every endpoint used by the screens.
 
 **Relevant context:** `docs/BRIEF.md` §Screens, §Fairness rules; `server/src/routes/`; `client/src/pages/`.
@@ -381,9 +381,9 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Acceptance Criteria:**
 - Seed script (from Milestone 2) populates a demo team with 4 simulated members, ≥20 contributions, one stalled task, one overloaded member; after running the AI pipeline the dashboard shows at least one high-priority risk card and at least one rebalance suggestion.
-- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (manual deploy of `main` `d15947c`. Data on the `/data` volume persisted. Pushes to `main` do not auto-deploy.)
+- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (production is `main` `6d8ef1c`, deployed to Railway on 2026-11-17 as deployment `5143d6dd`. The health check passed. Smoke tests passed. Pushes to `main` do not auto-deploy.)
 - Public URL is accessible and the demo scenario loads without errors.
-- `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link. — done (the live Railway URL is in `README.md`. The site asks for HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`; judges get those credentials separately.)
+- `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link. — done (the demo steps in `README.md` are local. The live Railway URL is in that file, and the page says that site holds real teams and is not where the demo runs. The site asks for HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`; judges get those credentials separately.)
 - No secrets appear in the repo; `.env.example` is complete. — done
 - All acceptance criteria from Milestones 1–3 still pass against the deployed instance.
 
@@ -391,7 +391,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end. — done (`AI_PROVIDER=mock` seed of StudyBuddy: 4 members, 31 contributions, #12 Auth flow stalled with a high risk, Sam overloaded with 2 open tasks while Jordan has 0. On Today the high risk and the pending swap of #14 from Sam to Jordan are visible; Accept swap then Undo returns the suggestion to pending and #14 to Sam. Plan lists #12 under At risk. People lists the 4 members. Settings deadline saves and clears; Danger zone requires the team name and Cancel leaves the team. A log-work entry dated yesterday shows as Yesterday.)
 2. Configure Vite build output and Express static serving for production.
 3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done (`.railway/railway.ts` has the Railpack builder, `npm run build`, `npm start`, and restart policy `ON_FAILURE`. `railway.json` stays until Config as Code cutover. The dashboard build command is `npm run build` and the start command is `npm start`. `docs/RAILWAY.md` is the dashboard steps for the volume, variables, and a manual redeploy.)
-4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (manual deploy of `main` `d15947c`, PR #18. Auto-deploy is not connected.)
+4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (production is `main` `6d8ef1c`, deployed 2026-11-17. Auto-deploy is not connected.)
 5. Smoke-test the deployed public URL end-to-end. — done (`/`, `/teams/1` 200 HTML; `/api/teams` 200 JSON; `/api/does-not-exist` 404 JSON; unauthenticated request 401. Data on the `/data` volume persisted.)
 6. Write `README.md` with setup and demo instructions. — done
 7. Add a `BOB_LOG.md` entry for this milestone. — done (sessions 33–36: the client redesign, Ask Maestro, the StudyBuddy check on the new pages, and the manual production deploys.)

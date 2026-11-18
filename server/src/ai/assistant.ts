@@ -212,8 +212,9 @@ ${renderContext(facts)}
 Question: ${JSON.stringify(question)}`;
 
   const out = await completeJSON(prompt, AskSchema, 'AskMaestro');
-  if (!out.can_answer) {
-    const ranking = /rank|compare|judge/i.test(out.answer);
+  // Catch a ranking in any answer. A model can set can_answer and still compare people.
+  const ranking = /rank|compare|judge/i.test(out.answer);
+  if (!out.can_answer || ranking) {
     return { answer: ranking ? REFUSAL : (out.answer || 'I don’t have evidence for that yet.'), sources: [], refused: ranking };
   }
   return { answer: out.answer.trim(), sources: resolveSources(out.source_ids, facts), refused: false };

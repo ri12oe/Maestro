@@ -116,6 +116,24 @@ describe('ask (grok, stubbed)', () => {
     expect(sent).toContain(`C${c2} |`);
     expect(r?.sources).toEqual([{ type: 'contribution', id: c2 }, { type: 'task', id: schema }]);
   });
+
+  it('refuses a ranking even when the model says it can answer', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({
+        can_answer: true,
+        answer: 'I rank Ben above Ana: he did more of the work.',
+        source_ids: [`C${c2}`, `C${c1}`],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+    const r = await A.ask(teamId, 'Who has worked on the database?', TODAY);
+    expect(r?.refused).toBe(true);
+    expect(r?.answer).toBe(A.REFUSAL);
+    expect(r?.sources).toEqual([]);
+  });
 });
 
 describe('plan check', () => {

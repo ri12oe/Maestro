@@ -41,6 +41,8 @@ function state(): WorkerDbState {
 }
 
 function workerId(): string {
+  // Vitest 5 still sets both names. The values are 1-based (they started at 0
+  // through Vitest 4). This uses the id only as a directory-name suffix.
   const id = process.env.VITEST_POOL_ID ?? process.env.VITEST_WORKER_ID;
   if (id != null && id !== '') return id;
   return String(process.pid);

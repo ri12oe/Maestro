@@ -57,8 +57,11 @@ describe('ranking guardrail', () => {
     'who did the most work',
     'Who contributed less than everyone else?',
     'rank the team by effort',
+    'rate the members by effort',
     'compare everyone’s contribution',
     'Is Ben not pulling his weight?',
+    'Ben did more of the work than Ana',
+    'Sam contributed the least',
   ])('refuses %s', async q => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
@@ -69,7 +72,14 @@ describe('ranking guardrail', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it.each(['Who has worked on the database?', 'What is blocking #12?', 'What did Ana do this week?', 'Who could take on more tasks?'])('answers %s', q => {
+  it.each([
+    'Who has worked on the database?',
+    'What is blocking #12?',
+    'What did Ana do this week?',
+    'Who could take on more tasks?',
+    'What has Frank worked on?',
+    'Compared to the plan, is #12 behind?',
+  ])('answers %s', q => {
     expect(A.isRankingQuestion(q)).toBe(false);
   });
 });
@@ -100,6 +110,16 @@ describe('ask (mock)', () => {
 });
 
 describe('ask (grok, stubbed)', () => {
+  function grokAnswer(answer: string, sourceIds: string[]) {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({ can_answer: true, answer, source_ids: sourceIds });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+  }
+
   it('sends data in <data> tags with the rules, and drops ids the model invented', async () => {
     process.env.AI_PROVIDER = 'grok';
     process.env.XAI_API_KEY = 'test-key';
@@ -114,6 +134,67 @@ describe('ask (grok, stubbed)', () => {
     expect(sent).toContain('<data>');
     expect(sent).toContain('never rank, grade, score or compare');
     expect(sent).toContain(`C${c2} |`);
+    expect(r?.sources).toEqual([{ type: 'contribution', id: c2 }, { type: 'task', id: schema }]);
+  });
+
+  it('refuses a ranking even when the model says it can answer', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({
+        can_answer: true,
+        answer: 'I rank Ben above Ana: he did more of the work.',
+        source_ids: [`C${c2}`, `C${c1}`],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+    const r = await A.ask(teamId, 'Who has worked on the database?', TODAY);
+    expect(r?.refused).toBe(true);
+    expect(r?.answer).toBe(A.REFUSAL);
+    expect(r?.sources).toEqual([]);
+  });
+
+  it('keeps a sourced answer that only compares work to the plan', async () => {
+    const answer = 'Compared to the plan, #12 is behind. Judged by the commits, the schema is done.';
+    grokAnswer(answer, [`T${login}`, `T${schema}`]);
+    const r = await A.ask(teamId, 'What is blocking #12?', TODAY);
+    expect(r?.refused).toBe(false);
+    expect(r?.answer).toBe(answer);
+    expect(r?.sources).toEqual([{ type: 'task', id: login }, { type: 'task', id: schema }]);
+  });
+
+  it('refuses a did-more-than ranking that never says rank, compare, or judge', async () => {
+    grokAnswer('Ben did more of the work than Ana.', [`C${c2}`, `C${c1}`]);
+    const r = await A.ask(teamId, 'Who has worked on the database?', TODAY);
+    expect(r?.refused).toBe(true);
+    expect(r?.answer).toBe(A.REFUSAL);
+    expect(r?.sources).toEqual([]);
+  });
+
+  it('refuses a contributed-the-least ranking with no ranking keyword', async () => {
+    grokAnswer('Sam contributed the least.', [`C${c3}`]);
+    const r = await A.ask(teamId, 'What did Ana do this week?', TODAY);
+    expect(r?.refused).toBe(true);
+    expect(r?.answer).toBe(A.REFUSAL);
+    expect(r?.sources).toEqual([]);
+  });
+
+  it('does not refuse a team-level commit rate', async () => {
+    const answer = 'the commit rate across the team dropped this week';
+    grokAnswer(answer, [`C${c2}`, `C${c3}`]);
+    const r = await A.ask(teamId, 'What did Ana do this week?', TODAY);
+    expect(r?.refused).toBe(false);
+    expect(r?.answer).toBe(answer);
+    expect(r?.sources).toEqual([{ type: 'contribution', id: c2 }, { type: 'contribution', id: c3 }]);
+  });
+
+  it('does not refuse an answer that names Frank', async () => {
+    const answer = 'Frankly, Frank closed the schema.';
+    grokAnswer(answer, [`C${c2}`, `T${schema}`]);
+    const r = await A.ask(teamId, 'Who has worked on the database?', TODAY);
+    expect(r?.refused).toBe(false);
+    expect(r?.answer).toBe(answer);
     expect(r?.sources).toEqual([{ type: 'contribution', id: c2 }, { type: 'task', id: schema }]);
   });
 });

@@ -1100,3 +1100,26 @@ The root `test` script now runs the server tests, then the client tests. The REA
 | `server/src/ai/provider.ts`, `server/src/db/seed.ts`, `server/src/tests/ai.test.ts`, `server/src/tests/sync.test.ts` | Unused bindings removed or voided. |
 
 `npm run lint` passed with no errors. `npm run build` succeeded. `npm test --workspace=server`: 21 files, 205 passed (205). `npm test --workspace=client`: 1 file, 8 passed (8). Not deployed.
+
+## 2026-11-18 — Session 44: npm audit triage (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`npm audit` on main (`457c5de`) reports 8 findings: 5 moderate, 1 high, 2 critical. `npm audit fix` with no `--force` changes nothing. Each patched release is a major bump, or, for Vite's nested esbuild, esbuild 0.25.0, which is outside Vite 5's `^0.21.3` range and is a breaking esbuild release. No `overrides` entry was added. Dependency ranges and the lockfile are unchanged.
+
+The `railway` devDependency is not one of the eight. `.railway/railway.ts` imports `railway/iac`, so the package stays. `npm start` does not import it.
+
+Server production dependencies are absent from the report: express 4.22.3, better-sqlite3, cors, dotenv, and zod. `npm audit --omit=dev` is only the two React Router findings. Those ship in the built client. The other six are Vitest, Vite, or their dependencies, and they are not loaded by `node dist/index.js`.
+
+| Package | Installed | Severity | Runtime | Fix left for later |
+|---|---|---|---|---|
+| vitest | 2.1.9 | critical | dev / test | 5.1.1 (major from 2). Latest 2.x is already installed. |
+| tinypool | 1.1.1 | critical | dev / test, via vitest | ≥2.1.2. Vitest 2 depends on `^1.0.1`. No newer 1.x. |
+| vite | 5.4.21 | high | dev server and client build | 8.3.8, the version `npm audit fix --force` selects. Latest 5.x is already installed. |
+| esbuild | 0.21.5 under vite | moderate | dev / build. Vite calls `transform` and `build`, not esbuild's dev server. tsx's esbuild 0.28.2 is already past 0.25.0. | 0.25.0 is outside `^0.21.3`. |
+| @vitest/mocker | 2.1.9 | moderate | dev / test | 4.1.12 or 5.0.3, tied to a Vitest major. |
+| vite-node | 2.1.9 | moderate | dev / test | Cleared when Vitest no longer depends on vulnerable Vite. |
+| react-router | 6.30.6 | moderate | production client bundle | 7.18.0. No 6.x patch. The app is a `BrowserRouter` SPA. |
+| react-router-dom | 6.30.6 | moderate | production client bundle | 7.18.6, which depends on that react-router. |
+
+`npm run lint` passed. `npm run build` succeeded. `npm test`: server 21 files, 205 passed (205); client 1 file, 8 passed (8). The known `database is locked` flake in `reasoner.test.ts` did not occur. Not deployed.

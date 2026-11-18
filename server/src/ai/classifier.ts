@@ -29,10 +29,13 @@ import { completeJSON } from './provider.js';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
-const ClassificationSchema = z.object({
+export const ClassificationSchema = z.object({
   work_type: z.enum(['feature', 'fix', 'test', 'refactor', 'docs', 'formatting', 'generated', 'design', 'other']),
   substance: z.enum(['low', 'medium', 'high']),
-  summary: z.string(),
+  // Trim first, then require one or more characters. An empty or whitespace-only
+  // summary fails this parse. completeJSON retries that once and then throws, so
+  // classifyTeam and rematchNewTasks count it failed and leave it to be tried again.
+  summary: z.string().trim().min(1),
   task_number: z.number().int().nullable(),
   match_confidence: z.enum(['low', 'medium', 'high']),
 });

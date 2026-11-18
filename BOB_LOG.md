@@ -1177,4 +1177,43 @@ Headless Chrome then loaded that server and rendered every route in the table be
 | `/t/:teamId/settings` | Settings. |
 | `/t/:teamId/settings/:section` | Settings. `/t/1/settings/deadline` included Deadline. |
 | `/teams/:teamId/*` | Legacy redirect. `/teams/1` → `/t/1`. `/teams/1/settings` → `/t/1/settings`. `/teams/1/log` → `/t/1?log=1` with Log work open. `/teams/1/members/2` → `/t/1/people/2`. `/teams/1/risks` → `/t/1`. |
-| `*` | `/no-such-page` replaced the history entry with `/`. |
+| `*` | `/no-such-page` replaced the history entry with `/`.
+
+## 2026-11-18 — Session 47: Vite 8 and Vitest 5 (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The six dev-only audit findings from session 44 are gone. Node is 22.23.4, which satisfies Vite 8 (`^20.19.0 || >=22.12.0`) and Vitest 5 (`^22.12.0 || ^24.0.0 || >=26.0.0`). React stays 18.3.1. `@vitejs/plugin-react` 6.3.0 peers Vite 8 and still enables Fast Refresh for React 16.9 or newer.
+
+Installed versions: Vite 8.3.8, Vitest 5.1.1, `@vitejs/plugin-react` 6.3.0, `@vitest/mocker` 5.1.1. One Vite copy is hoisted. `vite-tsconfig-paths` stays 6.1.1, the newest stable release. Its peer is `vite: *`, and it resolves to 8.3.8. The 7.0.0 line is alpha only. `@vitest/*` packages are not direct dependencies. Vitest 5 brings `@vitest/mocker` 5.1.1. Tinypool and vite-node are no longer in the tree. The esbuild copy left in the tree is 0.28.2 (tsx, and the optional esbuild peer Vite 8 no longer calls itself). The `allowScripts` entry for esbuild 0.21.5 is removed with that copy.
+
+Migration, and what this repo had to change:
+
+- Vite 6. No custom `resolve.conditions`. Sass's modern API becomes the default. This config already asked for `modern-compiler`.
+- Vite 7. The Sass `api` option is removed and Vite always uses the compiler API, which is the same API this config requested. `client/vite.config.mts` drops `css.preprocessorOptions.scss.api`. There is no `scss` file in the client. No `build.rollupOptions` or `esbuild` options to rename.
+- Vite 8. Rolldown and Oxc replace Rollup and esbuild. The client config has no Rollup or esbuild options, so nothing moves to `rolldownOptions` or `oxc`. The dev server still listens on port 5173 and proxies `/api` to port 3001.
+- Vitest 3. There is no `vitest.workspace` file and no `environmentMatchGlobs`, so the workspace-to-projects rename does not apply. `environment` stays `node`.
+- Vitest 4. `poolOptions` is gone. `pool: 'forks'` stays, so better-sqlite3 still loads in a child process. `isolate: true` moves to the top level, so each file still imports `db/client.ts` again. The default `exclude` is only `node_modules` and `.git`. `tsc` writes `server/dist/tests/*.test.js`, and Vitest collected those too (42 files, 410 tests). The config restores the previous exclude list, including `**/dist/**`.
+- Vitest 5. `vite` is a peer dependency, so the server workspace declares `vite` ^8.3.8 next to Vitest. `clearMocks` now defaults to true. The suite passed with that default. `VITEST_POOL_ID` and `VITEST_WORKER_ID` still exist. Both are 1-based now (they started at 0 through Vitest 4). `server/src/tests/workerDb.ts` still prefers the pool id and falls back to the worker id. The value is only a directory-name suffix, not an index, so the lookup did not change. No test calls `vi.mock` inside a function.
+
+| File | Change |
+|---|---|
+| `client/package.json`, `server/package.json`, `package-lock.json` | Vite ^8.3.8, Vitest ^5.1.1, `@vitejs/plugin-react` ^6.3.0. Server declares the Vite peer. |
+| `client/vite.config.mts` | Drop the removed Sass `api` option. |
+| `server/vitest.config.ts` | Top-level `isolate`. Restore the pre-Vitest-4 exclude list so `dist/` is not collected. |
+| `server/src/tests/workerDb.ts` | Comment: the same env vars are 1-based and used as a path suffix. |
+| `package.json` | Drop the `allowScripts` entry for esbuild 0.21.5. |
+
+`npm audit` reports 0 vulnerabilities.
+
+`npm run lint` passed with no errors.
+
+`npm run build` succeeded. Vite reported `vite v8.3.8 building client environment for production` and wrote `dist/index.html`, `dist/assets/index-CXBQT4p1.css`, and `dist/assets/index-D9XdCpfA.js`. The server `tsc` and postbuild succeeded.
+
+`npm test`: server 21 files, 205 passed (205); client 1 file, 8 passed (8). The client run was after the production build. Client `dist/` has no test files, so the new default exclude did not change that count.
+
+From a clean tree (no `server/dev.db`, no repo `dev.db`, no `maestro-vitest-*` temp dirs), `npm test --workspace=server` passed 5 times: 21 files, 205 passed (205) each time. No `dev.db` was created under `server/` or the repo root. No worker temp directory was left in the OS temp dir.
+
+`npm run dev --workspace=client` started Vite 8.3.8 on `http://localhost:5173/` (it listens on `::1`). `curl http://localhost:5173/` returned `200` `text/html` with `<title>Maestro</title>`, `<div id="root">`, the React Refresh preamble, and `/src/main.tsx`. `curl http://localhost:5173/src/main.tsx` returned `200` `text/javascript`. `curl http://localhost:5173/t/1` returned `200` `text/html` and the same document.
+
+Production, from the repo root, after that build: `NODE_ENV=production AI_PROVIDER=mock DB_PATH=/tmp/maestro-vite8.db PORT=3456 npm start`. The log line was `Migration complete: /tmp/maestro-vite8.db`. No repo `dev.db` was created. `curl` of `/` and `/t/1` each returned `200` `text/html` and the same SPA document (`id="root"`, title Maestro, the built `/assets/index-D9XdCpfA.js` and CSS). Those asset URLs returned `200`. Headless Chrome rendered `/` as "Meet Maestro" and `/t/1` as "This team doesn't exist" against that empty database. Not deployed. |

@@ -13,8 +13,8 @@
  *     (skip if a row already exists for the contribution_id).
  *   - model_version = "grok:<model>:prompt-v2"
  *
- * Mock mode: keyword rules for work_type; keyword overlap (4+ letter words)
- * for task matching.
+ * Mock mode: keyword rules for work_type; keyword overlap (4+ letter words,
+ * ignoring generic words such as "user") for task matching.
  *
  * Manual entries (source = 'manual'): no AI work_type classification.
  *   - work_type is derived from kind: design→design, everything else→other
@@ -114,15 +114,68 @@ function mockSubstance(diffSummary: string | null): Classification['substance'] 
   return 'low';
 }
 
-/** Words of 4+ letters shared between commit title and task title */
-function sharedLongWords(a: string, b: string): number {
-  const words = (s: string) =>
-    new Set(s.toLowerCase().match(/[a-z]{4,}/g) ?? []);
-  const wa = words(a);
-  const wb = words(b);
-  let count = 0;
-  for (const w of wa) if (wb.has(w)) count++;
-  return count;
+/**
+ * Words that show up in almost any title and do not identify a task.
+ * One of these on its own must not link a commit. A specific shared word
+ * ("dashboard", "auth", "backend") still does, so a real overlap of one
+ * topical word stays a medium match.
+ */
+const GENERIC_WORDS = new Set([
+  'about', 'after', 'before', 'code', 'data', 'file', 'files', 'from',
+  'into', 'item', 'just', 'list', 'only', 'other', 'page', 'pages',
+  'that', 'this', 'user', 'users', 'using', 'view', 'with', 'work',
+]);
+
+/** Meaningful 4+ letter words in a title, generic words removed, each word once. */
+function meaningfulWords(s: string): string[] {
+  const found = s.toLowerCase().match(/[a-z]{4,}/g) ?? [];
+  return [...new Set(found.filter(w => !GENERIC_WORDS.has(w)))];
+}
+
+function sharedWords(commitTitle: string, taskTitle: string): string[] {
+  const taskWords = new Set(meaningfulWords(taskTitle));
+  return meaningfulWords(commitTitle).filter(w => taskWords.has(w));
+}
+
+/** How many of these task titles contain each meaningful word. */
+function taskWordFrequency(tasks: TaskRow[]): Map<string, number> {
+  const freq = new Map<string, number>();
+  for (const task of tasks) {
+    for (const w of meaningfulWords(task.title)) freq.set(w, (freq.get(w) ?? 0) + 1);
+  }
+  return freq;
+}
+
+/**
+ * Positive when `a` is the stronger overlap. More shared words wins, then the
+ * longer shared word, then the rarer one (it appears in fewer task titles).
+ * Equal overlaps return 0, so the caller can break that tie without looking
+ * at list order.
+ */
+function compareOverlap(a: string[], b: string[], freq: Map<string, number>): number {
+  if (a.length !== b.length) return a.length - b.length;
+  const lengths = (words: string[]) => words.map(w => w.length).sort((x, y) => y - x);
+  const la = lengths(a);
+  const lb = lengths(b);
+  for (let i = 0; i < la.length; i++) {
+    if (la[i] !== lb[i]) return la[i] - lb[i];
+  }
+  const rarity = (words: string[]) => words.map(w => freq.get(w) ?? 0).sort((x, y) => x - y);
+  const ra = rarity(a);
+  const rb = rarity(b);
+  for (let i = 0; i < ra.length; i++) {
+    if (ra[i] !== rb[i]) return rb[i] - ra[i];
+  }
+  return 0;
+}
+
+/** Lower issue number, then title, then id. Stable, and independent of list order. */
+function preferTask(a: TaskRow, b: TaskRow): boolean {
+  const ai = a.github_issue_number ?? Number.POSITIVE_INFINITY;
+  const bi = b.github_issue_number ?? Number.POSITIVE_INFINITY;
+  if (ai !== bi) return ai < bi;
+  if (a.title !== b.title) return a.title < b.title;
+  return a.id < b.id;
 }
 
 function mockClassify(
@@ -132,18 +185,23 @@ function mockClassify(
 ): Classification {
   const work_type = mockWorkType(title, diffSummary);
   const substance = mockSubstance(diffSummary);
+  const freq = taskWordFrequency(tasks);
 
-  let best: { task: TaskRow; score: number } | null = null;
+  let best: { task: TaskRow; words: string[] } | null = null;
   for (const task of tasks) {
-    const score = sharedLongWords(title, task.title);
-    if (score > 0 && (!best || score > best.score)) {
-      best = { task, score };
+    const words = sharedWords(title, task.title);
+    if (words.length === 0) continue;
+    if (!best) {
+      best = { task, words };
+      continue;
     }
+    const cmp = compareOverlap(words, best.words, freq);
+    if (cmp > 0 || (cmp === 0 && preferTask(task, best.task))) best = { task, words };
   }
 
   const task_number = best ? best.task.github_issue_number : null;
   const match_confidence: Classification['match_confidence'] =
-    best ? (best.score >= 3 ? 'high' : 'medium') : 'low';
+    best ? (best.words.length >= 3 ? 'high' : 'medium') : 'low';
 
   const summary = `${work_type} work: ${title.slice(0, 80)}`;
 

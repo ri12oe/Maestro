@@ -39,9 +39,13 @@ type AcceptedSuggestion = {
 
 // POST /api/teams/:teamId/suggestions/:suggestionId/respond
 // status `pending` undoes an accept: the suggestion goes back to pending and the
-// task returns to the member who held it (from_login). Accept is the only
-// response that writes anything besides the suggestion row, and that write is
-// local: tasks.assignee_login = the receiving member's GitHub login.
+// task returns to the member who held it (from_login). That revert runs only
+// while the suggestion is still accepted and the task is still assigned to the
+// member who received it (to_login). Anything else is a 409 and writes nothing.
+// Accepted rows are kept across reasoner runs, not replaced; a later accept
+// moves the task, which this check refuses.
+// Accept is the only other response that writes anything besides the suggestion
+// row, and that write is local: tasks.assignee_login = to_login.
 router.post('/:suggestionId/respond', (req: Request<TeamParams & { suggestionId: string }>, res: Response) => {
   const { status } = req.body as { status?: string };
   const allowed = ['accepted', 'dismissed', 'discuss', 'pending'];
@@ -100,41 +104,40 @@ function undoAcceptedSuggestion(teamId: number, suggestionId: number, res: Respo
   `).get(suggestionId, teamId) as AcceptedSuggestion | undefined;
 
   if (!sug) { res.status(404).json({ error: 'Suggestion not found' }); return; }
-  if (sug.status !== 'accepted') {
-    res.status(400).json({ error: 'Only an accepted suggestion can be set back to pending' });
-    return;
+  const refused = undoRefusal(sug);
+  if (refused) { res.status(409).json({ error: refused }); return; }
+
+  // Re-check both rows inside the write. A sync or another accept can move the
+  // task between the read above and this update; that must not land halfway.
+  let reverted: true | string = true;
+  try {
+    reverted = db.transaction(() => {
+      const moved = db.prepare(
+        'UPDATE tasks SET assignee_login = ? WHERE id = ? AND assignee_login IS ?',
+      ).run(sug.from_login, sug.task_id, sug.to_login);
+      if (moved.changes !== 1) return 'Cannot undo this suggestion because the task is no longer assigned to the member who received it';
+      const updated = db.prepare(
+        `UPDATE suggestions SET status = 'pending' WHERE id = ? AND team_id = ? AND status = 'accepted'`,
+      ).run(suggestionId, teamId);
+      if (updated.changes !== 1) throw new Error('status');
+      return true as const;
+    })();
+  } catch {
+    reverted = 'Only an accepted suggestion can be set back to pending';
   }
 
-  // Accept set assignee_login to to_login. Put it back only while that write is
-  // still the current assignment. A later sync or another accept may have moved
-  // the task; overwriting that would undo a change this suggestion did not make.
-  const stillAssignedToReceiver = sug.assignee_login === sug.to_login;
-  const alreadyWithOriginal = sug.assignee_login === sug.from_login;
-  if (stillAssignedToReceiver && !sug.from_login) {
-    res.status(409).json({ error: 'Cannot undo this suggestion because the original assignee has no GitHub login' });
-    return;
-  }
-  if (!stillAssignedToReceiver && !alreadyWithOriginal) {
-    res.status(409).json({ error: 'Cannot undo this suggestion because the task is no longer assigned to the member who received it' });
-    return;
-  }
-
-  const reverted = db.transaction(() => {
-    const updated = db.prepare(
-      `UPDATE suggestions SET status = 'pending' WHERE id = ? AND team_id = ? AND status = 'accepted'`,
-    ).run(suggestionId, teamId);
-    if (updated.changes !== 1) return false;
-    if (stillAssignedToReceiver) {
-      db.prepare('UPDATE tasks SET assignee_login = ? WHERE id = ?').run(sug.from_login, sug.task_id);
-    }
-    return true;
-  })();
-
-  if (!reverted) {
-    res.status(400).json({ error: 'Only an accepted suggestion can be set back to pending' });
-    return;
-  }
+  if (reverted !== true) { res.status(409).json({ error: reverted }); return; }
   res.json({ ok: true });
+}
+
+/** Why this undo must not write, or null when the accept is still the current assignment. */
+function undoRefusal(sug: AcceptedSuggestion): string | null {
+  if (sug.status !== 'accepted') return 'Only an accepted suggestion can be set back to pending';
+  if (sug.assignee_login !== sug.to_login) {
+    return 'Cannot undo this suggestion because the task is no longer assigned to the member who received it';
+  }
+  if (!sug.from_login) return 'Cannot undo this suggestion because the original assignee has no GitHub login';
+  return null;
 }
 
 export default router;

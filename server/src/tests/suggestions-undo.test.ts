@@ -3,6 +3,9 @@
  *
  * POST .../suggestions/:id/respond with { status: 'pending' } sets an accepted
  * suggestion back to pending and restores the task assignee accept moved.
+ * That write runs only while the suggestion is still accepted and the task is
+ * still assigned to the member who received it. Otherwise the route returns
+ * 409 and leaves both rows alone.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
@@ -104,31 +107,32 @@ describe('undo an accepted suggestion', () => {
     expect(row).toMatchObject({ id: suggestionId, status: 'pending', task_id: taskId });
 
     const again = await respond(suggestionId, 'pending');
-    expect(again.status).toBe(400);
+    expect(again.status).toBe(409);
     expect(again.body).toEqual({ error: 'Only an accepted suggestion can be set back to pending' });
     expect(suggestionStatus(suggestionId)).toBe('pending');
     expect(assignee(taskId)).toBe('sam-builds');
   });
 
-  it('leaves the assignee in place when a sync already put the task back', async () => {
+  it('returns 409 and changes nothing when a sync already moved the task off the receiver', async () => {
     const taskId = insertTask('sam-builds');
     const suggestionId = insertSuggestion(taskId, 'accepted');
     expect(assignee(taskId)).toBe('sam-builds');
 
     const undone = await respond(suggestionId, 'pending');
-    expect(undone.status).toBe(200);
-    expect(suggestionStatus(suggestionId)).toBe('pending');
+    expect(undone.status).toBe(409);
+    expect(undone.body).toEqual({ error: 'Cannot undo this suggestion because the task is no longer assigned to the member who received it' });
+    expect(suggestionStatus(suggestionId)).toBe('accepted');
     expect(assignee(taskId)).toBe('sam-builds');
   });
 
   it.each(['pending', 'dismissed', 'discuss'])(
-    'returns 400 when the suggestion is %s',
+    'returns 409 when the suggestion is %s',
     async (status) => {
       const taskId = insertTask('sam-builds');
       const suggestionId = insertSuggestion(taskId, status);
 
       const res = await respond(suggestionId, 'pending');
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(409);
       expect(res.body).toEqual({ error: 'Only an accepted suggestion can be set back to pending' });
       expect(suggestionStatus(suggestionId)).toBe(status);
       expect(assignee(taskId)).toBe('sam-builds');
@@ -161,9 +165,47 @@ describe('undo an accepted suggestion', () => {
 
     const res = await respond(suggestionId, 'pending');
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/no longer assigned/);
+    expect(res.body).toEqual({ error: 'Cannot undo this suggestion because the task is no longer assigned to the member who received it' });
     expect(suggestionStatus(suggestionId)).toBe('accepted');
     expect(assignee(taskId)).toBe('priya-docs');
+  });
+
+  it('fresh undo of an accepted suggestion succeeds and reassigns the task', async () => {
+    const taskId = insertTask('sam-builds');
+    const suggestionId = insertSuggestion(taskId);
+    expect((await respond(suggestionId, 'accepted')).status).toBe(200);
+    expect(suggestionStatus(suggestionId)).toBe('accepted');
+    expect(assignee(taskId)).toBe('jordan-qa');
+
+    const undone = await respond(suggestionId, 'pending');
+    expect(undone.status).toBe(200);
+    expect(undone.body).toEqual({ ok: true });
+    expect(suggestionStatus(suggestionId)).toBe('pending');
+    expect(assignee(taskId)).toBe('sam-builds');
+  });
+
+  it('returns 409 and changes nothing when the task was moved off to_member', async () => {
+    const taskId = insertTask('sam-builds');
+    const suggestionId = insertSuggestion(taskId);
+    expect((await respond(suggestionId, 'accepted')).status).toBe(200);
+    db.prepare('UPDATE tasks SET assignee_login = ? WHERE id = ?').run('rio-dev', taskId);
+
+    const undone = await respond(suggestionId, 'pending');
+    expect(undone.status).toBe(409);
+    expect(undone.body).toEqual({ error: 'Cannot undo this suggestion because the task is no longer assigned to the member who received it' });
+    expect(suggestionStatus(suggestionId)).toBe('accepted');
+    expect(assignee(taskId)).toBe('rio-dev');
+  });
+
+  it('returns 409 when undoing a suggestion that is not accepted', async () => {
+    const taskId = insertTask('sam-builds');
+    const suggestionId = insertSuggestion(taskId, 'dismissed');
+
+    const undone = await respond(suggestionId, 'pending');
+    expect(undone.status).toBe(409);
+    expect(undone.body).toEqual({ error: 'Only an accepted suggestion can be set back to pending' });
+    expect(suggestionStatus(suggestionId)).toBe('dismissed');
+    expect(assignee(taskId)).toBe('sam-builds');
   });
 
   it('returns 409 when the original assignee has no GitHub login', async () => {

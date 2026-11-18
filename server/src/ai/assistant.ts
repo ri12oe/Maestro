@@ -10,6 +10,7 @@
  *   - never guess at why someone was quiet
  *   - say "I don't have evidence for that" instead of speculating
  * Questions that ask for a ranking are refused before any model call (isRankingQuestion).
+ * The same check runs on every model answer, so a comparison of people is refused too.
  *
  * Commit messages, Issue titles and logged work are untrusted text written by team
  * members. They are passed inside <data> tags with an instruction to treat them as data.
@@ -141,15 +142,21 @@ export function resolveSources(ids: string[], f: TeamFacts): SourceRef[] {
 
 export interface AskResult { answer: string; sources: SourceRef[]; refused: boolean }
 
+// People comparisons only. Word boundaries and a single sentence, so "Frank",
+// "Frankly", "compared to the plan", and "judged by the commits" are not rankings.
 const RANKING = [
   /\b(lazi(est|er)|laziest|lazy|slack(er|ing)?|freeload\w*|useless|worst|weakest)\b/i,
-  /\bwho\b.*\b(did|does|has done|contribut\w*|work(ed|s)?|commit(ted|s)?|effort|put in)\b.*\b(most|least|more|less|fewest|hardest)\b/i,
-  /\bwho\b.*\b(best|worst|hardest[- ]working|top|biggest|weakest)\b/i,
-  /\b(rank|ranking|leaderboard|grade|score|rate)\b.*\b(team|member|people|us|them|each|everyone)\b/i,
-  /\b(compare|comparison)\b.*\b(effort|contribution|work)\b/i,
-  /\b(not|isn'?t|aren'?t|doesn'?t|don'?t)\b.*\b(pull(ing)? (their|his|her) weight|doing (their|his|her) (part|share))\b/i,
+  /\bwho\b[^.\n]*\b(did|does|has done|contribut\w*|work(ed|s)?|commit(ted|s)?|effort|put in)\b[^.\n]*\b(most|least|more|less|fewest|hardest)\b/i,
+  /\bwho\b[^.\n]*\b(best|worst|hardest[- ]working|top|biggest|weakest)\b/i,
+  /\b(rank|ranking|leaderboard|grade|score|rate)\b[^.\n]*\b(team|member|people|us|them|each|everyone)\b/i,
+  /\brank(?:ing|s|ed)?\b[^.\n]{0,40}\b(above|below|higher|lower|over|under)\b/i,
+  /\b(compare|comparison)\b[^.\n]*\b(effort|contribution|work)\b/i,
+  /\b(not|isn'?t|aren'?t|doesn'?t|don'?t)\b[^.\n]*\b(pull(ing)? (their|his|her) weight|doing (their|his|her) (part|share))\b/i,
+  /\b(did|does|has done|contribut\w*|work(ed|s)?|commit(ted|s)?|effort|put in)\b[^.\n]{0,80}\b(more|less|fewer)\b[^.\n]{0,40}\bthan\s+(?!the\s+(?:plan|deadline|expected|average)|expected\b|before\b|last\b|usual\b|just\b|it\b|that\b)/i,
+  /\b(did|does|has done|contribut\w*|work(ed|s)?|commit(ted|s)?|effort|put in)\b[^.\n]{0,40}\bthe (most|least|fewest)\b(?!\s+(?:recent|to)\b)/i,
 ];
 
+/** True for a ranking question or an answer that compares people. */
 export function isRankingQuestion(q: string): boolean {
   return RANKING.some(r => r.test(q));
 }
@@ -212,8 +219,8 @@ ${renderContext(facts)}
 Question: ${JSON.stringify(question)}`;
 
   const out = await completeJSON(prompt, AskSchema, 'AskMaestro');
-  // Catch a ranking in any answer. A model can set can_answer and still compare people.
-  const ranking = /rank|compare|judge/i.test(out.answer);
+  // Same people-comparison check as the question, on every answer.
+  const ranking = isRankingQuestion(out.answer);
   if (!out.can_answer || ranking) {
     return { answer: ranking ? REFUSAL : (out.answer || 'I don’t have evidence for that yet.'), sources: [], refused: ranking };
   }

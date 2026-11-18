@@ -144,11 +144,13 @@ export interface AskResult { answer: string; sources: SourceRef[]; refused: bool
 
 // People comparisons only. Word boundaries and a single sentence, so "Frank",
 // "Frankly", "compared to the plan", and "judged by the commits" are not rankings.
+// rank/rate/score/grade count only when applied to people ("rank the team",
+// "rate the members"), not as a team metric ("the commit rate across the team").
 const RANKING = [
   /\b(lazi(est|er)|laziest|lazy|slack(er|ing)?|freeload\w*|useless|worst|weakest)\b/i,
   /\bwho\b[^.\n]*\b(did|does|has done|contribut\w*|work(ed|s)?|commit(ted|s)?|effort|put in)\b[^.\n]*\b(most|least|more|less|fewest|hardest)\b/i,
   /\bwho\b[^.\n]*\b(best|worst|hardest[- ]working|top|biggest|weakest)\b/i,
-  /\b(rank|ranking|leaderboard|grade|score|rate)\b[^.\n]*\b(team|member|people|us|them|each|everyone)\b/i,
+  /\b(rank(?:ing|s|ed)?|leaderboards?|grad(?:e|es|ed|ing)|scor(?:e|es|ed|ing)|rat(?:e|es|ed|ing))\s+(?:(?:the|our|a|their)\s+|(?:each|every)\s+(?:of\s+(?:the\s+)?)?)?(team|members?|people|persons?|everyone|everybody|us|them)\b/i,
   /\brank(?:ing|s|ed)?\b[^.\n]{0,40}\b(above|below|higher|lower|over|under)\b/i,
   /\b(compare|comparison)\b[^.\n]*\b(effort|contribution|work)\b/i,
   /\b(not|isn'?t|aren'?t|doesn'?t|don'?t)\b[^.\n]*\b(pull(ing)? (their|his|her) weight|doing (their|his|her) (part|share))\b/i,

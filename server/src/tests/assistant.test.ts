@@ -57,6 +57,7 @@ describe('ranking guardrail', () => {
     'who did the most work',
     'Who contributed less than everyone else?',
     'rank the team by effort',
+    'rate the members by effort',
     'compare everyone’s contribution',
     'Is Ben not pulling his weight?',
     'Ben did more of the work than Ana',
@@ -177,6 +178,15 @@ describe('ask (grok, stubbed)', () => {
     expect(r?.refused).toBe(true);
     expect(r?.answer).toBe(A.REFUSAL);
     expect(r?.sources).toEqual([]);
+  });
+
+  it('does not refuse a team-level commit rate', async () => {
+    const answer = 'the commit rate across the team dropped this week';
+    grokAnswer(answer, [`C${c2}`, `C${c3}`]);
+    const r = await A.ask(teamId, 'What did Ana do this week?', TODAY);
+    expect(r?.refused).toBe(false);
+    expect(r?.answer).toBe(answer);
+    expect(r?.sources).toEqual([{ type: 'contribution', id: c2 }, { type: 'contribution', id: c3 }]);
   });
 
   it('does not refuse an answer that names Frank', async () => {

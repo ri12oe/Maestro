@@ -526,13 +526,11 @@ describe('seed', () => {
       const jordanId = insertMemberFn('jordan', 'jordan@x.com', 'Jordan');
 
       // Insert 11 Sam commits + 8 Rio + 3 Jordan + 6 Priya + 3 manual = 31
-      let n = 1;
       const addCommit = (memberId: number, sha: string, title: string) => {
         testDb.prepare(
           `INSERT INTO contributions (team_id, member_id, source, github_sha, title, authored_at)
            VALUES (?, ?, 'commit', ?, ?, '2024-01-01T00:00:00Z')`,
         ).run(teamId, memberId, sha, title);
-        n++;
       };
       for (let i = 0; i < 11; i++) addCommit(samId,    `sam-sha-${i}`,    `Sam commit ${i}`);
       for (let i = 0; i < 8;  i++) addCommit(rioId,    `rio-sha-${i}`,    `Rio commit ${i}`);

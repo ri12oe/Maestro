@@ -240,7 +240,7 @@ export async function completeJSON<T extends z.ZodType<unknown>>(
   let parsed: z.infer<T>;
   try {
     parsed = zodSchema.parse(raw) as z.infer<T>;
-  } catch (_parseErr) {
+  } catch {
     // One retry after a Zod validation failure
     await sleep(2000);
     const raw2 = await attempt();

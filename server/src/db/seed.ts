@@ -114,7 +114,7 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
   const task17Id = insertTask(17, 'Documentation and README', daysFromNow(today, 25), 'priya-code');
 
   // Suppress unused variable warnings — IDs only matter to verify insert succeeded
-  void task13Id; void task14Id; void task15Id; void task16Id; void task17Id;
+  void task12Id; void task13Id; void task14Id; void task15Id; void task16Id; void task17Id;
 
   console.log(`Inserted 6 tasks`);
 

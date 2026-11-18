@@ -71,6 +71,15 @@ npm run dev:client
 
 The API listens on port 3001. Vite listens on port 5173 and proxies `/api` to `http://localhost:3001`. Open http://localhost:5173.
 
+From the repo root:
+
+```bash
+npm run lint
+npm test
+```
+
+`npm run lint` runs ESLint in `server/` and then in `client/`. `npm test` runs the server test suite, then the client test suite.
+
 ## Demo
 
 StudyBuddy is on the public site, seeded once via `SEED_DEMO=1`, and it can also be run locally. On the public site the seed runs at startup against the server's SQLite file, with the mock provider, and it leaves other teams alone. A second start finds StudyBuddy and inserts nothing.
@@ -105,7 +114,7 @@ npm test
 npm run eval --workspace=server
 ```
 
-`npm test` runs the server test suite. `npm run eval` is a script in `server/` (the root `package.json` has no `eval` script). It scores the classifier on the hand-labeled commits and prints accuracy and the misses. Mock mode stays offline.
+`npm test` runs the server test suite, then the client test suite. `npm run eval` is a script in `server/` (the root `package.json` has no `eval` script). It scores the classifier on the hand-labeled commits and prints accuracy and the misses. Mock mode stays offline.
 
 ## Production
 

@@ -16,14 +16,28 @@ import {
 } from '../ui/primitives.tsx';
 
 type Filter = 'all' | 'high' | 'swaps';
-interface Resolved { key: string; text: string; undo?: () => Promise<void>; at: number }
+interface Resolved {
+  key: string;
+  text: string;
+  at: number;
+  /** Accepted swap. Stored with the row so Undo can call the respond route after reload. */
+  suggestionId?: number;
+  /** Decision hidden when this row was resolved, so Undo can show that card again. */
+  decisionKey?: string;
+}
 
 const RESOLVED_KEY = (teamId: number) => `maestro.resolved.${teamId}`;
 
-function loadResolved(teamId: number): Array<Omit<Resolved, 'undo'>> {
+function loadResolved(teamId: number): Resolved[] {
   try {
-    const all = JSON.parse(localStorage.getItem(RESOLVED_KEY(teamId)) ?? '[]') as Array<Omit<Resolved, 'undo'>>;
-    return all.filter(r => Date.now() - r.at < 7 * 86_400_000);
+    const all = JSON.parse(localStorage.getItem(RESOLVED_KEY(teamId)) ?? '[]') as Resolved[];
+    return all.filter(r => Date.now() - r.at < 7 * 86_400_000).map(r => ({
+      key: r.key,
+      text: r.text,
+      at: r.at,
+      suggestionId: typeof r.suggestionId === 'number' ? r.suggestionId : undefined,
+      decisionKey: typeof r.decisionKey === 'string' ? r.decisionKey : undefined,
+    }));
   } catch { return []; }
 }
 
@@ -34,9 +48,15 @@ export default function Today() {
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [resolved, setResolved] = useState<Resolved[]>(() => loadResolved(teamId));
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [undoingKey, setUndoingKey] = useState<string | null>(null);
+  const undoingIds = useRef(new Set<number>());
 
   useEffect(() => {
-    try { localStorage.setItem(RESOLVED_KEY(teamId), JSON.stringify(resolved.map(({ undo: _u, ...r }) => r))); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(RESOLVED_KEY(teamId), JSON.stringify(resolved.map(r => ({
+        key: r.key, text: r.text, at: r.at, suggestionId: r.suggestionId, decisionKey: r.decisionKey,
+      }))));
+    } catch { /* ignore */ }
   }, [resolved, teamId]);
 
   const decisions = useMemo(() => buildDecisions(risks, suggestions).filter(d => !hidden.has(d.key)), [risks, suggestions, hidden]);
@@ -44,11 +64,37 @@ export default function Today() {
   const deadline = teamDeadline(team, tasks);
   const people = sortedMembers(summary?.members);
 
-  function resolve(d: Decision, text: string, undo?: () => Promise<void>) {
+  async function undoResolved(item: Resolved) {
+    const suggestionId = item.suggestionId;
+    if (typeof suggestionId !== 'number' || undoingIds.current.has(suggestionId)) return;
+    undoingIds.current.add(suggestionId);
+    setUndoingKey(item.key);
+    try {
+      await api.respond(teamId, suggestionId, 'pending');
+      setResolved(list => list.filter(x => x.key !== item.key));
+      const decisionKey = item.decisionKey;
+      if (decisionKey) {
+        setHidden(h => {
+          const next = new Set(h);
+          next.delete(decisionKey);
+          return next;
+        });
+      }
+      reload();
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : String(e));
+    } finally {
+      undoingIds.current.delete(suggestionId);
+      setUndoingKey(key => (key === item.key ? null : key));
+    }
+  }
+
+  function resolve(d: Decision, text: string, suggestionId?: number) {
     setHidden(h => new Set(h).add(d.key));
-    const item: Resolved = { key: `${d.key}-${Date.now()}`, text, undo, at: Date.now() };
+    const item: Resolved = { key: `${d.key}-${Date.now()}`, text, at: Date.now(), suggestionId, decisionKey: d.key };
     setResolved(r => [item, ...r]);
-    toast.show(text, undo ? { label: 'Undo', run: () => { void undo().then(() => { setResolved(r => r.filter(x => x.key !== item.key)); setHidden(h => { const n = new Set(h); n.delete(d.key); return n; }); }); } } : undefined);
+    if (typeof suggestionId === 'number') setResolvedOpen(true);
+    toast.show(text, typeof suggestionId === 'number' ? { label: 'Undo', run: () => { void undoResolved(item); } } : undefined);
     window.setTimeout(reload, 400);
   }
 
@@ -105,8 +151,7 @@ export default function Today() {
                   <DecisionCard d={d} meName={meName}
                     onAccept={async s => {
                       await api.respond(teamId, s.id, 'accepted');
-                      resolve(d, `Swap accepted. #${s.task_number} moves from ${firstName(s.from_name, s.from_login)} to ${firstName(s.to_name, s.to_login)}.`,
-                        async () => { await api.respond(teamId, s.id, 'pending'); reload(); });
+                      resolve(d, `Swap accepted. #${s.task_number} moves from ${firstName(s.from_name, s.from_login)} to ${firstName(s.to_name, s.to_login)}.`, s.id);
                     }}
                     onNotAProblem={async () => {
                       if (d.risk) await api.dismissRisk(teamId, d.risk.id);
@@ -132,6 +177,17 @@ export default function Today() {
                       <li key={r.key} className="flex items-center gap-2.5 px-4 py-2.5 text-label font-normal">
                         <Check size={14} className="shrink-0 text-ok" aria-hidden="true" />
                         <span className="min-w-0 flex-1">{r.text}</span>
+                        {typeof r.suggestionId === 'number' && (
+                          <button
+                            type="button"
+                            className="shrink-0 font-semibold underline underline-offset-[3px] hover:text-fg disabled:opacity-50"
+                            disabled={undoingKey === r.key}
+                            aria-busy={undoingKey === r.key || undefined}
+                            onClick={() => { void undoResolved(r); }}
+                          >
+                            Undo
+                          </button>
+                        )}
                         <span className="shrink-0 text-fg-muted">{new Date(r.at).toLocaleDateString(undefined, { weekday: 'short' })}</span>
                       </li>
                     ))}

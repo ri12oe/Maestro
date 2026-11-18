@@ -52,7 +52,7 @@ If the deploy log says `Created missing database folder`, the path in `DB_PATH` 
 
 Service → Variables. These are the names `server/src` reads with `process.env`, outside tests. Test files only assign the same names for fixtures. `server/src/db/seed.ts` also contains the text `process.env.DATABASE_URL` and `process.env.REDIS_URL` inside sample commit diffs. The server does not read those.
 
-`.env.example` lists the same nine names for a local copy. That file is set up for local mock mode: `NODE_ENV=development`, `PORT=3001`, `DB_PATH=./dev.db`, `AI_PROVIDER=mock`, an empty `SITE_PASSWORD`, `SITE_USER=maestro`, and placeholders for `GITHUB_TOKEN` and `XAI_API_KEY`. Do not copy those local values into this dashboard. Use the table below. There is no `.env` file on Railway.
+`.env.example` lists the same ten names for a local copy. That file is set up for local mock mode: `NODE_ENV=development`, `PORT=3001`, `DB_PATH=./dev.db`, `AI_PROVIDER=mock`, an empty `SITE_PASSWORD`, `SITE_USER=maestro`, placeholders for `GITHUB_TOKEN` and `XAI_API_KEY`, and `SEED_DEMO` commented out so a local server does not seed. Do not copy those local values into this dashboard. Use the table below. There is no `.env` file on Railway.
 
 Railway injects `PORT`. Leave it unset. The server listens on that value, and falls back to 3001 only when `PORT` is missing.
 
@@ -69,6 +69,7 @@ Railpack also sets `NODE_ENV=production` on the running container, and it still 
 | `GITHUB_TOKEN` | Optional | Read-only GitHub token used by Sync. The demo seed does not call GitHub. Sync responds 503 when the token is missing. Read in `server/src/ingestion/sync.ts` and `server/src/routes/teams.ts`. | secret, set in Railway |
 | `SITE_PASSWORD` | Optional | When set, pages and API routes ask for HTTP Basic auth. `GET /api/health` stays open so Railway can probe it. Read in `server/src/middleware/sitePassword.ts`. | secret, set in Railway |
 | `SITE_USER` | Optional | Basic-auth username, used only when `SITE_PASSWORD` is set. Default `maestro`. Read in `server/src/middleware/sitePassword.ts`. | `maestro` |
+| `SEED_DEMO` | Optional | When this is exactly `1`, startup inserts the StudyBuddy demo into `DB_PATH` after migrations. The insert uses the mock provider, so it does not call xAI or GitHub. If a team named StudyBuddy already exists, startup skips it. Other teams are left as they are. A failure is logged and the process still listens. Read in `server/src/db/seed.ts`, called from `server/src/index.ts`. | `1` on the public site. Leave unset otherwise. |
 
 `mock` is the provider the StudyBuddy demo was checked with. Use `grok` only when both `XAI_API_KEY` and `GROK_MODEL` are set.
 
@@ -100,28 +101,17 @@ Expect:
 
 When `SITE_PASSWORD` is set, `/api/health` still returns `200` with no credentials. Add `-u maestro:YOUR_PASSWORD` (or whatever `SITE_USER` is) to the other curls. Those return `401` until the credentials are sent.
 
-### Seed the demo team
+### StudyBuddy on the public site
 
-The seed is optional. It inserts the StudyBuddy team (Rio, Sam, Priya, Jordan, 31 contributions, a high risk, and a pending suggestion) and then skips if that team already exists. It reads `DB_PATH` and `AI_PROVIDER` from the environment.
+Set `SEED_DEMO=1` and deploy. After migrations, `node dist/index.js` inserts the StudyBuddy team into the same file as `DB_PATH` (`/data/maestro.db` when the volume is mounted at `/data`). The insert is compiled into the server build, so the container does not need `tsx`. It uses the mock provider even when `AI_PROVIDER=grok`, so it does not call xAI or GitHub. The log prints `Created team StudyBuddy (id=N)`.
 
-Run it in the deployed container, where `/data` is mounted. Link the project (`railway link`), then:
+If that team is already in the file, startup prints the existing id and inserts nothing. Other teams stay as they are. If the insert throws, the server logs `[seed] SEED_DEMO failed` and still listens.
 
-```bash
-railway ssh -- node /app/server/dist/db/seed.js
-```
+Leaving `SEED_DEMO=1` on later deploys is safe. Unset it when a restart should skip the check.
 
-`railway ssh` runs that file on the service. `railway run` runs on your computer, so it would miss the volume. The log prints the team id. On an empty database that id is 1.
+`/api/teams` then includes StudyBuddy (Rio, Sam, Priya, Jordan, a high risk on issue #12, and a pending suggestion) along with any real teams. Open `$BASE/t/N` for the id the log printed.
 
-Then:
-
-```bash
-curl -sS -D - "$BASE/api/teams"
-curl -sS -D - "$BASE/api/teams/1"
-```
-
-`/api/teams` is a one-element array whose `name` is `StudyBuddy`. `/api/teams/1` is that team. Open `$BASE/teams/1` in a browser for the dashboard. Use the id the seed printed if it is not 1.
-
-With `AI_PROVIDER=mock` the seed stays offline. With `AI_PROVIDER=grok` the same command calls xAI and needs `XAI_API_KEY` and `GROK_MODEL`.
+`npm run seed --workspace=server` still seeds a local database. It is the same insert, and it still follows `AI_PROVIDER`.
 
 ## 5. Deploy a change
 

@@ -4,9 +4,9 @@ Maestro is the shared view of a student team project. It used to be called Group
 
 A team connects its GitHub repository. Maestro reads commits and Issues, labels each contribution (work type, substance, and a one-line summary), and shows every member the same picture: who did what, which tasks have gone quiet, and a suggested task swap. Off-repo work can be logged. An AI label can be disputed from the member page.
 
-The demo runs from a local copy. The steps are under [Demo](#demo).
+The StudyBuddy demo is on the public site at https://maestro-production-70bb78b5.up.railway.app. The server seeds it once at startup when `SEED_DEMO=1`, alongside any real teams. The same demo can be run locally. The steps are under [Demo](#demo).
 
-The live site at https://maestro-production-70bb78b5.up.railway.app holds real teams and is not where the demo runs. It is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`). Judges get the credentials separately.
+The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`). Judges get the credentials separately.
 
 ## Screens
 
@@ -52,11 +52,11 @@ cp .env.example .env
 npm install
 ```
 
-Leave the copied `.env` as it is. It lists every variable the server reads: `PORT`, `NODE_ENV`, `DB_PATH`, `AI_PROVIDER`, `XAI_API_KEY`, `GROK_MODEL`, `GITHUB_TOKEN`, `SITE_USER`, and `SITE_PASSWORD`.
+Leave the copied `.env` as it is. It lists every variable the server reads: `PORT`, `NODE_ENV`, `DB_PATH`, `AI_PROVIDER`, `XAI_API_KEY`, `GROK_MODEL`, `GITHUB_TOKEN`, `SITE_USER`, `SITE_PASSWORD`, and `SEED_DEMO`.
 
 `DB_PATH=./dev.db` is the SQLite file at the repo root. A relative path is resolved from the repo root, so the dev server, seed, migrate, and eval open that same file. An absolute path is used as given (`DB_PATH=/data/maestro.db` on Railway). When `DB_PATH` is unset, the file is still `<repo>/dev.db`. Each command prints `Migration complete:` and that path.
 
-`AI_PROVIDER=mock` and `NODE_ENV=development` in the copied file are enough for the demo. The dev server does not serve `client/dist`. The seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
+`AI_PROVIDER=mock` and `NODE_ENV=development` in the copied file are enough to run locally. `SEED_DEMO` is commented out, so the dev server does not insert StudyBuddy on startup. The dev server does not serve `client/dist`. The seed does not call GitHub, and it does not read `XAI_API_KEY` or `GROK_MODEL`.
 
 `GITHUB_TOKEN` and `XAI_API_KEY` in the copied file are placeholders, not real credentials. Sync against a real repository needs a read-only personal access token in `GITHUB_TOKEN`. Sync responds with 503 when that variable is unset or empty. Grok needs `AI_PROVIDER=grok`, a real `XAI_API_KEY`, and `GROK_MODEL`.
 
@@ -73,9 +73,9 @@ The API listens on port 3001. Vite listens on port 5173 and proxies `/api` to `h
 
 ## Demo
 
-The demo runs locally, with `AI_PROVIDER=mock`. The live Railway site holds real teams and is not where the demo runs. The seed writes the local SQLite file only.
+StudyBuddy is on the public site, seeded once via `SEED_DEMO=1`, and it can also be run locally. On the public site the seed runs at startup against the server's SQLite file, with the mock provider, and it leaves other teams alone. A second start finds StudyBuddy and inserts nothing.
 
-The copied `.env` sets `AI_PROVIDER=mock` and `DB_PATH=./dev.db` (resolved from the repo root). From the repo root, in two terminals:
+Locally, `SEED_DEMO` stays commented, so the dev server does not seed on startup. The copied `.env` sets `AI_PROVIDER=mock` and `DB_PATH=./dev.db` (resolved from the repo root). From the repo root, in two terminals:
 
 ```bash
 npm run dev:server

@@ -383,7 +383,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 - Seed script (from Milestone 2) populates a demo team with 4 simulated members, ≥20 contributions, one stalled task, one overloaded member; after running the AI pipeline the dashboard shows at least one high-priority risk card and at least one rebalance suggestion.
 - App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (production is `main` `6d8ef1c`, deployed to Railway on 2026-11-17 as deployment `5143d6dd`. The health check passed. Smoke tests passed. Pushes to `main` do not auto-deploy.)
 - Public URL is accessible and the demo scenario loads without errors.
-- `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link. — done (the demo steps in `README.md` are local. The live Railway URL is in that file, and the page says that site holds real teams and is not where the demo runs. The site asks for HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`; judges get those credentials separately.)
+- `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link. — done (the StudyBuddy demo is on the public Railway site, seeded once via `SEED_DEMO=1`, and `README.md` also has the local seed steps. The site asks for HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`; judges get those credentials separately.)
 - No secrets appear in the repo; `.env.example` is complete. — done
 - All acceptance criteria from Milestones 1–3 still pass against the deployed instance.
 

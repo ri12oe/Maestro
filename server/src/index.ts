@@ -16,6 +16,8 @@ import summaryRouter from './routes/summary.js';
 import assistantRouter from './routes/assistant.js';
 import { sitePassword } from './middleware/sitePassword.js';
 import { serveProductionClient } from './serveClient.js';
+import db from './db/client.js';
+import { seedDemoOnStartup } from './db/seed.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ?? 3001;
@@ -48,6 +50,10 @@ const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (process.env.NODE_ENV === 'production') {
   serveProductionClient(app, clientDist);
 }
+
+// Migrations already ran when the database module loaded. SEED_DEMO=1 inserts
+// StudyBuddy into that same file. A seed error is logged and the server still listens.
+await seedDemoOnStartup(db);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

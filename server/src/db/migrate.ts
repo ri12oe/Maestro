@@ -8,6 +8,32 @@ import { resolveDbPath } from './paths.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
+ * Add a column when this database does not have it yet.
+ *
+ * schema.sql already declares every column, so a fresh database skips ALTER.
+ * An older database gets ALTER TABLE … ADD COLUMN, which leaves existing rows
+ * in place (new columns are NULL, or the DEFAULT written here). A duplicate
+ * column is ignored so a database that already has the column — because
+ * schema.sql created it, or a previous attempt added it — still records the
+ * migration.
+ */
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (cols.some(c => c.name === column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/duplicate column name/i.test(message)) throw err;
+  }
+}
+
+/**
  * Run the schema migration against the given database file.
  *
  * The base migration applies schema.sql (idempotent via CREATE TABLE IF NOT EXISTS).
@@ -95,19 +121,15 @@ export function runMigration(dbPath: string): void {
   /**
    * migration_002: Add files_changed, additions, deletions to contributions.
    *
-   * ALTER TABLE … ADD COLUMN is safe on SQLite — the new columns default to NULL
-   * and do not rewrite existing rows.  We run each statement separately and
-   * ignore "duplicate column" errors so the migration is idempotent.
+   * ALTER TABLE … ADD COLUMN leaves existing rows in place. The new columns
+   * are NULL. schema.sql already declares them, so a fresh database skips
+   * the ALTER.
    */
   if (!appliedSet.has('migration_002_contributions_diff_stats')) {
     db.transaction(() => {
-      for (const col of [
-        'ALTER TABLE contributions ADD COLUMN files_changed INTEGER',
-        'ALTER TABLE contributions ADD COLUMN additions INTEGER',
-        'ALTER TABLE contributions ADD COLUMN deletions INTEGER',
-      ]) {
-        try { db.exec(col); } catch { /* column already exists — idempotent */ }
-      }
+      addColumnIfMissing(db, 'contributions', 'files_changed', 'INTEGER');
+      addColumnIfMissing(db, 'contributions', 'additions', 'INTEGER');
+      addColumnIfMissing(db, 'contributions', 'deletions', 'INTEGER');
       db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
         'migration_002_contributions_diff_stats',
       );
@@ -122,9 +144,7 @@ export function runMigration(dbPath: string): void {
    */
   if (!appliedSet.has('migration_003_contributions_paths')) {
     db.transaction(() => {
-      try {
-        db.exec('ALTER TABLE contributions ADD COLUMN paths TEXT');
-      } catch { /* column already exists — idempotent */ }
+      addColumnIfMissing(db, 'contributions', 'paths', 'TEXT');
       db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
         'migration_003_contributions_paths',
       );
@@ -139,13 +159,9 @@ export function runMigration(dbPath: string): void {
    */
   if (!appliedSet.has('migration_004_rematch_and_sync_status')) {
     db.transaction(() => {
-      for (const col of [
-        'ALTER TABLE contributions ADD COLUMN match_checked_task_id INTEGER',
-        'ALTER TABLE teams ADD COLUMN last_synced_at TEXT',
-        'ALTER TABLE teams ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0',
-      ]) {
-        try { db.exec(col); } catch { /* column already exists — idempotent */ }
-      }
+      addColumnIfMissing(db, 'contributions', 'match_checked_task_id', 'INTEGER');
+      addColumnIfMissing(db, 'teams', 'last_synced_at', 'TEXT');
+      addColumnIfMissing(db, 'teams', 'is_demo', 'INTEGER NOT NULL DEFAULT 0');
       db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_004_rematch_and_sync_status');
     })();
   }
@@ -158,9 +174,7 @@ export function runMigration(dbPath: string): void {
    */
   if (!appliedSet.has('migration_005_teams_deadline')) {
     db.transaction(() => {
-      try {
-        db.exec('ALTER TABLE teams ADD COLUMN deadline TEXT');
-      } catch { /* column already exists — idempotent */ }
+      addColumnIfMissing(db, 'teams', 'deadline', 'TEXT');
       db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_005_teams_deadline');
     })();
   }
@@ -172,9 +186,7 @@ export function runMigration(dbPath: string): void {
    */
   if (!appliedSet.has('migration_006_teams_report_enabled')) {
     db.transaction(() => {
-      try {
-        db.exec('ALTER TABLE teams ADD COLUMN report_enabled INTEGER NOT NULL DEFAULT 0');
-      } catch { /* column already exists — idempotent */ }
+      addColumnIfMissing(db, 'teams', 'report_enabled', 'INTEGER NOT NULL DEFAULT 0');
       db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run('migration_006_teams_report_enabled');
     })();
   }

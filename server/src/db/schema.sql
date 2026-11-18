@@ -60,10 +60,12 @@ CREATE TABLE IF NOT EXISTS contributions (
   files_changed     INTEGER,               -- number of files touched (from GitHub API)
   additions         INTEGER,               -- total lines added
   deletions         INTEGER,               -- total lines deleted
+  paths             TEXT,                  -- JSON array of file paths changed by a commit; null for manual entries
   url               TEXT,                  -- link to GitHub commit
   embedding         BLOB,                  -- Float32 vector for task-matching
   authored_at       TEXT    NOT NULL,
-  synced_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  synced_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  match_checked_task_id INTEGER            -- highest task id this commit has been checked against
 );
 
 -- classifications: AI label for each contribution (cached by contribution_id)

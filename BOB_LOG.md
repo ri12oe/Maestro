@@ -1024,3 +1024,19 @@ The public site cannot run `npm run seed`, because that script uses `tsx` and `t
 | `docs/PLAN.md` | The milestone 4 README line now says the demo is on the public site. |
 
 `npm run build` succeeded. `npm test --workspace=server`: 21 files, 200 passed (200). Main had 198. Not deployed.
+
+## 2026-11-18 — Session 40: schema.sql includes every migration column (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`schema.sql` was missing two columns that later migrations add: `contributions.paths` (migration_003, JSON array of changed file paths) and `contributions.match_checked_task_id` (migration_004, highest task id that commit has been checked against). The other columns migrations add were already in the base schema: `files_changed`, `additions`, `deletions`, `teams.last_synced_at`, `teams.is_demo`, `teams.deadline`, and `teams.report_enabled`. A fresh database built from `schema.sql` alone now has the same columns as one that has run every migration.
+
+`addColumnIfMissing` reads `PRAGMA table_info` and skips `ALTER TABLE` when the column is already there, including when `schema.sql` just created it. A duplicate-column error is still ignored. An older database that lacks the column still gets `ALTER TABLE … ADD COLUMN`, and its rows stay. Migrations already recorded in `schema_migrations` do not run again, so the production volume at `/data/maestro.db` is unchanged.
+
+| File | Change |
+|---|---|
+| `server/src/db/schema.sql` | `contributions.paths` and `contributions.match_checked_task_id`. |
+| `server/src/db/migrate.ts` | Skip `ALTER TABLE` when the column already exists. |
+| `server/src/tests/migration.test.ts` | A fresh migrated database matches the expected columns and `schema.sql` alone. A second migrate changes nothing. An older database gains the columns and keeps its rows. |
+
+`npm run build` succeeded. `npm test --workspace=server`: 21 files, 202 passed (202). Main had 200. Not deployed.

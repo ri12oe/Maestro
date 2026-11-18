@@ -1123,3 +1123,20 @@ Server production dependencies are absent from the report: express 4.22.3, bette
 | react-router-dom | 6.30.6 | moderate | production client bundle | 7.18.6, which depends on that react-router. |
 
 `npm run lint` passed. `npm run build` succeeded. `npm test`: server 21 files, 205 passed (205); client 1 file, 8 passed (8). The known `database is locked` flake in `reasoner.test.ts` did not occur. Not deployed.
+
+## 2026-11-18 — Session 45: Each Vitest file gets its own database (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`npm test --workspace=server` could fail once on a fresh checkout with `SqliteError: database is locked` while loading `server/src/tests/reasoner.test.ts`. `server/src/db/client.ts` opens `DB_PATH` and migrates it as soon as the module is imported. `reasoner.test.ts` imports the reasoner, and `ai.test.ts` imports the classifier, so both open that singleton at load. With `DB_PATH` unset, both migrate `<repo>/dev.db`. Vitest runs files in parallel, so two workers were migrating that one file.
+
+Vitest now runs `server/src/tests/setup.ts` in the worker before the test file is imported. That sets `DB_PATH` to a temp file. The directory name includes `VITEST_POOL_ID` (or `VITEST_WORKER_ID` when the pool id is absent). Each test file in the worker gets the next file in that directory, so a connection left open by the previous file cannot lock the next migration. The worker deletes the directory on exit. `server/src/tests/global-setup.ts` removes any `maestro-vitest-*` directory still under the OS temp dir. `client.ts` and `resolveDbPath` are unchanged. A path set here still wins over `.env`, because `loadEnv.ts` does not override it. Forks stay isolated so each file imports `client.ts` again.
+
+| File | Change |
+|---|---|
+| `server/src/tests/setup.ts` | Sets `DB_PATH` before tests import the database. |
+| `server/src/tests/workerDb.ts` | Per-worker temp directory, one file per test, cleanup. |
+| `server/src/tests/global-setup.ts` | Removes leftover temp directories after the run. |
+| `server/vitest.config.ts` | Registers the setup file and the global teardown. Keeps fork isolation on. |
+
+From a clean tree (no `server/dev.db`, no repo `dev.db`, no `maestro-vitest-*` temp dirs), `npm test --workspace=server` passed 10 times: 21 files, 205 passed (205) each time. No `dev.db` was created under `server/` or the repo root. No worker temp directory was left in the OS temp dir. `npm run lint` passed. `npm run build` succeeded. `npm test`: server 21 files, 205 passed (205); client 1 file, 8 passed (8). Not deployed.

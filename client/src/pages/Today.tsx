@@ -323,6 +323,7 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
               ? <a key={c.id} href={href} target="_blank" rel="noreferrer" className={cls} title={c.title}><Icon size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{label}</span></a>
               : <span key={c.id} className={cls} title={c.title}><Icon size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{label}</span></span>;
           })}
+          {chips.length > 3 && <span className="inline-flex h-6 items-center rounded-full bg-surface-2 px-2 text-[11.5px] text-fg-muted">+{chips.length - 3} more</span>}
           {chips.length > 0 && task && <Link to={`${base}/plan/${taskNumber}`} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-surface-2 px-2 font-mono text-[11.5px] text-fg-muted hover:text-fg"><CircleDot size={12} aria-hidden="true" />#{taskNumber}</Link>}
           {evidenceTasks.map(t => {
             const n = t.github_issue_number;
@@ -332,7 +333,6 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
               </Link>
             );
           })}
-          {chips.length > 3 && <span className="inline-flex h-6 items-center rounded-full bg-surface-2 px-2 text-[11.5px] text-fg-muted">+{chips.length - 3} more</span>}
         </div>
       )}
 

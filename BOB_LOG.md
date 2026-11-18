@@ -1073,3 +1073,30 @@ The client runs these cases with Vitest (`npm test --workspace=client`). No DOM 
 | `client/package.json` | `test` script and `vitest` devDependency. |
 
 `npm run build` succeeded. `npm test --workspace=server`: 21 files, 205 passed (205). `npm test --workspace=client`: 1 file, 8 passed (8). Not deployed.
+
+## 2026-11-18 — Session 43: ESLint for the client and the server (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Root `npm run lint` runs the server lint script, then the client lint script. Both use one flat config at the repo root, `eslint.config.js`. The root `package.json` is `"type": "module"` so Node loads that file as ESM. `typescript-eslint` recommended applies to TypeScript in both workspaces. `eslint-plugin-react-hooks` recommended applies to `client/**/*.{ts,tsx}`.
+
+Five rules from that hooks preset flag existing patterns and are off, each with a one-line comment in the config: `set-state-in-effect`, `purity`, `immutability`, `refs`, and `use-memo`. `rules-of-hooks` and `exhaustive-deps` stay on. No hooks-rule violation needed a code change.
+
+`@typescript-eslint/no-unused-vars` reported five unused bindings. Each edit only drops or voids a binding nothing reads:
+
+- `server/src/ai/provider.ts`: the Zod retry catch no longer binds `_parseErr`.
+- `server/src/db/seed.ts`: `task12Id` is voided with the other inserted task ids.
+- `server/src/tests/ai.test.ts`: the unused counter `n` is gone.
+- `server/src/tests/sync.test.ts`: unused `beforeEach` and `afterEach` imports are gone.
+
+The root `test` script now runs the server tests, then the client tests. The README local-run section names `npm run lint` and `npm test`.
+
+| File | Change |
+|---|---|
+| `eslint.config.js` | Flat config: typescript-eslint recommended, react-hooks on `client/`. |
+| `package.json` | `lint` runs both workspaces. `test` runs server, then client. `type` is `module`. ESLint dev dependencies. |
+| `server/package.json`, `client/package.json` | `lint` script: `eslint .` |
+| `README.md` | Local-run section includes `npm run lint` and `npm test`. |
+| `server/src/ai/provider.ts`, `server/src/db/seed.ts`, `server/src/tests/ai.test.ts`, `server/src/tests/sync.test.ts` | Unused bindings removed or voided. |
+
+`npm run lint` passed with no errors. `npm run build` succeeded. `npm test --workspace=server`: 21 files, 205 passed (205). `npm test --workspace=client`: 1 file, 8 passed (8). Not deployed.

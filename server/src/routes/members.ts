@@ -62,7 +62,7 @@ router.delete('/:memberId', (req: Request<TeamParams & { memberId: string }>, re
 
   if (hasContributions || hasSuggestions) {
     res.status(409).json({
-      error: 'Cannot remove this member because they still have logged work or suggestions',
+      error: "Can't remove this member because they have logged work or suggestions. Keep them on the team so that history stays.",
     });
     return;
   }

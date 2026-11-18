@@ -63,7 +63,9 @@ describe('DELETE /api/teams/:teamId/members/:memberId', () => {
     const res = await request(app).delete(`/api/teams/${teamId}/members/${memberId}`);
 
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/logged work or suggestions/);
+    expect(res.body.error).toBe(
+      "Can't remove this member because they have logged work or suggestions. Keep them on the team so that history stays.",
+    );
     expect(memberExists(memberId)).toBe(true);
     expect(db.prepare('SELECT id FROM contributions WHERE id = ?').get(contributionId)).toEqual({
       id: contributionId,
@@ -84,7 +86,9 @@ describe('DELETE /api/teams/:teamId/members/:memberId', () => {
     const res = await request(app).delete(`/api/teams/${teamId}/members/${toId}`);
 
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/logged work or suggestions/);
+    expect(res.body.error).toBe(
+      "Can't remove this member because they have logged work or suggestions. Keep them on the team so that history stays.",
+    );
     expect(memberExists(toId)).toBe(true);
     expect(memberExists(fromId)).toBe(true);
   });

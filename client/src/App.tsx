@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router';
 import Shell from './app/Shell.tsx';
 import Start from './pages/Start.tsx';
 import Today from './pages/Today.tsx';

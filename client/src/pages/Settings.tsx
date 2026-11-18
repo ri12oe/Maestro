@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
-import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, useNavigate, useParams } from 'react-router';
 import { Monitor, Moon, Sun, X } from 'lucide-react';
 import { api } from '../api/client.ts';
 import { useApi } from '../hooks/useApi.ts';

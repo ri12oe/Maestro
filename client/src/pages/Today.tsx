@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ArrowRight, CalendarClock, Check, ChevronRight, CircleDot, Copy, GitCommitHorizontal, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Contribution, Risk, Suggestion, Task } from '../api/types.ts';

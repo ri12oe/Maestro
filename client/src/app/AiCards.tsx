@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Check, CircleCheck, Copy, Gauge, RefreshCw, TriangleAlert } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Digest, PlanCheck, PlanVerdict } from '../api/types.ts';

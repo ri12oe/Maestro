@@ -7,9 +7,13 @@ export function shortDate(iso: string): string {
   return shortFmt.format(d);
 }
 
-/** "today", "yesterday", "5 days ago". */
+/** "today", "yesterday", "5 days ago", counted in the viewer's local calendar days. */
 export function daysAgo(iso: string, now = new Date()): string {
-  const days = Math.floor((now.getTime() - new Date(iso).getTime()) / DAY);
+  const then = new Date(iso);
+  const days = Math.round(
+    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+      Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) / DAY,
+  );
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   return `${days} days ago`;

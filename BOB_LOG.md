@@ -1055,3 +1055,21 @@ The mock classifier still sets `summary` to `${work_type} work: ${title.slice(0,
 | `server/src/tests/ai.test.ts` | Empty and whitespace-only summaries are rejected. A normal summary passes. The mock summary is non-empty. |
 
 `npm run build` succeeded. `npm test --workspace=server`: 21 files, 205 passed (205). Main had 202. Not deployed.
+
+## 2026-11-18 — Session 42: Today and yesterday follow the local calendar day (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`daysAgo` was counting elapsed 24-hour blocks. Just after midnight, 23:59 the previous evening was "today". A noon-UTC manual log for yesterday (`YYYY-MM-DDT12:00:00Z`, unchanged in `server/src/routes/manual.ts`) was still "today" for a viewer in the morning in UTC or a US timezone, because fewer than 24 hours had passed.
+
+"Today" is now the same local calendar day, and "yesterday" is the previous one, in the viewer's timezone. Older days stay "N days ago". `shortDate`, `dueLabel`, and `timeAgo` are unchanged.
+
+The client runs these cases with Vitest (`npm test --workspace=client`). No DOM environment. The noon-UTC cases set `process.env.TZ` to America/Indianapolis, America/Chicago, America/Denver, America/Los_Angeles, and UTC.
+
+| File | Change |
+|---|---|
+| `client/src/dates.ts` | Compare local calendar days in `daysAgo`. |
+| `client/src/dates.test.ts` | Midnight, 25-hour, and noon-UTC manual-date cases. |
+| `client/package.json` | `test` script and `vitest` devDependency. |
+
+`npm run build` succeeded. `npm test --workspace=server`: 21 files, 205 passed (205). `npm test --workspace=client`: 1 file, 8 passed (8). Not deployed.

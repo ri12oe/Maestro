@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router';
 import { CircleCheck, CircleDashed, CircleDot, ExternalLink, GitCommitHorizontal, NotebookPen, Search } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { RiskLevel, Task } from '../api/types.ts';

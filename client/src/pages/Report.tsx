@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Link2, Printer } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Contribution } from '../api/types.ts';

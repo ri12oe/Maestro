@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { ExternalLink, GitCommitHorizontal, MessageSquareWarning, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Contribution, MemberSummary } from '../api/types.ts';

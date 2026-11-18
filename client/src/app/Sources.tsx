@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { CircleDot, GitCommitHorizontal, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { SourceRef } from '../api/types.ts';

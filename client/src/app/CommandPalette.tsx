@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { CircleDot, FileText, ListChecks, Moon, Plus, RefreshCw, Search, Settings2, Sun, User, Users } from 'lucide-react';
 import { LogoMark } from '../components/Bulb.tsx';
 import { Kbd } from '../ui/primitives.tsx';

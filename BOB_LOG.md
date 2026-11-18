@@ -1140,3 +1140,41 @@ Vitest now runs `server/src/tests/setup.ts` in the worker before the test file i
 | `server/vitest.config.ts` | Registers the setup file and the global teardown. Keeps fork isolation on. |
 
 From a clean tree (no `server/dev.db`, no repo `dev.db`, no `maestro-vitest-*` temp dirs), `npm test --workspace=server` passed 10 times: 21 files, 205 passed (205) each time. No `dev.db` was created under `server/` or the repo root. No worker temp directory was left in the OS temp dir. `npm run lint` passed. `npm run build` succeeded. `npm test`: server 21 files, 205 passed (205); client 1 file, 8 passed (8). Not deployed.
+
+## 2026-11-18 — Session 46: React Router 7 on the client (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The client stays in library mode: `BrowserRouter`, `Routes`, and `Route` in `client/src/App.tsx`. React stays 18. `react-router` 7.18.6 replaces `react-router-dom` 6.30.6. 7.18.6 is the last 7.x release. It is the audit fix named for `react-router-dom`, and its peer dependency is `react >= 18`. The current `latest` tag is React Router 8, which asks for React 19, so this install is `react-router@^7.18.6`.
+
+Imports follow the v6-to-v7 upgrade guide and come from `react-router`. The app does not use `RouterProvider`, so nothing imports `react-router/dom`. The v7 `BrowserRouter` has no `future` prop; the v6 flags are the defaults. There is no data router, so the fetcher, form-method, partial-hydration, and action-revalidation flags do not apply. No loader returns `json` or `defer`. No component calls `React.lazy`, so navigations stay on the default `startTransition` path. The splat route is `/teams/:teamId/*`. `LegacyRedirect` sends an absolute `/t/...` location, and the other `Link` and `navigate` calls are absolute too, so the v7 relative-splat rule does not move a link. The route table is unchanged.
+
+The StudyBuddy seed still stores a sample diff that mentions `react-router-dom`. That string is commit text in the demo database, not an import.
+
+| File | Change |
+|---|---|
+| `client/package.json`, `package-lock.json` | `react-router` ^7.18.6 replaces `react-router-dom` ^6.23.1 and the nested `react-router` 6.30.6. |
+| `client/src/App.tsx`, `Shell.tsx`, `AiCards.tsx`, `CommandPalette.tsx`, `Sources.tsx`, `Start.tsx`, `Today.tsx`, `Plan.tsx`, `People.tsx`, `Report.tsx`, `Settings.tsx` | Import path is `react-router`. |
+
+`npm audit --omit=dev` reports 0 vulnerabilities. A full `npm audit` is the six dev and build findings from session 44: vitest, tinypool, vite, esbuild, @vitest/mocker, and vite-node. React Router is not in that list.
+
+`npm run lint` passed. `npm run build` succeeded. `npm test`: server 21 files, 205 passed (205); client 1 file, 8 passed (8).
+
+Production check, from the repo root, after that build: `NODE_ENV=production AI_PROVIDER=mock DB_PATH=/tmp/maestro-rr7.db SEED_DEMO=1 PORT=3456 npm start`. `SITE_PASSWORD` was unset. The gate runs only when that variable is set. Startup seeded StudyBuddy as team 1. Each of these returned `200` `text/html` and the SPA document (`id="root"`, title Maestro): `/`, `/t/1`, `/t/1/plan`, and the deep link `/t/1/plan/12`.
+
+Headless Chrome then loaded that server and rendered every route in the table below. No page error. Not deployed.
+
+| Route | What rendered |
+|---|---|
+| `/` | Start. "Your teams", with StudyBuddy. `/?new=1` on the same route rendered "Meet Maestro". |
+| `/t/:teamId` | Shell, Today. `/t/1` heading Today. `/t/999` heading "This team doesn't exist". |
+| `/t/:teamId/plan` | Plan. |
+| `/t/:teamId/plan/:issue` | Plan. `/t/1/plan/12` included Auth flow. |
+| `/t/:teamId/people` | People. |
+| `/t/:teamId/people/:memberId` | People. `/t/1/people/2` included Sam. |
+| `/t/:teamId/report` | Project report. The seed leaves the report off, so the page says it is off. |
+| `/t/:teamId/maestro` | Maestro. |
+| `/t/:teamId/settings` | Settings. |
+| `/t/:teamId/settings/:section` | Settings. `/t/1/settings/deadline` included Deadline. |
+| `/teams/:teamId/*` | Legacy redirect. `/teams/1` → `/t/1`. `/teams/1/settings` → `/t/1/settings`. `/teams/1/log` → `/t/1?log=1` with Log work open. `/teams/1/members/2` → `/t/1/people/2`. `/teams/1/risks` → `/t/1`. |
+| `*` | `/no-such-page` replaced the history entry with `/`. |

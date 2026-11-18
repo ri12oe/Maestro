@@ -4,22 +4,22 @@ Maestro is the shared view of a student team project. It used to be called Group
 
 A team connects its GitHub repository. Maestro reads commits and Issues, labels each contribution (work type, substance, and a one-line summary), and shows every member the same picture: who did what, which tasks have gone quiet, and a suggested task swap. Off-repo work can be logged. An AI label can be disputed from the member page.
 
-Demo: https://maestro-production-70bb78b5.up.railway.app
+The demo runs from a local copy. The steps are under [Demo](#demo).
 
-The live demo is behind a site password. That is HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`. Judges get the credentials separately.
+The live site at https://maestro-production-70bb78b5.up.railway.app holds real teams and is not where the demo runs. It is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`). Judges get the credentials separately.
 
 ## Screens
 
 - **Start** (`/`). Your teams, or connect a repository on one screen: paste `owner/repo` or a GitHub URL, Maestro syncs it and fills in the team from commit authors and the deadline from milestones, then you confirm and open it.
 - **Today** (`/t/:teamId`). Maestro's short brief on where the project stands, then "Needs the team": each risk and the swap that would fix it on one card, with Accept swap, Copy check-in and Not a problem. Side cards show the team's work mix, this week's activity and what's due soon.
-- **Plan** (`/plan`). Every task with a deadline strip, grouped by at risk, in progress, not started and done. A task opens in a panel with Maestro's note, any suggested swap and the work matched to it.
-- **People** (`/people`). The team's work on one scale, alphabetical, and a panel per person with their work mix, contributions, tasks and logged work. "Wrong label?" disputes a label in place.
-- **Report** (`/report`). The record for peer evaluations: team activity by week and each person's completed tasks, notable work and off-repo work. Off until anyone on the team turns it on in Settings. Export PDF prints it.
-- **Maestro** (`/maestro`). What the AI labeled, disputes, changes still waiting for a label, and how Maestro decides.
-- **Settings** (`/settings`). Members, team deadline, the report switch, theme, and deleting the team.
+- **Plan** (`/t/:teamId/plan` and `/t/:teamId/plan/:issue`). Every task with a deadline strip, grouped by at risk, in progress, not started and done. A task opens in a panel with Maestro's note, any suggested swap and the work matched to it.
+- **People** (`/t/:teamId/people` and `/t/:teamId/people/:memberId`). The team's work on one scale, alphabetical, and a panel per person with their work mix, contributions, tasks and logged work. "Wrong label?" disputes a label in place.
+- **Report** (`/t/:teamId/report`). The record for peer evaluations: team activity by week and each person's completed tasks, notable work and off-repo work. Off until anyone on the team turns it on in Settings. Export PDF prints it.
+- **Maestro** (`/t/:teamId/maestro`). What the AI labeled, disputes, changes still waiting for a label, and how Maestro decides.
+- **Settings** (`/t/:teamId/settings` and `/t/:teamId/settings/:section`). Members, team deadline, the report switch, theme, and deleting the team.
 - **Log work** is available from anywhere: the sidebar button, the mobile **+**, or the `L` key.
 
-Old `/teams/:id/...` links redirect to the new routes.
+`/teams/:teamId/*` redirects into `/t/:teamId` (`members/:id` goes to `/people/:id`, `settings` goes to `/settings`, and `log` goes to `?log=1`). Any other path redirects to `/`.
 
 ### Maestro AI
 
@@ -71,19 +71,32 @@ npm run dev:client
 
 The API listens on port 3001. Vite listens on port 5173 and proxies `/api` to `http://localhost:3001`. Open http://localhost:5173.
 
-## Seed the demo
+## Demo
+
+The demo runs locally, with `AI_PROVIDER=mock`. The live Railway site holds real teams and is not where the demo runs. The seed writes the local SQLite file only.
+
+The copied `.env` sets `AI_PROVIDER=mock` and `DB_PATH=./dev.db` (resolved from the repo root). From the repo root, in two terminals:
+
+```bash
+npm run dev:server
+npm run dev:client
+```
+
+`npm run dev:server` runs the server workspace `dev` script (`tsx watch src/index.ts`). `npm run dev:client` runs Vite. The API listens on port 3001. Vite listens on port 5173 and proxies `/api` to `http://localhost:3001`.
+
+Seed that local database:
 
 ```bash
 npm run seed --workspace=server
 ```
 
-The command inserts the StudyBuddy team, then runs the classifier and the risk reasoner before it exits. With `AI_PROVIDER=mock` that pipeline stays offline. It is not a separate step.
+That is the server `seed` script, `tsx src/db/seed.ts`. It inserts the StudyBuddy team, then runs the classifier and the risk reasoner before it exits. With `AI_PROVIDER=mock` that pipeline stays offline. It is not a separate step.
 
 StudyBuddy has 4 members (Rio, Sam, Priya, Jordan) and 31 contributions (28 commits and 3 manual entries). Issue #12 Auth flow is stalled. Sam is overloaded. The log prints a high risk and a pending suggestion.
 
-Running it again is safe. If StudyBuddy already exists, the command prints that team id and inserts nothing.
+The team id is not fixed. SQLite assigns it on insert. A new row prints `Created team StudyBuddy (id=N)` and, when the run finishes, `Team id: N`. If StudyBuddy is already in the file, the command prints `StudyBuddy team already exists (id=N). Skipping seed.` and inserts nothing.
 
-Open http://localhost:5173/teams/1, or the id the seed printed. Setup also links to StudyBuddy.
+Open http://localhost:5173/t/N with that id. Start at http://localhost:5173 lists StudyBuddy and links to the same path.
 
 ## Tests and eval
 

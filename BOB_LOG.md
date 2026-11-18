@@ -972,3 +972,35 @@ Only `9b4cf4a` (PR #21) and `e23e484` (PR #22) were deployed to production, with
 Smoke tests passed.
 
 The live site is https://maestro-production-70bb78b5.up.railway.app. It is behind a site password (HTTP basic auth via `SITE_USER` / `SITE_PASSWORD`). Judges get the credentials separately.
+
+## 2026-11-17 — Session 37: Railway config in .railway/railway.ts (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+PR #25, merge `6fa5705`. `.railway/railway.ts` records the production service as Infrastructure as Code. The file exports `partial = "Maestro"`. The service is `Maestro` in project `lucid-courtesy`. The builder is Railpack (`RAILPACK`), the build command is `npm run build`, the build environment is `V3`, and the start command is `npm start`. The restart policy is `ON_FAILURE`. There is one replica in `sfo`, and the private network endpoint is `maestro`. `variables.managed` is `false`, so the file does not write service variables. It does not declare the volume. `package.json` adds the `railway` package as a dev dependency so the CLI can evaluate the file. The production build does not import it.
+
+Cutover was not run. Cutover is `railway config migrate cutover`. `railway.json` stays in the repo. A deploy still reads `railway.json`. Railway does not read `.railway/` on deploy.
+
+| File | Change |
+|---|---|
+| `.railway/railway.ts` | IaC for the Maestro service: Railpack, `npm run build`, `npm start`, `ON_FAILURE`. |
+| `package.json` | `railway` dev dependency. |
+| `docs/RAILWAY.md` | The new file, and that cutover is a separate step. |
+
+## 2026-11-17 — Session 38: Public GET /api/health (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+PR #26, merge `6d8ef1c`. `GET /api/health` is a liveness probe. It runs `SELECT 1`. Success is `200` `{ "ok": true }`. A thrown query is `503` `{ "ok": false, "error": "Database check failed" }`. The body does not include the database path, environment values, or secrets. The site-password middleware lets this exact path through with no credentials. When `SITE_PASSWORD` is set, every other path still asks for auth.
+
+`railway.json` sets `deploy.healthcheckPath` to `/api/health`. `.railway/railway.ts` sets `healthcheck` to `/api/health`. Cutover is still not run, so a deploy reads the path from `railway.json`.
+
+`6d8ef1c` was deployed to Railway on 2026-11-17 (deployment `5143d6dd`). The health check passed. Smoke tests passed. That commit is production. It includes the Railway config from session 37 and this probe. Railway is still reading `railway.json`, not `.railway/railway.ts`.
+
+| File | Change |
+|---|---|
+| `server/src/routes/health.ts` | `GET /api/health`. |
+| `server/src/index.ts` | Mounts the route at `/api/health`. |
+| `server/src/middleware/sitePassword.ts` | Lets `/api/health` through with no credentials. |
+| `server/src/tests/health.test.ts`, `server/src/tests/site-password.test.ts` | The probe status codes and the password exception. |
+| `railway.json`, `.railway/railway.ts` | Healthcheck path `/api/health`. |

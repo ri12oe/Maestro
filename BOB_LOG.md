@@ -1004,3 +1004,23 @@ PR #26, merge `6d8ef1c`. `GET /api/health` is a liveness probe. It runs `SELECT 
 | `server/src/middleware/sitePassword.ts` | Lets `/api/health` through with no credentials. |
 | `server/src/tests/health.test.ts`, `server/src/tests/site-password.test.ts` | The probe status codes and the password exception. |
 | `railway.json`, `.railway/railway.ts` | Healthcheck path `/api/health`. |
+
+## 2026-11-18 — Session 39: Seed StudyBuddy on startup (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The public site cannot run `npm run seed`, because that script uses `tsx` and `tsx` is a dev dependency. `seedDemo(db)` is the same insert as before: if a team named StudyBuddy already exists, it logs that id and inserts nothing; otherwise it creates the team and logs the id. `npm run seed` still opens `DB_PATH`, migrates, calls `seedDemo`, and exits.
+
+`server/src/index.ts` calls `seedDemoOnStartup` after the database module has run migrations, and before `listen`. The call runs only when `SEED_DEMO` is exactly `1`. It forces `AI_PROVIDER=mock` for that call, so the classifier and reasoner make no network calls, then restores the previous provider. Other teams are not modified. A thrown seed is logged and the process still listens. `tsc` emits `dist/db/seed.js`, and `dist/index.js` imports it, so `node dist/index.js` runs the seed without `tsx`.
+
+| File | Change |
+|---|---|
+| `server/src/db/seed.ts` | `seedDemo(db)`, `seedStudyBuddy` (the CLI), and `seedDemoOnStartup`. |
+| `server/src/index.ts` | Calls `seedDemoOnStartup` on the server database after migrations. |
+| `server/src/tests/seed-startup.test.ts` | A temp database already has another team. Startup seeding twice creates one StudyBuddy team (4 members, high risk on #12, pending #14 Sam → Jordan) and leaves the other team unchanged. A thrown seed is logged and does not reject. |
+| `.env.example` | `SEED_DEMO=1` commented out. |
+| `README.md` | StudyBuddy is on the public site (`SEED_DEMO=1`) and can also be run locally. |
+| `docs/RAILWAY.md` | `SEED_DEMO` in the variable table, and the startup seed in place of a container shell. |
+| `docs/PLAN.md` | The milestone 4 README line now says the demo is on the public site. |
+
+`npm run build` succeeded. `npm test --workspace=server`: 21 files, 200 passed (200). Main had 198. Not deployed.

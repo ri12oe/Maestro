@@ -16,10 +16,16 @@
  *
  * Safe to re-run: skips if the "StudyBuddy" team already exists.
  * Pass `today` to pin commit dates, due dates, and the reasoner clock.
+ *
+ * `seedDemo(db)` writes into the database it is given and does not close it.
+ * `npm run seed` still opens DB_PATH, migrates, and calls that function.
+ * Server startup calls `seedDemoOnStartup(db)` after migrations when SEED_DEMO=1.
+ * That path forces the mock provider and keeps running if the seed throws.
  */
 
 import '../loadEnv.js';
 import Database from 'better-sqlite3';
+import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { runMigration } from './migrate.js';
 import { resolveDbPath } from './paths.js';
@@ -46,24 +52,18 @@ export interface SeedResult {
 }
 
 /**
- * Insert the StudyBuddy demo, then classify contributions and run the reasoner.
+ * Insert the StudyBuddy demo into `db`, then classify contributions and run the reasoner.
  * Leaves `teams.deadline` null so each task keeps its own milestone due date.
- * A second call finds the team and inserts nothing.
+ * A second call finds the team and inserts nothing. Other teams are not modified.
+ * Does not close `db`.
  */
-export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResult> {
-  const dbPath = resolveDbPath();
-  runMigration(dbPath);
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
+export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Promise<SeedResult> {
   const existing = db
     .prepare("SELECT id FROM teams WHERE name = 'StudyBuddy'")
     .get() as { id: number } | undefined;
 
   if (existing) {
     console.log(`StudyBuddy team already exists (id=${existing.id}). Skipping seed.`);
-    db.close();
     return { skipped: true, teamId: existing.id };
   }
 
@@ -213,9 +213,8 @@ export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResu
 
   // ── Run classifier ────────────────────────────────────────────────────────────
 
-  // classifyTeam uses the singleton in client.ts. .env is loaded and DB_PATH is
-  // resolved before that module opens, so this connection and the singleton
-  // are the same file.
+  // classifyTeam and the reasoner use the singleton in client.ts. `npm run seed`
+  // opens that same file before this runs. Startup passes the singleton itself.
   console.log('Running classifier...');
   const { classified, failed } = await classifyTeam(teamId);
   console.log(`Classified ${classified} contributions${failed > 0 ? `, ${failed} failed` : ''}`);
@@ -285,11 +284,49 @@ export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResu
   console.log(`   Classifications: ${classCount}`);
   console.log(`   Task matches: ${matchCount}`);
 
-  db.close();
   return { skipped: false, teamId };
 }
 
-// Run when invoked as `npm run seed`, not when a test imports seedStudyBuddy.
+/**
+ * Open the database at DB_PATH, migrate, and seed. This is `npm run seed`.
+ */
+export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResult> {
+  const dbPath = resolveDbPath();
+  runMigration(dbPath);
+  const db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  try {
+    return await seedDemo(db, today);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Server startup. When SEED_DEMO is exactly `1`, seed the server's open database
+ * with the mock provider so the insert makes no network calls. Any other value
+ * does nothing. A thrown seed is logged and swallowed so the process still listens.
+ */
+export async function seedDemoOnStartup(db: SqliteDatabase, today: Date = new Date()): Promise<void> {
+  if (process.env.SEED_DEMO !== '1') return;
+
+  const previous = process.env.AI_PROVIDER;
+  process.env.AI_PROVIDER = 'mock';
+  try {
+    await seedDemo(db, today);
+  } catch (err) {
+    console.error(
+      '[seed] SEED_DEMO failed; the server will keep running:',
+      err instanceof Error ? err.message : err,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.AI_PROVIDER;
+    else process.env.AI_PROVIDER = previous;
+  }
+}
+
+// Run when invoked as `npm run seed`, not when the server or a test imports this file.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = await seedStudyBuddy();
   if (result.skipped) process.exit(0);

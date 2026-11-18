@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CalendarClock, Check, ChevronRight, CircleDot, Copy, GitCommitHorizontal, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
-import type { Contribution, Risk, Suggestion } from '../api/types.ts';
+import type { Contribution, Risk, Suggestion, Task } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { shortDate } from '../dates.ts';
 import { WORK_CATEGORIES } from '../workTypes.ts';
@@ -264,6 +264,13 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
     [teamId, task?.id, evidenceIds.join(',')],
   );
   const chips = (contribs.data ?? []).filter(c => evidenceIds.includes(c.id));
+  // Next to its commits, a task risk already links that task. Other task evidence
+  // (an overload has no task of its own) still needs a #issue chip.
+  const coveredTaskId = chips.length > 0 ? task?.id : undefined;
+  const evidenceTasks = (r?.evidence ?? [])
+    .filter(e => e.type === 'task' && e.id !== coveredTaskId)
+    .map(e => (tasks ?? []).find(t => t.id === e.id))
+    .filter((t): t is Task => t != null);
 
   async function act(kind: 'accept' | 'dismiss') {
     setBusy(kind); setErr(null);
@@ -305,7 +312,7 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
 
       {r && <p className="text-pretty">{r.description.replace(/^#\d+\s[^:]+:\s*/, '')}</p>}
 
-      {chips.length > 0 && (
+      {(chips.length > 0 || evidenceTasks.length > 0) && (
         <div className="flex flex-wrap gap-1.5">
           {chips.slice(0, 3).map(c => {
             const Icon = c.source === 'manual' ? NotebookPen : GitCommitHorizontal;
@@ -316,7 +323,15 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
               ? <a key={c.id} href={href} target="_blank" rel="noreferrer" className={cls} title={c.title}><Icon size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{label}</span></a>
               : <span key={c.id} className={cls} title={c.title}><Icon size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{label}</span></span>;
           })}
-          {task && <Link to={`${base}/plan/${taskNumber}`} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-surface-2 px-2 font-mono text-[11.5px] text-fg-muted hover:text-fg"><CircleDot size={12} aria-hidden="true" />#{taskNumber}</Link>}
+          {chips.length > 0 && task && <Link to={`${base}/plan/${taskNumber}`} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-surface-2 px-2 font-mono text-[11.5px] text-fg-muted hover:text-fg"><CircleDot size={12} aria-hidden="true" />#{taskNumber}</Link>}
+          {evidenceTasks.map(t => {
+            const n = t.github_issue_number;
+            return (
+              <Link key={t.id} to={n != null ? `${base}/plan/${n}` : `${base}/plan`} title={t.title} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-surface-2 px-2 font-mono text-[11.5px] text-fg-muted hover:text-fg">
+                <CircleDot size={12} aria-hidden="true" />{n != null ? `#${n}` : t.title.slice(0, 32)}
+              </Link>
+            );
+          })}
           {chips.length > 3 && <span className="inline-flex h-6 items-center rounded-full bg-surface-2 px-2 text-[11.5px] text-fg-muted">+{chips.length - 3} more</span>}
         </div>
       )}

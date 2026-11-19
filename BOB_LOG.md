@@ -1281,3 +1281,23 @@ The new tests set `process.env.TZ` to `America/New_York` inside the test, as the
 | `client/src/pages/People.tsx` | Imports `dayLabel`. The local midnight division is gone. |
 
 `npm run lint` passed with no errors. `npm test`: server 21 files, 205 passed (205); client 1 file, 11 passed (11). Main had 8 client tests. Not deployed.
+
+## 2026-11-19 — Session 50: Manual log summaries must be non-empty (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Session 41 required `ClassificationSchema.summary` to be trimmed and non-empty. The manual log still parsed its one-line summary with `z.string()`. `classifyTeam` had a private `SummarySchema`, and `POST /api/teams/:teamId/manual` had its own copy. An empty or whitespace-only model summary was stored. A classifications row already exists after that, so the next run skips the entry.
+
+Both call sites now use `ManualSummarySchema`: `z.string().trim().min(1)`. `completeJSON` still retries a failed parse once and then throws.
+
+`classifyTeam` does not write a row when that throw happens, so the entry stays unclassified and the next run tries again. Mock mode still copies the title (`title.slice(0, 120)`). A title that trims to nothing is not stored.
+
+The log-work route already caught a model failure and stored `title.trim().slice(0, 120)`. That fallback is unchanged, including for an empty or whitespace-only model summary. A blank title is still `400` with `{ error: 'title is required' }`, and nothing is written. A model summary that passes is stored trimmed.
+
+| File | Change |
+|---|---|
+| `server/src/ai/classifier.ts` | `ManualSummarySchema` trims and requires one or more characters. `classifyTeam` uses it and refuses a blank title. |
+| `server/src/routes/manual.ts` | The log-work summary uses that schema. The title fallback is unchanged. |
+| `server/src/tests/manual-summary.test.ts` | Empty, whitespace-only, and a trimmed valid summary. Title fallback, including the 120-character cut. Blank titles are 400 and write nothing. |
+
+`npm run lint` passed with no errors. `npm test`: server 22 files, 217 passed (217); client 1 file, 11 passed (11). Main had 205 server tests and 11 client tests. Not deployed.

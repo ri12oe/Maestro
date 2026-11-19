@@ -1217,3 +1217,47 @@ From a clean tree (no `server/dev.db`, no repo `dev.db`, no `maestro-vitest-*` t
 `npm run dev --workspace=client` started Vite 8.3.8 on `http://localhost:5173/` (it listens on `::1`). `curl http://localhost:5173/` returned `200` `text/html` with `<title>Maestro</title>`, `<div id="root">`, the React Refresh preamble, and `/src/main.tsx`. `curl http://localhost:5173/src/main.tsx` returned `200` `text/javascript`. `curl http://localhost:5173/t/1` returned `200` `text/html` and the same document.
 
 Production, from the repo root, after that build: `NODE_ENV=production AI_PROVIDER=mock DB_PATH=/tmp/maestro-vite8.db PORT=3456 npm start`. The log line was `Migration complete: /tmp/maestro-vite8.db`. No repo `dev.db` was created. `curl` of `/` and `/t/1` each returned `200` `text/html` and the same SPA document (`id="root"`, title Maestro, the built `/assets/index-D9XdCpfA.js` and CSS). Those asset URLs returned `200`. Headless Chrome rendered `/` as "Meet Maestro" and `/t/1` as "This team doesn't exist" against that empty database. Not deployed. |
+
+## 2026-11-19 — Session 48: Production commit on the plan (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+Docs only. `docs/PLAN.md` and this log. `README.md` is unchanged, including the "seeded once" wording.
+
+Production on Railway is `main` `c896111`, Railway deployment `c72442c8`, deployed 2026-11-18. That commit includes PRs #27 through #42. On that deploy the StudyBuddy demo is team 3. Pushes to `main` do not auto-deploy. The previous production commit was `6d8ef1c`, deployment `5143d6dd`, on 2026-11-17. That earlier deploy's health check and smoke tests passed. This session does not repeat them.
+
+Merged after `6d8ef1c`:
+
+| PR | What landed |
+|---|---|
+| #27 | Ranking check. Refuse a ranking answer even when the model says it can answer. |
+| #28 | Copy fix. The seeded rebalance check-in message says Maestro. |
+| #29 | Deleting a member who still has work returns 409. |
+| #30 | Mock matcher. A generic word no longer links a commit to a task. |
+| #31 | Docs for the health deploy, the shipped theme, and the local demo. |
+| #32 | Evidence chips on Today for a risk with no task. |
+| #33 | Undo stays available on an accepted rebalance suggestion. |
+| #34 | Opt-in startup seed when `SEED_DEMO=1`. StudyBuddy on the public site is team 3. |
+| #35 | `schema.sql` includes the columns later migrations add. |
+| #36 | A classification summary must be non-empty after trim. |
+| #37 | "Yesterday" follows the local calendar day. Client Vitest covers it. |
+| #38 | ESLint flat config for the client and the server. |
+| #39 | Audit triage. The eight findings were recorded. Dependencies were left as they were. |
+| #40 | Each Vitest file gets its own SQLite database. |
+| #41 | React Router 7 on the client. |
+| #42 | Vite 8 and Vitest 5. `npm audit` reports 0. |
+
+Milestone 4 stays `[ ] in progress`.
+
+Checked on `main`:
+
+- The seed scenario in todo 1 stays done. `server/src/db/seed.ts` still inserts StudyBuddy with Rio, Sam, Priya, and Jordan, at least 20 contributions, stalled issue #12, and Sam overloaded. `server/src/tests/seed-scenario.test.ts` still requires 4 members, at least 20 contributions, a stalled task, an overloaded member, a high risk, and a pending suggestion. `server/src/tests/seed-startup.test.ts` still requires a high risk on #12 and a pending #14 swap from Sam to Jordan. The browser walk recorded in todo 1 was local. It is not a walk of deployment `c72442c8`.
+- Todo 2 is now done. It was already on `main` and had no done mark. `client/vite.config.mts` writes the build to `client/dist`. Root `npm run build` builds the client, then the server. When `NODE_ENV` is `production`, `server/src/index.ts` serves that directory through `serveProductionClient`. Unknown `/api` paths stay JSON 404s. `server/src/tests/production-client.test.ts` covers those cases.
+- The Railway config in todo 3 stays done. `railway.json` and `.railway/railway.ts` are the same files. The volume is still the dashboard mount at `/data` in `docs/RAILWAY.md`. The Infrastructure as Code file does not declare the volume. Cutover is still a separate step.
+- The deploy lines now name `c896111` and `c72442c8`.
+- The README criterion stays done. This session does not edit `README.md`.
+- The secrets criterion stays done. `.env.example` still lists the ten names the server reads (`PORT`, `NODE_ENV`, `DB_PATH`, `AI_PROVIDER`, `XAI_API_KEY`, `GROK_MODEL`, `GITHUB_TOKEN`, `SITE_USER`, `SITE_PASSWORD`, `SEED_DEMO`) with placeholders.
+- "Public URL is accessible and the demo scenario loads without errors" stays open for deployment `c72442c8`. The recorded public smoke test is deployment `5143d6dd`.
+- "All acceptance criteria from Milestones 1–3 still pass against the deployed instance" stays open for deployment `c72442c8`. A check of those criteria against that deploy is still to be recorded.
+
+Milestones 1–3 stay `[x] done`. Their criteria are met in the repo. The dark default, Geist, Geist Mono, and Maestro gold `#E8A93A` are still in `client/src/styles/theme.css`, with a light theme beside them. The UI still has no leaderboard. Ask Maestro and the project report say they do not rank people. Milestone 3's six original screens were replaced by the later redesign (session 33). That redesign is on `main`, and milestone 4 todo 1 already records the demo on the current pages. Milestone 5 stays `[ ] pending`. The repo has no demo video, slide deck, or submission form.

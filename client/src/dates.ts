@@ -7,14 +7,15 @@ export function shortDate(iso: string): string {
   return shortFmt.format(d);
 }
 
-/** "today", "yesterday", "5 days ago", counted in the viewer's local calendar days. */
+/** "today", "yesterday", "5 days ago", counted in the viewer's local calendar days. A later calendar day is a short date. */
 export function daysAgo(iso: string, now = new Date()): string {
   const then = new Date(iso);
   const days = Math.round(
     (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
       Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) / DAY,
   );
-  if (days <= 0) return 'today';
+  if (days < 0) return shortDate(iso);
+  if (days === 0) return 'today';
   if (days === 1) return 'yesterday';
   return `${days} days ago`;
 }

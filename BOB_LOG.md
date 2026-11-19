@@ -1262,7 +1262,7 @@ Checked on `main`:
 
 Milestones 1–3 stay `[x] done`. Their criteria are met in the repo. The dark default, Geist, Geist Mono, and Maestro gold `#E8A93A` are still in `client/src/styles/theme.css`, with a light theme beside them. The UI still has no leaderboard. Ask Maestro and the project report say they do not rank people. Milestone 3's six original screens were replaced by the later redesign (session 33). That redesign is on `main`, and milestone 4 todo 1 already records the demo on the current pages. Milestone 5 stays `[ ] pending`. The repo has no demo video, slide deck, or submission form.
 
-## 2026-11-19 — Session 48: People day labels follow the local calendar day (written with Grok bots, not IBM Bob)
+## 2026-11-19 — Session 49: People day labels follow the local calendar day (written with Grok bots, not IBM Bob)
 
 **AI source:** Grok bots
 
@@ -1270,14 +1270,14 @@ Milestones 1–3 stay `[x] done`. Their criteria are met in the repo. The dark d
 
 The fall-back day, 1 November 2026, is 25 hours (02:00 falls back to 01:00). Dividing that gap by 24 hours already floors to 1, so the old header said "Yesterday" and already agreed with `daysAgo` on that morning.
 
-`dayLabel` now calls `daysAgo`. "today" and "yesterday" become "Today" and "Yesterday". An older day stays a short date. The function moved from `People.tsx` to `dates.ts`. A second copy of the `Date.UTC` calendar subtraction, or rounding the 24-hour gap, would be another implementation of the same rule. Calling `daysAgo` keeps one. A timestamp on a later calendar day follows `daysAgo` and reads "Today".
+`dayLabel` now calls `daysAgo`. "today" and "yesterday" become "Today" and "Yesterday". An older day stays a short date. The function moved from `People.tsx` to `dates.ts`. A second copy of the `Date.UTC` calendar subtraction, or rounding the 24-hour gap, would be another implementation of the same rule. Calling `daysAgo` keeps one. A later time on today's calendar day stays "today". A later calendar day is a short date from both `daysAgo` and `dayLabel`.
 
 The new tests set `process.env.TZ` to `America/New_York` inside the test, as the other client date tests set a zone. They assert the midnight gap (23 hours, then 47) so a run that is not on that short day fails before the label check. With the old division still in `dayLabel`, the spring-forward test failed: expected "Yesterday", received "Today". The fall-back test locks the 25-hour morning, both 01:30 instants on the repeated hour, and the day before that (49 hours, a short date, "2 days ago").
 
 | File | Change |
 |---|---|
-| `client/src/dates.ts` | `dayLabel` calls `daysAgo`. |
-| `client/src/dates.test.ts` | Spring-forward and fall-back cases in America/New_York. |
+| `client/src/dates.ts` | `dayLabel` calls `daysAgo`. A later calendar day is a short date. |
+| `client/src/dates.test.ts` | Spring-forward and fall-back cases in America/New_York. A later calendar day is a short date; a later time today stays today. |
 | `client/src/pages/People.tsx` | Imports `dayLabel`. The local midnight division is gone. |
 
-`npm run lint` passed with no errors. `npm test`: server 21 files, 205 passed (205); client 1 file, 10 passed (10). Main had 8 client tests. Not deployed.
+`npm run lint` passed with no errors. `npm test`: server 21 files, 205 passed (205); client 1 file, 11 passed (11). Main had 8 client tests. Not deployed.

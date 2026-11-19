@@ -59,6 +59,17 @@ describe('daysAgo', () => {
     const then = localDate(2026, 11, 13, 23, 0);
     expect(daysAgo(then.toISOString(), now)).toBe('5 days ago');
   });
+
+  it('uses a short date for a later calendar day', () => {
+    useTz('UTC');
+    const now = localDate(2026, 11, 18, 15, 0);
+    const laterToday = localDate(2026, 11, 18, 23, 30);
+    const tomorrow = localDate(2026, 11, 19, 0, 1);
+    expect(daysAgo(laterToday.toISOString(), now)).toBe('today');
+    expect(dayLabel(laterToday.toISOString(), now)).toBe('Today');
+    expect(daysAgo(tomorrow.toISOString(), now)).toBe(shortDate(tomorrow.toISOString()));
+    expect(dayLabel(tomorrow.toISOString(), now)).toBe(shortDate(tomorrow.toISOString()));
+  });
 });
 
 /** Hours between the local midnights of two instants. DST makes this 23 or 25. */

@@ -5,6 +5,24 @@ import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveDbPath } from './paths.js';
 
+/** Row in demo_seed that means the StudyBuddy demo has finished seeding. */
+export const STUDYBUDDY_DEMO_SLUG = 'studybuddy';
+
+/**
+ * Teams the old seed inserted: name StudyBuddy, repo studybuddy-org/studybuddy-app,
+ * is_demo = 1. Production's copy is team id 3. A real team named StudyBuddy is
+ * stored with is_demo = 0 and its own repo. Rows come back lowest id first.
+ * When more than one matches, the marker uses the first and a warning is logged.
+ */
+const EXISTING_DEMO_TEAMS = `
+  SELECT id FROM teams
+  WHERE name = 'StudyBuddy'
+    AND repo_owner = 'studybuddy-org'
+    AND repo_name = 'studybuddy-app'
+    AND is_demo = 1
+  ORDER BY id
+`;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -191,9 +209,66 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
+  /**
+   * migration_007: demo_seed done marker, and recognize a StudyBuddy demo the
+   * old seed already inserted.
+   *
+   * schema.sql creates demo_seed. This migration records that the table is in
+   * place and, when the old demo team is already in the file, writes the marker
+   * for that team. The public database's copy is id 3. Startup finds the marker
+   * and leaves that team as the only StudyBuddy demo. The marker is not a
+   * foreign key; deleting the team later leaves it set.
+   */
+  if (!appliedSet.has('migration_007_demo_seed_marker')) {
+    let adopted: number | null = null;
+    db.transaction(() => {
+      adopted = backfillStudyBuddyDemo(db);
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
+        'migration_007_demo_seed_marker',
+      );
+    })();
+    if (adopted != null) {
+      console.log(
+        `Recognized existing StudyBuddy demo (id=${adopted}). It will not be seeded again.`,
+      );
+    }
+  }
+
   db.close();
 
   console.log(`Migration complete: ${dbPath}`);
+}
+
+/**
+ * Write the StudyBuddy done marker when the old seed's team is already stored.
+ * Returns that team's id, or null when this database has no such team.
+ * Creates demo_seed when schema.sql has not run yet. The caller wraps this in
+ * a transaction with the migration record, or with nothing else when the seed
+ * adopts an existing team before inserting.
+ */
+export function backfillStudyBuddyDemo(db: Database.Database): number | null {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS demo_seed (
+      slug       TEXT PRIMARY KEY,
+      team_id    INTEGER,
+      seeded_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    )
+  `);
+  const matches = db.prepare(EXISTING_DEMO_TEAMS).all() as Array<{ id: number }>;
+  if (matches.length === 0) return null;
+  const existing = matches[0];
+  if (matches.length > 1) {
+    const ids = matches.map(row => row.id).join(', ');
+    console.warn(
+      `[migrate] ${matches.length} StudyBuddy demo teams match (${ids}). The done marker uses id ${existing.id}.`,
+    );
+  }
+  db.prepare('UPDATE teams SET is_demo = 1 WHERE id = ?').run(existing.id);
+  db.prepare(
+    `INSERT INTO demo_seed (slug, team_id) VALUES (?, ?)
+     ON CONFLICT(slug) DO NOTHING`,
+  ).run(STUDYBUDDY_DEMO_SLUG, existing.id);
+  return existing.id;
 }
 
 // Run directly when invoked as a script

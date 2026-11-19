@@ -69,7 +69,7 @@ Railpack also sets `NODE_ENV=production` on the running container, and it still 
 | `GITHUB_TOKEN` | Optional | Read-only GitHub token used by Sync. The demo seed does not call GitHub. Sync responds 503 when the token is missing. Read in `server/src/ingestion/sync.ts` and `server/src/routes/teams.ts`. | secret, set in Railway |
 | `SITE_PASSWORD` | Optional | When set, pages and API routes ask for HTTP Basic auth. `GET /api/health` stays open so Railway can probe it. Read in `server/src/middleware/sitePassword.ts`. | secret, set in Railway |
 | `SITE_USER` | Optional | Basic-auth username, used only when `SITE_PASSWORD` is set. Default `maestro`. Read in `server/src/middleware/sitePassword.ts`. | `maestro` |
-| `SEED_DEMO` | Optional | When this is exactly `1`, startup inserts the StudyBuddy demo into `DB_PATH` after migrations. The insert uses the mock provider, so it does not call xAI or GitHub. If a team named StudyBuddy already exists, startup skips it. Other teams are left as they are. A failure is logged and the process still listens. Read in `server/src/db/seed.ts`, called from `server/src/index.ts`. | `1` on the public site. Leave unset otherwise. |
+| `SEED_DEMO` | Optional | When this is exactly `1`, startup inserts the StudyBuddy demo into `DB_PATH` after migrations, in one transaction with a `demo_seed` done marker. The insert uses the mock provider, so it does not call xAI or GitHub. Startup skips the insert when that marker is already set. A real team named StudyBuddy is left as it is, and the demo is inserted beside it. Other teams are left as they are. If the insert throws, the transaction rolls back, the failure is logged, and the process still listens. The next start tries again. Deleting the demo leaves the marker, so a later start leaves the team absent. Read in `server/src/db/seed.ts`, called from `server/src/index.ts`. | `1` on the public site. Leave unset otherwise. |
 
 `mock` is the provider the StudyBuddy demo was checked with. Use `grok` only when both `XAI_API_KEY` and `GROK_MODEL` are set.
 
@@ -103,9 +103,11 @@ When `SITE_PASSWORD` is set, `/api/health` still returns `200` with no credentia
 
 ### StudyBuddy on the public site
 
-Set `SEED_DEMO=1` and deploy. After migrations, `node dist/index.js` inserts the StudyBuddy team into the same file as `DB_PATH` (`/data/maestro.db` when the volume is mounted at `/data`). The insert is compiled into the server build, so the container does not need `tsx`. It uses the mock provider even when `AI_PROVIDER=grok`, so it does not call xAI or GitHub. The log prints `Created team StudyBuddy (id=N)`.
+Set `SEED_DEMO=1` and deploy. After migrations, `node dist/index.js` inserts the StudyBuddy team into the same file as `DB_PATH` (`/data/maestro.db` when the volume is mounted at `/data`). The insert is compiled into the server build, so the container does not need `tsx`. It uses the mock provider even when `AI_PROVIDER=grok`, so it does not call xAI or GitHub. The team, its rows, and a `demo_seed` marker (slug `studybuddy`) commit together. The log prints `Created team StudyBuddy (id=N)`.
 
-If that team is already in the file, startup prints the existing id and inserts nothing. Other teams stay as they are. If the insert throws, the server logs `[seed] SEED_DEMO failed` and still listens.
+The public database already has the team the previous seed inserted: id 3, name StudyBuddy, repo `studybuddy-org/studybuddy-app`, `is_demo` 1. `migration_007` writes the marker for that row and logs `Recognized existing StudyBuddy demo (id=3)`. Startup then prints `StudyBuddy demo already seeded (id=3). Skipping seed.` That deploy keeps team 3 as the only StudyBuddy demo.
+
+A later start finds the marker and inserts nothing, including after the demo team is deleted. The marker stays, so the team stays deleted. A real team that is only named StudyBuddy is left as it is, and a missing demo is still inserted beside it. Other teams stay as they are. If the insert throws, the server logs `[seed] SEED_DEMO failed` and `[seed] StudyBuddy demo failed and was rolled back`, and it still listens. The next start tries again, because the marker was not written.
 
 Leaving `SEED_DEMO=1` on later deploys is safe. Unset it when a restart should skip the check.
 

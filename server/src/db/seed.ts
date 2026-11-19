@@ -14,20 +14,28 @@
  *     - Priya has 3 manual log entries
  *   - Then runs the classifier and the risk reasoner
  *
- * Safe to re-run: skips if the "StudyBuddy" team already exists.
+ * Safe to re-run: a row in demo_seed (slug 'studybuddy') means the seed finished.
+ * The marker commits in the same transaction as the team, contributions,
+ * classifications, and risks. A throw rolls that transaction back, so the next
+ * run starts from an empty demo. Deleting the team leaves the marker, and the
+ * demo stays deleted. A real team named StudyBuddy is a different row.
+ *
  * Pass `today` to pin commit dates, due dates, and the reasoner clock.
  *
  * `seedDemo(db)` writes into the database it is given and does not close it.
  * `npm run seed` still opens DB_PATH, migrates, and calls that function.
  * Server startup calls `seedDemoOnStartup(db)` after migrations when SEED_DEMO=1.
  * That path forces the mock provider and keeps running if the seed throws.
+ *
+ * Demo commit shas are `demo:studybuddy:` plus a fixed token. A GitHub sha is
+ * 40 hex characters, so these values cannot collide with a real commit.
  */
 
 import '../loadEnv.js';
 import Database from 'better-sqlite3';
 import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { fileURLToPath } from 'url';
-import { runMigration } from './migrate.js';
+import { backfillStudyBuddyDemo, runMigration, STUDYBUDDY_DEMO_SLUG } from './migrate.js';
 import { resolveDbPath } from './paths.js';
 import { classifyTeam } from '../ai/classifier.js';
 import { runReasoner } from '../ai/reasoner.js';
@@ -46,6 +54,42 @@ function daysFromNow(today: Date, n: number): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD for due_date
 }
 
+/**
+ * Prefix on every demo commit sha. GitHub shas are 40 hex characters.
+ * This prefix contains a colon, so it cannot equal one.
+ */
+export const DEMO_COMMIT_SHA_PREFIX = 'demo:studybuddy:';
+
+/** Deterministic demo sha for one seed token, such as `rio0008hhhh`. */
+export function demoCommitSha(token: string): string {
+  return `${DEMO_COMMIT_SHA_PREFIX}${token}`;
+}
+
+interface DemoMarker {
+  teamId: number | null;
+}
+
+function readDemoMarker(db: SqliteDatabase): DemoMarker | undefined {
+  const row = db.prepare(
+    'SELECT team_id AS teamId FROM demo_seed WHERE slug = ?',
+  ).get(STUDYBUDDY_DEMO_SLUG) as DemoMarker | undefined;
+  return row;
+}
+
+function skippedDemo(db: SqliteDatabase, teamId: number | null): SeedResult {
+  const id = teamId ?? 0;
+  const row = id === 0
+    ? undefined
+    : db.prepare('SELECT id FROM teams WHERE id = ?').get(id) as { id: number } | undefined;
+  if (row) {
+    console.log(`StudyBuddy demo already seeded (id=${row.id}). Skipping seed.`);
+    return { skipped: true, teamId: row.id };
+  }
+  const which = id === 0 ? '' : ` (id=${id})`;
+  console.log(`StudyBuddy demo was already seeded${which} and is not recreated. Skipping seed.`);
+  return { skipped: true, teamId: id };
+}
+
 export interface SeedResult {
   skipped: boolean;
   teamId: number;
@@ -54,26 +98,29 @@ export interface SeedResult {
 /**
  * Insert the StudyBuddy demo into `db`, then classify contributions and run the reasoner.
  * Leaves `teams.deadline` null so each task keeps its own milestone due date.
- * A second call finds the team and inserts nothing. Other teams are not modified.
+ * A second call finds the done marker and inserts nothing. Other teams are not modified.
  * Does not close `db`.
+ *
+ * The insert, the classifier, the reasoner, and the demo_seed marker commit together.
+ * A throw rolls that work back. The marker is what a later call checks, including
+ * after the team row has been deleted.
  */
 export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Promise<SeedResult> {
-  const existing = db
-    .prepare("SELECT id FROM teams WHERE name = 'StudyBuddy'")
-    .get() as { id: number } | undefined;
+  const marked = readDemoMarker(db);
+  if (marked) return skippedDemo(db, marked.teamId);
 
-  if (existing) {
-    console.log(`StudyBuddy team already exists (id=${existing.id}). Skipping seed.`);
-    return { skipped: true, teamId: existing.id };
-  }
+  // An old seed already stored this demo (production team id 3 is this case).
+  // Record the marker and leave that team in place.
+  const adopted = db.transaction(() => backfillStudyBuddyDemo(db))();
+  if (adopted != null) return skippedDemo(db, adopted);
 
   // ── Insert team ───────────────────────────────────────────────────────────────
+  db.exec('BEGIN IMMEDIATE');
+  try {
 
   const teamId = db
     .prepare("INSERT INTO teams (name, repo_owner, repo_name, is_demo) VALUES ('StudyBuddy', 'studybuddy-org', 'studybuddy-app', 1)")
     .run().lastInsertRowid as number;
-
-  console.log(`Created team StudyBuddy (id=${teamId})`);
 
   // ── Insert members ────────────────────────────────────────────────────────────
 
@@ -133,7 +180,8 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
     paths?: string[];
   };
 
-  function insertCommit({ memberId, sha, title, diff, filesChanged, additions, deletions, daysAgoN, url, paths }: ContribArgs): number {
+  function insertCommit({ memberId, sha: token, title, diff, filesChanged, additions, deletions, daysAgoN, url, paths }: ContribArgs): number {
+    const sha = demoCommitSha(token);
     return db
       .prepare(
         `INSERT INTO contributions
@@ -144,7 +192,10 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
       .run(
         teamId, memberId, sha, title, diff,
         filesChanged, additions, deletions,
-        url ?? `https://github.com/studybuddy-org/studybuddy-app/commit/${sha}`,
+        // Stored sha keeps the demo:studybuddy: prefix. The link uses the token
+        // after the last colon. Client chips show the first 7 characters of it
+        // (`client/src/sha.ts`).
+        url ?? `https://github.com/studybuddy-org/studybuddy-app/commit/${token}`,
         paths ? JSON.stringify(paths) : null,
         daysAgo(today, daysAgoN),
       ).lastInsertRowid as number;
@@ -208,19 +259,22 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
   console.log(`Inserted contributions and manual entries`);
 
   // ── Override: set no-recent-activity on task #12 ─────────────────────────────
-  // The last commit touching auth (rio0008hhhh) is 7 days ago — issue #12 stays open
+  // The last commit touching auth (demo:studybuddy:rio0008hhhh) is 7 days ago — issue #12 stays open
   // No further action needed; the data already reflects this.
 
   // ── Run classifier ────────────────────────────────────────────────────────────
 
-  // classifyTeam and the reasoner use the singleton in client.ts. `npm run seed`
-  // opens that same file before this runs. Startup passes the singleton itself.
+  // Same connection as the open transaction, so these rows commit or roll back with it.
+  // `npm run seed` opens DB_PATH for this call. Startup passes the singleton.
   console.log('Running classifier...');
-  const { classified, failed } = await classifyTeam(teamId);
-  console.log(`Classified ${classified} contributions${failed > 0 ? `, ${failed} failed` : ''}`);
+  const { classified, failed } = await classifyTeam(teamId, db);
+  if (failed > 0) {
+    throw new Error(`classifier left ${failed} StudyBuddy contributions unclassified`);
+  }
+  console.log(`Classified ${classified} contributions`);
 
   console.log('Running risk reasoner...');
-  await runReasoner(teamId, today);
+  await runReasoner(teamId, today, db);
 
   const riskRows = db
     .prepare(`SELECT level, description, evidence FROM risks WHERE team_id = ? AND dismissed = 0 ORDER BY CASE level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, generated_at DESC`)
@@ -272,6 +326,12 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
     }
   }
 
+  db.prepare(
+    'INSERT INTO demo_seed (slug, team_id) VALUES (?, ?)',
+  ).run(STUDYBUDDY_DEMO_SLUG, teamId);
+  db.exec('COMMIT');
+
+  console.log(`Created team StudyBuddy (id=${teamId})`);
   console.log('\n✅ StudyBuddy seed complete.');
   console.log(`   Team id: ${teamId}`);
   console.log(`   Members: Rio(${rioId}), Sam(${samId}), Priya(${priyaId}), Jordan(${jordanId})`);
@@ -285,6 +345,22 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
   console.log(`   Task matches: ${matchCount}`);
 
   return { skipped: false, teamId };
+  } catch (err) {
+    let rolledBack = false;
+    try {
+      if (db.inTransaction) {
+        db.exec('ROLLBACK');
+        rolledBack = true;
+      }
+    } catch (rollbackErr) {
+      console.error(
+        '[seed] rollback failed:',
+        rollbackErr instanceof Error ? rollbackErr.message : rollbackErr,
+      );
+    }
+    if (rolledBack) console.error('[seed] StudyBuddy demo failed and was rolled back');
+    throw err;
+  }
 }
 
 /**
@@ -306,7 +382,9 @@ export async function seedStudyBuddy(today: Date = new Date()): Promise<SeedResu
 /**
  * Server startup. When SEED_DEMO is exactly `1`, seed the server's open database
  * with the mock provider so the insert makes no network calls. Any other value
- * does nothing. A thrown seed is logged and swallowed so the process still listens.
+ * does nothing. A thrown seed has already rolled back, and it is logged and
+ * swallowed so the process still listens. The next start tries the seed again
+ * when the done marker is still absent.
  */
 export async function seedDemoOnStartup(db: SqliteDatabase, today: Date = new Date()): Promise<void> {
   if (process.env.SEED_DEMO !== '1') return;

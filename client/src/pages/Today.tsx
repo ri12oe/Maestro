@@ -5,6 +5,7 @@ import { api } from '../api/client.ts';
 import type { Contribution, Risk, Suggestion, Task } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { shortDate } from '../dates.ts';
+import { shortCommitSha } from '../sha.ts';
 import { WORK_CATEGORIES } from '../workTypes.ts';
 import { buildDecisions, type Decision } from '../app/decisions.ts';
 import { daysUntil, firstName, longDate, sortedMembers, teamDeadline, useTeam } from '../app/team.tsx';
@@ -373,7 +374,7 @@ function DecisionCard({ d, onAccept, onNotAProblem }: {
           {chips.slice(0, 3).map(c => {
             const Icon = c.source === 'manual' ? NotebookPen : GitCommitHorizontal;
             const href = c.url ?? c.link ?? undefined;
-            const label = `${c.github_sha ? c.github_sha.slice(0, 7) : shortDate(c.authored_at)} · ${(c.summary ?? c.title).slice(0, 32)}`;
+            const label = `${c.github_sha ? shortCommitSha(c.github_sha) : shortDate(c.authored_at)} · ${(c.summary ?? c.title).slice(0, 32)}`;
             const cls = 'inline-flex h-6 max-w-full items-center gap-1.5 overflow-hidden rounded-full bg-surface-2 px-2 font-mono text-[11.5px] whitespace-nowrap text-fg-muted hover:text-fg';
             return href
               ? <a key={c.id} href={href} target="_blank" rel="noreferrer" className={cls} title={c.title}><Icon size={12} className="shrink-0" aria-hidden="true" /><span className="truncate">{label}</span></a>

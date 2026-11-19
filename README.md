@@ -4,7 +4,7 @@ Maestro is the shared view of a student team project. It used to be called Group
 
 A team connects its GitHub repository. Maestro reads commits and Issues, labels each contribution (work type, substance, and a one-line summary), and shows every member the same picture: who did what, which tasks have gone quiet, and a suggested task swap. Off-repo work can be logged. An AI label can be disputed from the member page.
 
-The StudyBuddy demo is on the public site at https://maestro-production-70bb78b5.up.railway.app. The server seeds it once at startup when `SEED_DEMO=1`, alongside any real teams. The same demo can be run locally. The steps are under [Demo](#demo).
+The StudyBuddy demo is on the public site at https://maestro-production-70bb78b5.up.railway.app. With `SEED_DEMO=1`, startup seeds it once into the server database, alongside any real teams, and records a done marker. The next startup inserts nothing. Deleting the demo leaves the marker, so the team stays deleted. A real team named StudyBuddy is left as it is, and the demo is seeded beside it. The same demo can be run locally. The steps are under [Demo](#demo).
 
 The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`). Judges get the credentials separately.
 
@@ -82,7 +82,7 @@ npm test
 
 ## Demo
 
-StudyBuddy is on the public site, seeded once via `SEED_DEMO=1`, and it can also be run locally. On the public site the seed runs at startup against the server's SQLite file, with the mock provider, and it leaves other teams alone. A second start finds StudyBuddy and inserts nothing.
+StudyBuddy is on the public site. `SEED_DEMO=1` seeds it once at startup into the server's SQLite file, with the mock provider, and leaves other teams alone. The demo rows and the done marker commit together. A second start finds the marker and inserts nothing. Deleting the demo leaves the marker, so a later start leaves the team absent. A real team named StudyBuddy is left as it is, and the demo is inserted beside it.
 
 Locally, `SEED_DEMO` stays commented, so the dev server does not seed on startup. The copied `.env` sets `AI_PROVIDER=mock` and `DB_PATH=./dev.db` (resolved from the repo root). From the repo root, in two terminals:
 
@@ -103,7 +103,7 @@ That is the server `seed` script, `tsx src/db/seed.ts`. It inserts the StudyBudd
 
 StudyBuddy has 4 members (Rio, Sam, Priya, Jordan) and 31 contributions (28 commits and 3 manual entries). Issue #12 Auth flow is stalled. Sam is overloaded. The log prints a high risk and a pending suggestion.
 
-The team id is not fixed. SQLite assigns it on insert. A new row prints `Created team StudyBuddy (id=N)` and, when the run finishes, `Team id: N`. If StudyBuddy is already in the file, the command prints `StudyBuddy team already exists (id=N). Skipping seed.` and inserts nothing.
+The team id is not fixed. SQLite assigns it on insert. A new row prints `Created team StudyBuddy (id=N)` and, when the run finishes, `Team id: N`. If the done marker is already there, the command prints `StudyBuddy demo already seeded (id=N). Skipping seed.` and inserts nothing. After that team has been deleted, it prints `StudyBuddy demo was already seeded (id=N) and is not recreated. Skipping seed.`
 
 Open http://localhost:5173/t/N with that id. Start at http://localhost:5173 lists StudyBuddy and links to the same path.
 

@@ -4,6 +4,7 @@ import { api } from '../api/client.ts';
 import type { SourceRef } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { firstName, useTeam } from './team.tsx';
+import { shortCommitSha } from '../sha.ts';
 
 const chip = 'inline-flex h-6 max-w-full items-center gap-1.5 overflow-hidden rounded-full bg-surface-2 px-2 text-[11.5px] whitespace-nowrap text-fg-muted hover:text-fg';
 
@@ -37,7 +38,7 @@ export function SourceChips({ sources, onNavigate }: { sources: SourceRef[]; onN
           <li key={`c${s.id}`} className="max-w-full">
             <Link to={`${base}/people/${c.member_id}`} onClick={onNavigate} className={chip} title={c.title}>
               <Icon size={12} className="shrink-0" aria-hidden="true" />
-              <span className="truncate">{c.github_sha && <span className="font-mono">{c.github_sha.slice(0, 7)} · </span>}{firstName(who?.displayName)}: {(c.summary ?? c.title).slice(0, 48)}</span>
+              <span className="truncate">{c.github_sha && <span className="font-mono">{shortCommitSha(c.github_sha)} · </span>}{firstName(who?.displayName)}: {(c.summary ?? c.title).slice(0, 48)}</span>
             </Link>
           </li>
         );

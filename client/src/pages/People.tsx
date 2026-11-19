@@ -5,6 +5,7 @@ import { api } from '../api/client.ts';
 import type { Contribution, MemberSummary } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { dayLabel, shortDate } from '../dates.ts';
+import { shortCommitSha } from '../sha.ts';
 import { WORK_TYPE_LABEL, categoryShares } from '../workTypes.ts';
 import { firstName, sortedMembers, useTeam } from '../app/team.tsx';
 import { Sheet, useToast } from '../ui/overlays.tsx';
@@ -200,7 +201,7 @@ function ContributionItem({ c, teamId }: { c: Contribution; teamId: number }) {
         <div>
           <div className="text-[13.5px] leading-5">{c.summary ?? c.title}</div>
           <div className="truncate font-mono text-[11.5px] leading-4 text-fg-muted">
-            {href ? <a href={href} target="_blank" rel="noreferrer" className="hover:text-fg">{c.github_sha ? c.github_sha.slice(0, 7) : 'link'}</a> : c.github_sha?.slice(0, 7) ?? 'logged'}
+            {href ? <a href={href} target="_blank" rel="noreferrer" className="hover:text-fg">{c.github_sha ? shortCommitSha(c.github_sha) : 'link'}</a> : shortCommitSha(c.github_sha) ?? 'logged'}
             {c.summary && c.title !== c.summary ? ` · ${c.title}` : ''}
           </div>
         </div>

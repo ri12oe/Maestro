@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { api } from '../api/client.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { shortDate, timeAgo } from '../dates.ts';
+import { shortCommitSha } from '../sha.ts';
 import { LogoMark } from '../components/Bulb.tsx';
 import { firstName, useTeam } from '../app/team.tsx';
 import { useToast } from '../ui/overlays.tsx';
@@ -71,7 +72,7 @@ export default function MaestroPage() {
               <tbody>
                 {disputes.map(c => (
                   <tr key={c.id} className="h-14 border-t border-line">
-                    <td className="pr-2 pl-5"><div>{c.summary ?? c.title}</div><div className="font-mono text-[11.5px] text-fg-muted">{c.github_sha?.slice(0, 7)} · {shortDate(c.authored_at)}</div></td>
+                    <td className="pr-2 pl-5"><div>{c.summary ?? c.title}</div><div className="font-mono text-[11.5px] text-fg-muted">{shortCommitSha(c.github_sha)} · {shortDate(c.authored_at)}</div></td>
                     <td className="px-2">{nameOf(c.member_id)}</td>
                     <td className="px-2"><WorkTypeTag type={c.work_type} /></td>
                     <td className="px-2 pr-5 text-fg-muted">{c.dispute_note ?? '—'}</td>
@@ -89,7 +90,7 @@ export default function MaestroPage() {
           <ul className="list-none">
             {unlabeled.slice(0, 8).map(c => (
               <li key={c.id} className="flex items-center gap-3 border-t border-line py-2.5 first:border-t-0">
-                <div className="min-w-0 flex-1"><div className="truncate text-label font-normal">{c.title}</div><div className="font-mono text-[11.5px] text-fg-muted">{nameOf(c.member_id)} · {c.github_sha?.slice(0, 7)}</div></div>
+                <div className="min-w-0 flex-1"><div className="truncate text-label font-normal">{c.title}</div><div className="font-mono text-[11.5px] text-fg-muted">{nameOf(c.member_id)} · {shortCommitSha(c.github_sha)}</div></div>
               </li>
             ))}
           </ul>

@@ -381,20 +381,20 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 **Acceptance Criteria:**
 - Seed script (from Milestone 2) populates a demo team with 4 simulated members, ≥20 contributions, one stalled task, one overloaded member; after running the AI pipeline the dashboard shows at least one high-priority risk card and at least one rebalance suggestion.
-- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (production is `main` `6d8ef1c`, deployed to Railway on 2026-11-17 as deployment `5143d6dd`. The health check passed. Smoke tests passed. Pushes to `main` do not auto-deploy.)
-- Public URL is accessible and the demo scenario loads without errors.
+- App is deployed as a single Railway service: Express serves the built Vite client, SQLite lives on a Railway volume. — done (production is `main` `c896111`, Railway deployment `c72442c8`, deployed 2026-11-18. That commit includes PRs #27 through #42. On that deploy the StudyBuddy demo is team 3. Pushes to `main` do not auto-deploy. The previous production commit was `6d8ef1c`, deployment `5143d6dd`, on 2026-11-17, and that deploy's health check and smoke tests passed.)
+- Public URL is accessible and the demo scenario loads without errors. Still open for deployment `c72442c8`. The recorded public smoke test is deployment `5143d6dd` (todo 5). The demo-scenario walk is the local check in todo 1.
 - `README.md` covers: what the app does, how to run it locally (env vars, `npm install`, `npm run dev`), how to seed demo data, and the public demo link. — done (the StudyBuddy demo is on the public Railway site, seeded once via `SEED_DEMO=1`, and `README.md` also has the local seed steps. The site asks for HTTP basic auth via `SITE_USER` and `SITE_PASSWORD`; judges get those credentials separately.)
 - No secrets appear in the repo; `.env.example` is complete. — done
-- All acceptance criteria from Milestones 1–3 still pass against the deployed instance.
+- All acceptance criteria from Milestones 1–3 still pass against the deployed instance. Still open for deployment `c72442c8`. Milestones 1–3 stay done for the code on `main`.
 
 **Todo:**
 1. Verify seed script (Milestone 2) produces the required demo scenario end-to-end. — done (`AI_PROVIDER=mock` seed of StudyBuddy: 4 members, 31 contributions, #12 Auth flow stalled with a high risk, Sam overloaded with 2 open tasks while Jordan has 0. On Today the high risk and the pending swap of #14 from Sam to Jordan are visible; Accept swap then Undo returns the suggestion to pending and #14 to Sam. Plan lists #12 under At risk. People lists the 4 members. Settings deadline saves and clears; Danger zone requires the team name and Cancel leaves the team. A log-work entry dated yesterday shows as Yesterday.)
-2. Configure Vite build output and Express static serving for production.
+2. Configure Vite build output and Express static serving for production. — done (`client/vite.config.mts` sets `build.outDir` to `dist`. Root `npm run build` builds the client, then the server. `npm start` runs `node dist/index.js`. When `NODE_ENV` is `production`, `server/src/index.ts` serves `client/dist` through `serveProductionClient`: static files, `index.html` for other non-API paths, and a JSON 404 for an `/api` path no route handled. `server/src/tests/production-client.test.ts` covers that.)
 3. Write Railway `railway.toml` (or `Procfile`) and configure volume mount for `DB_PATH`. — done (`.railway/railway.ts` has the Railpack builder, `npm run build`, `npm start`, and restart policy `ON_FAILURE`. `railway.json` stays until Config as Code cutover. The dashboard build command is `npm run build` and the start command is `npm start`. `docs/RAILWAY.md` is the dashboard steps for the volume, variables, and a manual redeploy.)
-4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (production is `main` `6d8ef1c`, deployed 2026-11-17. Auto-deploy is not connected.)
-5. Smoke-test the deployed public URL end-to-end. — done (`/`, `/teams/1` 200 HTML; `/api/teams` 200 JSON; `/api/does-not-exist` 404 JSON; unauthenticated request 401. Data on the `/data` volume persisted.)
+4. Deploy to Railway; set all required env vars in the Railway dashboard. — done (production is `main` `c896111`, Railway deployment `c72442c8`, deployed 2026-11-18. It includes PRs #27 through #42. StudyBuddy on that deploy is team 3. Auto-deploy is not connected.)
+5. Smoke-test the deployed public URL end-to-end. — open for deployment `c72442c8` (`main` `c896111`). Done only for the previous deploy, `5143d6dd` (`main` `6d8ef1c`, 2026-11-17): `/`, `/teams/1` 200 HTML; `/api/teams` 200 JSON; `/api/does-not-exist` 404 JSON; unauthenticated request 401. Data on the `/data` volume persisted.
 6. Write `README.md` with setup and demo instructions. — done
-7. Add a `BOB_LOG.md` entry for this milestone. — done (sessions 33–36: the client redesign, Ask Maestro, the StudyBuddy check on the new pages, and the manual production deploys.)
+7. Add a `BOB_LOG.md` entry for this milestone. — done (sessions 33–36: the client redesign, Ask Maestro, the StudyBuddy check on the new pages, and the manual production deploys. Session 48 records production moving to `c896111`.)
 
 **Relevant context:** `docs/BRIEF.md` §Milestones (Dec 2–7); `.env.example`; `server/src/db/seed.ts`.
 

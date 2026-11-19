@@ -19,6 +19,17 @@ export function daysAgo(iso: string, now = new Date()): string {
   return `${days} days ago`;
 }
 
+/**
+ * People section header: "Today", "Yesterday", or a short date.
+ * Same local calendar days as `daysAgo` (a 23-hour spring-forward day is still one day).
+ */
+export function dayLabel(iso: string, now = new Date()): string {
+  const rel = daysAgo(iso, now);
+  if (rel === 'today') return 'Today';
+  if (rel === 'yesterday') return 'Yesterday';
+  return shortDate(iso);
+}
+
 /** "due in 3 days", "due today", "2 days overdue". */
 export function dueLabel(dueIso: string, now = new Date()): { text: string; urgent: boolean } {
   const due = new Date(dueIso.length === 10 ? `${dueIso}T23:59:59Z` : dueIso);

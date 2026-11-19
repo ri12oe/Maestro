@@ -19,7 +19,8 @@
  * Manual entries (source = 'manual'): no AI work_type classification.
  *   - work_type is derived from kind: design→design, everything else→other
  *   - substance is always medium
- *   - Only the one-line summary is obtained from AI (mock: use the title)
+ *   - Only the one-line summary is obtained from AI (mock: use the title).
+ *     An empty or whitespace-only summary is rejected and not stored.
  *   - task_id is preserved from the existing task_matches row (not re-matched)
  */
 
@@ -40,9 +41,16 @@ export const ClassificationSchema = z.object({
   match_confidence: z.enum(['low', 'medium', 'high']),
 });
 
-/** Schema for the AI summary-only call used for manual entries */
-const SummarySchema = z.object({
-  summary: z.string(),
+/**
+ * One-line summary for a manual log entry.
+ * Trim first, then require one or more characters — the same rule as
+ * ClassificationSchema.summary. An empty or whitespace-only summary fails
+ * this parse. completeJSON retries that once and then throws, so classifyTeam
+ * counts the entry failed and leaves it for the next run. The log-work route
+ * catches that throw and stores the trimmed title.
+ */
+export const ManualSummarySchema = z.object({
+  summary: z.string().trim().min(1),
 });
 
 export type Classification = z.infer<typeof ClassificationSchema>;
@@ -463,9 +471,12 @@ export async function classifyTeam(teamId: number): Promise<ClassifyTeamResult> 
         summary = contrib.title.slice(0, 120);
       } else {
         const prompt = buildSummaryPrompt(contrib.title, contrib.body);
-        const res = await completeJSON(prompt, SummarySchema, 'ManualSummary');
+        const res = await completeJSON(prompt, ManualSummarySchema, 'ManualSummary');
         summary = res.summary;
       }
+
+      // The mock copies the title. A blank title must not be stored as the summary.
+      if (!summary.trim()) throw new Error('manual summary is empty');
 
       insertClassification.run({
         contribution_id: contrib.id,

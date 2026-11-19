@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { daysAgo } from './dates.ts';
+import { dayLabel, daysAgo, shortDate } from './dates.ts';
 
 /**
  * Node reads the timezone from `process.env.TZ` when local date parts are read.
@@ -58,5 +58,66 @@ describe('daysAgo', () => {
     const now = localDate(2026, 11, 18, 15, 0);
     const then = localDate(2026, 11, 13, 23, 0);
     expect(daysAgo(then.toISOString(), now)).toBe('5 days ago');
+  });
+
+  it('uses a short date for a later calendar day', () => {
+    useTz('UTC');
+    const now = localDate(2026, 11, 18, 15, 0);
+    const laterToday = localDate(2026, 11, 18, 23, 30);
+    const tomorrow = localDate(2026, 11, 19, 0, 1);
+    expect(daysAgo(laterToday.toISOString(), now)).toBe('today');
+    expect(dayLabel(laterToday.toISOString(), now)).toBe('Today');
+    expect(daysAgo(tomorrow.toISOString(), now)).toBe(shortDate(tomorrow.toISOString()));
+    expect(dayLabel(tomorrow.toISOString(), now)).toBe(shortDate(tomorrow.toISOString()));
+  });
+});
+
+/** Hours between the local midnights of two instants. DST makes this 23 or 25. */
+function localMidnightGapHours(earlier: Date, later: Date): number {
+  return (new Date(later.toDateString()).getTime() - new Date(earlier.toDateString()).getTime()) / 3_600_000;
+}
+
+describe('dayLabel', () => {
+  it('agrees with daysAgo across the US spring-forward', () => {
+    useTz('America/New_York');
+    // 8 Mar 2026 is 23 hours long (02:00 jumps to 03:00). Flooring that midnight gap by 24h yields 0, so the old label said Today.
+    const now = localDate(2026, 3, 9, 0, 30);
+    const springForwardDay = localDate(2026, 3, 8, 12, 0);
+    expect(localMidnightGapHours(springForwardDay, now)).toBe(23);
+    expect(dayLabel(springForwardDay.toISOString(), now)).toBe('Yesterday');
+    expect(daysAgo(springForwardDay.toISOString(), now)).toBe('yesterday');
+    expect(dayLabel(now.toISOString(), now)).toBe('Today');
+    expect(daysAgo(now.toISOString(), now)).toBe('today');
+
+    // Two calendar days later the same 23-hour gap floors to 1, so the old label said Yesterday.
+    const twoDaysLater = localDate(2026, 3, 10, 9, 0);
+    expect(localMidnightGapHours(springForwardDay, twoDaysLater)).toBe(47);
+    expect(daysAgo(springForwardDay.toISOString(), twoDaysLater)).toBe('2 days ago');
+    expect(dayLabel(springForwardDay.toISOString(), twoDaysLater)).toBe(shortDate(springForwardDay.toISOString()));
+  });
+
+  it('agrees with daysAgo across the US fall-back', () => {
+    useTz('America/New_York');
+    // 1 Nov 2026 is 25 hours long (02:00 falls back to 01:00). The next morning is still one calendar day later.
+    const now = localDate(2026, 11, 2, 0, 30);
+    const fallBackDay = localDate(2026, 11, 1, 12, 0);
+    expect(localMidnightGapHours(fallBackDay, now)).toBe(25);
+    expect(dayLabel(fallBackDay.toISOString(), now)).toBe('Yesterday');
+    expect(daysAgo(fallBackDay.toISOString(), now)).toBe('yesterday');
+    expect(dayLabel(now.toISOString(), now)).toBe('Today');
+    expect(daysAgo(now.toISOString(), now)).toBe('today');
+
+    // Both 01:30 instants on the fall-back night are that same calendar day.
+    const first130 = new Date('2026-11-01T05:30:00Z');
+    const second130 = new Date('2026-11-01T06:30:00Z');
+    expect(first130.getHours()).toBe(1);
+    expect(second130.getHours()).toBe(1);
+    expect(dayLabel(first130.toISOString(), now)).toBe('Yesterday');
+    expect(dayLabel(second130.toISOString(), now)).toBe('Yesterday');
+
+    const dayBefore = localDate(2026, 10, 31, 12, 0);
+    expect(localMidnightGapHours(dayBefore, now)).toBe(49);
+    expect(daysAgo(dayBefore.toISOString(), now)).toBe('2 days ago');
+    expect(dayLabel(dayBefore.toISOString(), now)).toBe(shortDate(dayBefore.toISOString()));
   });
 });

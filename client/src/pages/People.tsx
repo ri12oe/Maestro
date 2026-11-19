@@ -4,7 +4,7 @@ import { ExternalLink, GitCommitHorizontal, MessageSquareWarning, NotebookPen } 
 import { api } from '../api/client.ts';
 import type { Contribution, MemberSummary } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
-import { shortDate } from '../dates.ts';
+import { dayLabel, shortDate } from '../dates.ts';
 import { WORK_TYPE_LABEL, categoryShares } from '../workTypes.ts';
 import { firstName, sortedMembers, useTeam } from '../app/team.tsx';
 import { Sheet, useToast } from '../ui/overlays.tsx';
@@ -162,14 +162,6 @@ function PersonSheet({ member, onClose }: { member: MemberSummary | null; onClos
       )}
     </Sheet>
   );
-}
-
-function dayLabel(iso: string): string {
-  const d = new Date(iso); const today = new Date();
-  const diff = Math.floor((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return shortDate(iso);
 }
 
 const REASONS = ['Wrong kind of work', 'Wrong substance', 'Wrong task', 'This wasn’t mine'];

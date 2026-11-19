@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import Database from 'better-sqlite3';
-import { runMigration, STUDYBUDDY_DEMO_SLUG } from '../db/migrate.js';
+import { backfillStudyBuddyDemo, runMigration, STUDYBUDDY_DEMO_SLUG } from '../db/migrate.js';
 import { demoCommitSha, seedDemo, seedDemoOnStartup } from '../db/seed.js';
 
 const TODAY = new Date('2031-01-15T12:00:00.000Z');
@@ -126,12 +126,14 @@ describe('StudyBuddy seed marker', () => {
         .toEqual({ team_id: first.teamId });
 
       const shas = db.prepare(
-        `SELECT github_sha FROM contributions WHERE team_id = ? AND source = 'commit'`,
-      ).all(first.teamId) as Array<{ github_sha: string }>;
+        `SELECT github_sha, url FROM contributions WHERE team_id = ? AND source = 'commit'`,
+      ).all(first.teamId) as Array<{ github_sha: string; url: string }>;
       expect(shas.length).toBeGreaterThanOrEqual(20);
       expect(shas.every(row => row.github_sha.startsWith('demo:studybuddy:'))).toBe(true);
       expect(shas.every(row => !/^[0-9a-f]{40}$/i.test(row.github_sha))).toBe(true);
       expect(shas.some(row => row.github_sha === demoCommitSha('rio0008hhhh'))).toBe(true);
+      const auth = shas.find(row => row.github_sha === demoCommitSha('rio0008hhhh'));
+      expect(auth?.url).toBe('https://github.com/studybuddy-org/studybuddy-app/commit/rio0008hhhh');
 
       const second = await seedDemo(db, TODAY);
       expect(second).toEqual({ skipped: true, teamId: first.teamId });
@@ -265,6 +267,35 @@ describe('StudyBuddy seed marker', () => {
       expect(db.prepare('SELECT github_sha FROM contributions').all()).toEqual([{ github_sha: 'rio0008hhhh' }]);
       expect(db.prepare('SELECT team_id FROM demo_seed WHERE slug = ?').get(STUDYBUDDY_DEMO_SLUG))
         .toEqual({ team_id: 3 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('warns when more than one old StudyBuddy demo matches and marks the lowest id', () => {
+    const db = openMigrated();
+    try {
+      const lowId = db.prepare(
+        `INSERT INTO teams (name, repo_owner, repo_name, is_demo)
+         VALUES ('StudyBuddy', 'studybuddy-org', 'studybuddy-app', 1)`,
+      ).run().lastInsertRowid as number;
+      const highId = db.prepare(
+        `INSERT INTO teams (name, repo_owner, repo_name, is_demo)
+         VALUES ('StudyBuddy', 'studybuddy-org', 'studybuddy-app', 1)`,
+      ).run().lastInsertRowid as number;
+      expect(lowId).toBeLessThan(highId);
+
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(backfillStudyBuddyDemo(db)).toBe(lowId);
+        const text = warn.mock.calls.map(args => args.map(String).join(' ')).join('\n');
+        expect(text).toContain(`[migrate] 2 StudyBuddy demo teams match (${lowId}, ${highId})`);
+        expect(text).toContain(`The done marker uses id ${lowId}`);
+      } finally {
+        warn.mockRestore();
+      }
+      expect(db.prepare('SELECT team_id FROM demo_seed WHERE slug = ?').get(STUDYBUDDY_DEMO_SLUG))
+        .toEqual({ team_id: lowId });
     } finally {
       db.close();
     }

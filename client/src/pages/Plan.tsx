@@ -5,6 +5,7 @@ import { api } from '../api/client.ts';
 import type { RiskLevel, Task } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { daysAgo, shortDate } from '../dates.ts';
+import { shortCommitSha } from '../sha.ts';
 import { firstName, longDate, sortedMembers, teamDeadline, useTeam } from '../app/team.tsx';
 import { Sheet, useToast } from '../ui/overlays.tsx';
 import {
@@ -283,7 +284,7 @@ function TaskPanel({ task, level, onClose, teamId }: { task: Task | null; level?
                       <div className="text-label font-normal">{c.summary ?? c.title}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <WorkTypeTag type={c.work_type} /><SubstanceDots value={c.substance} />
-                        <span className="inline-flex items-center gap-1 font-mono text-[11.5px] text-fg-muted"><Icon size={12} aria-hidden="true" />{c.github_sha ? c.github_sha.slice(0, 7) : 'logged'}</span>
+                        <span className="inline-flex items-center gap-1 font-mono text-[11.5px] text-fg-muted"><Icon size={12} aria-hidden="true" />{c.github_sha ? shortCommitSha(c.github_sha) : 'logged'}</span>
                       </div>
                     </div>
                     <span className="text-caption font-normal text-fg-muted">{shortDate(c.authored_at)}</span>

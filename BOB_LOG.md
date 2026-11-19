@@ -1314,18 +1314,24 @@ A second run finds the marker and inserts nothing. Deleting the demo leaves the 
 
 Demo commit shas are `demo:studybuddy:` plus the same token as before (`demo:studybuddy:rio0008hhhh`). A GitHub sha is 40 hex characters. The prefix contains a colon, so the two cannot be equal. The scenario test still checks that the auth commit is 7 days before the pinned clock.
 
+The stored sha stays prefixed. Evidence chips were taking `github_sha.slice(0, 7)`, which showed `demo:st`. `client/src/sha.ts` takes the text after the last colon and shows its first 7 characters (`rio0008`). A 40-hex sha has no colon, so its 7-character prefix is unchanged. The seed's commit URL uses that same token (`/commit/rio0008hhhh`). Today, People, Plan, Maestro, and the source chips all call `shortCommitSha`.
+
+When more than one team matches the old demo identity, `migration_007` still writes the marker for the lowest id and logs `[migrate] N StudyBuddy demo teams match (…). The done marker uses id N.`
+
 Production already has the old seed's team: id 3, name StudyBuddy, repo `studybuddy-org/studybuddy-app`, `is_demo` 1, and the old short shas. `migration_007` runs after the other migrations and writes the marker for that row. It logs `Recognized existing StudyBuddy demo (id=3)`. Startup then skips. That deploy keeps team 3 and its existing shas. If the marker is missing and that same team is still in the file, the seed writes the marker and skips the insert.
 
 | File | Change |
 |---|---|
 | `server/src/db/schema.sql` | `demo_seed` table. |
-| `server/src/db/migrate.ts` | `migration_007` recognizes the old StudyBuddy demo and writes the marker. |
-| `server/src/db/seed.ts` | Skip on the marker. One transaction for the seed and the marker. Namespaced demo shas. |
+| `server/src/db/migrate.ts` | `migration_007` recognizes the old StudyBuddy demo and writes the marker. More than one match warns and uses the lowest id. |
+| `server/src/db/seed.ts` | Skip on the marker. One transaction for the seed and the marker. Namespaced demo shas. Commit links use the token. |
 | `server/src/ai/classifier.ts` | `classifyTeam` can write on the connection the seed passes in. |
 | `server/src/index.ts` | Comment: a seed error is rolled back, and the marker skips a later start. |
-| `server/src/tests/seed-marker.test.ts` | Rollback and retry, second run and delete, a real team named StudyBuddy, and the id 3 upgrade. |
+| `server/src/tests/seed-marker.test.ts` | Rollback and retry, second run and delete, a real team named StudyBuddy, the id 3 upgrade, the commit URL token, and the multiple-match warning. |
 | `server/src/tests/seed-scenario.test.ts` | The auth commit lookup uses the namespaced sha. |
 | `server/src/tests/migration.test.ts` | `demo_seed` is part of the expected schema. |
+| `client/src/sha.ts`, `client/src/sha.test.ts` | Short sha is the first 7 characters of the token after the last colon. A 40-hex sha is unchanged. |
+| `client/src/pages/Today.tsx`, `People.tsx`, `Plan.tsx`, `MaestroPage.tsx`, `client/src/app/Sources.tsx` | Chips call `shortCommitSha`. |
 | `README.md`, `docs/RAILWAY.md`, `.env.example` | The done marker, the deleted demo, and the production team. |
 
-`npm run lint` passed. `npm test`: server 22 files, 209 passed (209); client 1 file, 8 passed (8). Main had 205 server tests. Not deployed.
+`npm run lint` passed. `npm test`: server 22 files, 210 passed (210); client 2 files, 12 passed (12). Main had 205 server tests and 8 client tests. Not deployed.

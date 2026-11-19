@@ -192,7 +192,10 @@ export async function seedDemo(db: SqliteDatabase, today: Date = new Date()): Pr
       .run(
         teamId, memberId, sha, title, diff,
         filesChanged, additions, deletions,
-        url ?? `https://github.com/studybuddy-org/studybuddy-app/commit/${sha}`,
+        // Stored sha keeps the demo:studybuddy: prefix. The link uses the token
+        // after the last colon. Client chips show the first 7 characters of it
+        // (`client/src/sha.ts`).
+        url ?? `https://github.com/studybuddy-org/studybuddy-app/commit/${token}`,
         paths ? JSON.stringify(paths) : null,
         daysAgo(today, daysAgoN),
       ).lastInsertRowid as number;

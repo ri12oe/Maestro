@@ -9,18 +9,18 @@ import { resolveDbPath } from './paths.js';
 export const STUDYBUDDY_DEMO_SLUG = 'studybuddy';
 
 /**
- * The team the old seed inserted: name StudyBuddy, repo studybuddy-org/studybuddy-app,
+ * Teams the old seed inserted: name StudyBuddy, repo studybuddy-org/studybuddy-app,
  * is_demo = 1. Production's copy is team id 3. A real team named StudyBuddy is
- * stored with is_demo = 0 and its own repo. This query matches the seeded row only.
+ * stored with is_demo = 0 and its own repo. Rows come back lowest id first.
+ * When more than one matches, the marker uses the first and a warning is logged.
  */
-const EXISTING_DEMO_TEAM = `
+const EXISTING_DEMO_TEAMS = `
   SELECT id FROM teams
   WHERE name = 'StudyBuddy'
     AND repo_owner = 'studybuddy-org'
     AND repo_name = 'studybuddy-app'
     AND is_demo = 1
   ORDER BY id
-  LIMIT 1
 `;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -254,8 +254,15 @@ export function backfillStudyBuddyDemo(db: Database.Database): number | null {
       seeded_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     )
   `);
-  const existing = db.prepare(EXISTING_DEMO_TEAM).get() as { id: number } | undefined;
-  if (!existing) return null;
+  const matches = db.prepare(EXISTING_DEMO_TEAMS).all() as Array<{ id: number }>;
+  if (matches.length === 0) return null;
+  const existing = matches[0];
+  if (matches.length > 1) {
+    const ids = matches.map(row => row.id).join(', ');
+    console.warn(
+      `[migrate] ${matches.length} StudyBuddy demo teams match (${ids}). The done marker uses id ${existing.id}.`,
+    );
+  }
   db.prepare('UPDATE teams SET is_demo = 1 WHERE id = ?').run(existing.id);
   db.prepare(
     `INSERT INTO demo_seed (slug, team_id) VALUES (?, ?)

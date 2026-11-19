@@ -25,7 +25,7 @@ const tmpDir = mkdtempSync(join(tmpdir(), 'seed-scenario-'));
 process.env.DB_PATH = join(tmpDir, 'seed.db');
 process.env.AI_PROVIDER = 'mock';
 
-const { seedStudyBuddy } = await import('../db/seed.js');
+const { seedStudyBuddy, demoCommitSha } = await import('../db/seed.js');
 const { default: db } = await import('../db/client.js');
 const { default: suggestionsRouter } = await import('../routes/suggestions.js');
 const { runReasoner } = await import('../ai/reasoner.js');
@@ -167,8 +167,8 @@ describe('StudyBuddy demo scenario', () => {
     ).get(teamId) as { due_date: string };
     expect(auth.due_date).toBe(shift(7, true));
     const lastAuth = db.prepare(
-      "SELECT authored_at FROM contributions WHERE github_sha = 'rio0008hhhh'",
-    ).get() as { authored_at: string };
+      'SELECT authored_at FROM contributions WHERE github_sha = ?',
+    ).get(demoCommitSha('rio0008hhhh')) as { authored_at: string };
     expect(lastAuth.authored_at).toBe(shift(-7, false));
 
     // No stored deadline: the reasoner uses each task's milestone date.

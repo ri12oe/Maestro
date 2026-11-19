@@ -15,6 +15,7 @@ const EXPECTED_TABLES = [
   'task_matches',
   'risks',
   'suggestions',
+  'demo_seed',
   'schema_migrations',
 ];
 
@@ -46,6 +47,7 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
     'rationale', 'checkin_message', 'status', 'generated_at',
   ],
   schema_migrations: ['id', 'name', 'applied_at'],
+  demo_seed: ['slug', 'team_id', 'seeded_at'],
 };
 
 const SCHEMA_TABLES = EXPECTED_TABLES.filter(name => name !== 'schema_migrations');

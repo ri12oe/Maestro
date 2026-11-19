@@ -17,6 +17,16 @@ CREATE TABLE IF NOT EXISTS teams (
   report_enabled INTEGER NOT NULL DEFAULT 0 -- 1 when the team has turned on the project report
 );
 
+-- demo_seed: done marker for the opt-in StudyBuddy seed (slug 'studybuddy').
+-- Written in the same transaction as a finished seed. Not a foreign key, so
+-- deleting the team leaves the marker and startup does not recreate the demo.
+-- migration_007 inserts the row when the previous seed's team is already present.
+CREATE TABLE IF NOT EXISTS demo_seed (
+  slug       TEXT PRIMARY KEY,
+  team_id    INTEGER,                 -- team that was seeded; stale after that team is deleted
+  seeded_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
 -- members: one row per contributor; auto-created on first sync appearance
 CREATE TABLE IF NOT EXISTS members (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

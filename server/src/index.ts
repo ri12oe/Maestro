@@ -52,7 +52,8 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Migrations already ran when the database module loaded. SEED_DEMO=1 inserts
-// StudyBuddy into that same file. A seed error is logged and the server still listens.
+// StudyBuddy into that same file, or skips when the demo's done marker is set.
+// A seed error is rolled back and logged. The server still listens.
 await seedDemoOnStartup(db);
 
 app.listen(PORT, () => {

@@ -1301,3 +1301,31 @@ The log-work route already caught a model failure and stored `title.trim().slice
 | `server/src/tests/manual-summary.test.ts` | Empty, whitespace-only, and a trimmed valid summary. Title fallback, including the 120-character cut. Blank titles are 400 and write nothing. |
 
 `npm run lint` passed with no errors. `npm test`: server 22 files, 217 passed (217); client 1 file, 11 passed (11). Main had 205 server tests and 11 client tests. Not deployed.
+
+## 2026-11-19 — Session 51: StudyBuddy seed commits with a done marker (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The startup seed used to skip when any team was named StudyBuddy, and it inserted rows outside a transaction. A throw left a half-built team that the name check then treated as finished. Deleting that team made the next start insert it again under a new id. The demo commit shas were short tokens in the same `UNIQUE` column as real GitHub shas.
+
+`teams.is_demo` was already on the schema. It marks the demo row for the UI, and it is removed when that team is deleted, so it cannot be the done marker. The marker is a row in `demo_seed` (slug `studybuddy`) with the team id. It is not a foreign key. `seedDemo` commits the team, members, tasks, contributions, classifications, risks, suggestions, and that row in one transaction. `classifyTeam` takes the same connection the reasoner already accepted, so those writes sit inside the transaction. A throw rolls the transaction back, `seedDemoOnStartup` logs `[seed] SEED_DEMO failed` and still returns, and the next start with `SEED_DEMO=1` tries again. `SEED_DEMO` stays opt-in.
+
+A second run finds the marker and inserts nothing. Deleting the demo leaves the marker, so the team stays deleted. A real team named StudyBuddy (`is_demo` 0, its own repo) is left as it is, and the demo is inserted beside it.
+
+Demo commit shas are `demo:studybuddy:` plus the same token as before (`demo:studybuddy:rio0008hhhh`). A GitHub sha is 40 hex characters. The prefix contains a colon, so the two cannot be equal. The scenario test still checks that the auth commit is 7 days before the pinned clock.
+
+Production already has the old seed's team: id 3, name StudyBuddy, repo `studybuddy-org/studybuddy-app`, `is_demo` 1, and the old short shas. `migration_007` runs after the other migrations and writes the marker for that row. It logs `Recognized existing StudyBuddy demo (id=3)`. Startup then skips. That deploy keeps team 3 and its existing shas. If the marker is missing and that same team is still in the file, the seed writes the marker and skips the insert.
+
+| File | Change |
+|---|---|
+| `server/src/db/schema.sql` | `demo_seed` table. |
+| `server/src/db/migrate.ts` | `migration_007` recognizes the old StudyBuddy demo and writes the marker. |
+| `server/src/db/seed.ts` | Skip on the marker. One transaction for the seed and the marker. Namespaced demo shas. |
+| `server/src/ai/classifier.ts` | `classifyTeam` can write on the connection the seed passes in. |
+| `server/src/index.ts` | Comment: a seed error is rolled back, and the marker skips a later start. |
+| `server/src/tests/seed-marker.test.ts` | Rollback and retry, second run and delete, a real team named StudyBuddy, and the id 3 upgrade. |
+| `server/src/tests/seed-scenario.test.ts` | The auth commit lookup uses the namespaced sha. |
+| `server/src/tests/migration.test.ts` | `demo_seed` is part of the expected schema. |
+| `README.md`, `docs/RAILWAY.md`, `.env.example` | The done marker, the deleted demo, and the production team. |
+
+`npm run lint` passed. `npm test`: server 22 files, 209 passed (209); client 1 file, 8 passed (8). Main had 205 server tests. Not deployed.

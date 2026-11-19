@@ -25,7 +25,8 @@
  */
 
 import * as z from 'zod';
-import db from '../db/client.js';
+import type BetterSqlite3 from 'better-sqlite3';
+import singleton from '../db/client.js';
 import { completeJSON } from './provider.js';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -398,8 +399,16 @@ export interface ClassifyTeamResult {
  * - Manual entries: work_type from kind, substance = medium, summary from AI only.
  *
  * Returns { classified, failed }.
+ *
+ * `dbOverride` is the connection to write on. The StudyBuddy seed passes the
+ * connection that holds its open transaction, so a failed seed rolls the
+ * classifications back with the rest of the demo.
  */
-export async function classifyTeam(teamId: number): Promise<ClassifyTeamResult> {
+export async function classifyTeam(
+  teamId: number,
+  dbOverride?: BetterSqlite3.Database,
+): Promise<ClassifyTeamResult> {
+  const db = dbOverride ?? singleton;
   // Load ALL tasks (open and closed)
   const allTasks = db
     .prepare(
@@ -564,13 +573,13 @@ export interface RematchResult {
  * anything left over is picked up by the next sync.
  */
 export async function rematchNewTasks(teamId: number, limit = 200): Promise<RematchResult> {
-  const allTasks = db.prepare(
+  const allTasks = singleton.prepare(
     'SELECT id, github_issue_number, title, status FROM tasks WHERE team_id = ? AND github_issue_number IS NOT NULL',
   ).all(teamId) as TaskRow[];
   const maxTaskId = allTasks.reduce((m, t) => Math.max(m, t.id), 0);
   if (maxTaskId === 0) return { checked: 0, linked: 0, failed: 0 };
 
-  const candidates = db.prepare(`
+  const candidates = singleton.prepare(`
     SELECT c.id, c.title, c.diff_summary, c.files_changed, c.additions, c.deletions,
            COALESCE(c.match_checked_task_id, 0) AS checked_upto
     FROM contributions c
@@ -582,8 +591,8 @@ export async function rematchNewTasks(teamId: number, limit = 200): Promise<Rema
     LIMIT ?
   `).all(teamId, maxTaskId, limit) as Array<ContribRow & { checked_upto: number }>;
 
-  const markChecked = db.prepare('UPDATE contributions SET match_checked_task_id = ? WHERE id = ?');
-  const insertMatch = db.prepare(`
+  const markChecked = singleton.prepare('UPDATE contributions SET match_checked_task_id = ? WHERE id = ?');
+  const insertMatch = singleton.prepare(`
     INSERT INTO task_matches (contribution_id, task_id, similarity_score, matched_at)
     SELECT ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
     WHERE NOT EXISTS (SELECT 1 FROM task_matches WHERE contribution_id = ?)

@@ -1332,6 +1332,6 @@ Production already has the old seed's team: id 3, name StudyBuddy, repo `studybu
 | `server/src/tests/migration.test.ts` | `demo_seed` is part of the expected schema. |
 | `client/src/sha.ts`, `client/src/sha.test.ts` | Short sha is the first 7 characters of the token after the last colon. A 40-hex sha is unchanged. |
 | `client/src/pages/Today.tsx`, `People.tsx`, `Plan.tsx`, `MaestroPage.tsx`, `client/src/app/Sources.tsx` | Chips call `shortCommitSha`. |
-| `README.md`, `docs/RAILWAY.md`, `.env.example` | The done marker, the deleted demo, and the production team. |
+| `README.md`, `docs/PLAN.md`, `docs/RAILWAY.md`, `.env.example` | Seeded once means the done marker. A deleted demo stays deleted. A real team named StudyBuddy is left as it is. |
 
-`npm run lint` passed. `npm test`: server 22 files, 210 passed (210); client 2 files, 12 passed (12). Main had 205 server tests and 8 client tests. Not deployed.
+`npm run lint` passed. `npm test` after rebasing onto `2157edb`: server 23 files, 222 passed (222); client 2 files, 15 passed (15). That main had 217 server tests and 11 client tests. Not deployed.

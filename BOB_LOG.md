@@ -1386,4 +1386,4 @@ A follow-up on the same branch also rejects statement rankings that do not start
 | `client/src/pages/People.tsx` | `?dispute=` opens the existing Wrong label form for that contribution. |
 | `docs/PLAN.md`, `README.md` | The stretch item is built. Today and the Maestro AI list describe the digest. |
 
-`npm run lint` passed before the rebase onto `d0b358b`. Test counts after that rebase are in the line below this table once the suite is re-run. Not deployed.
+Rebased onto `d0b358b` (session 52, the holdout accuracy card). This entry is session 53. `npm run lint` passed. `npm test`: server 25 files, 238 passed (238); client 3 files, 21 passed (21). That main had 228 server tests and 21 client tests. Not deployed.

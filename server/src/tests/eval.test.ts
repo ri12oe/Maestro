@@ -9,7 +9,7 @@
  * fixture, so it still runs when the committed file is a Grok run. The
  * committed file is re-scored only when its provider is mock. A Grok file
  * must parse, its counts must agree with correct/total and the holdout row
- * count, and each listed miss must be a real holdout row.
+ * count, and each listed miss must name a real holdout row.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
@@ -22,8 +22,8 @@ import request from 'supertest';
 import { sitePassword } from '../middleware/sitePassword.js';
 import { createEvalRouter } from '../routes/eval.js';
 import { buildResultsFile, loadLabeledSet, scoreLabeledRows, type LabeledCommit } from '../ai/eval/measure.js';
-import { accuracyPercent, committedResultsPath, parseEvalResults, type AccuracyCount, type ConfusionPair, type EvalResults } from '../ai/eval/results.js';
-import { modelVersion } from '../ai/classifier.js';
+import { accuracyCount, accuracyPercent, committedResultsPath, parseEvalResults, type AccuracyCount, type EvalResults, type RecordedMiss } from '../ai/eval/results.js';
+import { SUBSTANCES, WORK_TYPES, modelVersion } from '../ai/classifier.js';
 
 const mockFixturePath = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'mock-holdout-results.json');
 
@@ -56,6 +56,9 @@ const usable = {
     workType: [{ expected: 'fix', got: 'feature', count: 1 }],
     substance: [],
   },
+  misses: [
+    { field: 'workType', title: 'Fix incorrect HTTP status code on validation error', expected: 'fix', got: 'feature' },
+  ],
 };
 
 afterAll(() => {
@@ -131,15 +134,17 @@ describe('GET /api/eval', () => {
     expectGrokCounts(committed, rows);
   });
 
-  it('rejects a listed miss that is not a holdout row', () => {
+  it('rejects a miss whose got label is not a classifier label', () => {
     const rows = loadLabeledSet('holdout.csv');
-    const problem = missProblem(
-      [{ expected: 'not-a-label', got: 'feature', count: 1 }],
-      rows.map(row => row.expected_work_type),
-      9,
-      rows.length,
-    );
-    expect(problem).toMatch(/holdout/);
+    const row = rows.find(item => item.expected_work_type === 'fix');
+    if (!row) throw new Error('holdout has no fix row');
+    const total = rows.length;
+    const problem = grokMissProblem({
+      workType: accuracyCount(total - 1, total),
+      substance: accuracyCount(total, total),
+      misses: [{ field: 'workType', title: row.title, expected: row.expected_work_type, got: 'not-a-label' }],
+    }, rows);
+    expect(problem).toMatch(/not-a-label/);
   });
 });
 
@@ -166,18 +171,7 @@ function expectGrokCounts(recorded: EvalResults, rows: LabeledCommit[]): void {
   expect(recorded.holdoutSize).toBe(rows.length);
   expectCountAgrees(recorded.workType, rows.length);
   expectCountAgrees(recorded.substance, rows.length);
-  expect(missProblem(
-    recorded.confusion.workType,
-    rows.map(row => row.expected_work_type),
-    recorded.workType.correct,
-    recorded.workType.total,
-  )).toBeNull();
-  expect(missProblem(
-    recorded.confusion.substance,
-    rows.map(row => row.expected_substance),
-    recorded.substance.correct,
-    recorded.substance.total,
-  )).toBeNull();
+  expect(grokMissProblem(recorded, rows)).toBeNull();
 }
 
 function expectCountAgrees(count: AccuracyCount, holdoutSize: number): void {
@@ -188,27 +182,40 @@ function expectCountAgrees(count: AccuracyCount, holdoutSize: number): void {
   expect(count.accuracy).toBe(Number(((count.correct / count.total) * 100).toFixed(1)));
 }
 
+const WORK_TYPE_LABELS = new Set<string>(WORK_TYPES);
+const SUBSTANCE_LABELS = new Set<string>(SUBSTANCES);
+
 /**
- * Confusion pairs are the misses the results file lists.
- * Each expected label has to be the expected label of that many holdout rows,
- * and the listed counts have to add up to total - correct.
+ * Each listed miss names a holdout row, that row's expected label for the
+ * field is `expected`, and `got` is a different classifier label for the field.
+ * The misses in each field add up to total - correct.
  */
-function missProblem(
-  pairs: ConfusionPair[],
-  labels: string[],
-  correct: number,
-  total: number,
+function grokMissProblem(
+  recorded: { misses: RecordedMiss[]; workType: AccuracyCount; substance: AccuracyCount },
+  rows: LabeledCommit[],
 ): string | null {
-  const listed = pairs.reduce((sum, pair) => sum + pair.count, 0);
-  if (listed !== total - correct) return `listed ${listed} misses, expected ${total - correct}`;
-  const remaining = new Map<string, number>();
-  for (const label of labels) remaining.set(label, (remaining.get(label) ?? 0) + 1);
-  for (const pair of pairs) {
-    const available = remaining.get(pair.expected) ?? 0;
-    if (pair.count > available) {
-      return `"${pair.expected}" is not the expected label of ${pair.count} holdout row(s)`;
+  const byTitle = new Map(rows.map(row => [row.title, row]));
+  for (const field of ['workType', 'substance'] as const) {
+    const listed = recorded.misses.filter(miss => miss.field === field).length;
+    const count = recorded[field];
+    if (listed !== count.total - count.correct) {
+      return `${field} listed ${listed} misses, expected ${count.total - count.correct}`;
     }
-    remaining.set(pair.expected, available - pair.count);
+  }
+  const seen = new Set<string>();
+  for (const miss of recorded.misses) {
+    const row = byTitle.get(miss.title);
+    if (!row) return `"${miss.title}" is not a holdout row`;
+    const key = `${miss.field}\0${miss.title}`;
+    if (seen.has(key)) return `"${miss.title}" is listed twice for ${miss.field}`;
+    seen.add(key);
+    const expected = miss.field === 'workType' ? row.expected_work_type : row.expected_substance;
+    if (miss.expected !== expected) {
+      return `"${miss.title}" expected ${expected} for ${miss.field}, file says ${miss.expected}`;
+    }
+    const allowed = miss.field === 'workType' ? WORK_TYPE_LABELS : SUBSTANCE_LABELS;
+    if (!allowed.has(miss.got)) return `"${miss.got}" is not a classifier label for ${miss.field}`;
+    if (miss.got === miss.expected) return `"${miss.title}" got the expected ${miss.field} label`;
   }
   return null;
 }

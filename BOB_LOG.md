@@ -1533,7 +1533,7 @@ The committed holdout file was the offline mock run (work type 50.0%, substance 
 
 The card line under each percentage is `90.0% · Grok (grok-4.20-0309-non-reasoning), 10 holdout commits`. The corner badge says Grok. An offline mock file still reads `50.0% · offline mock, 10 holdout commits` and its badge says Offline mock.
 
-`server/src/tests/eval.test.ts` re-scores `holdout.csv` only when the recorded provider is mock. A Grok file has to parse (`parseEvalResults`). `correct` is at most `total`, accuracy is `correct/total` to one decimal, and `holdoutSize` is the number of rows in `holdout.csv`. Each listed confusion miss has to be the expected label of that many holdout rows. The mock re-score still runs, against `server/src/tests/fixtures/mock-holdout-results.json`.
+`server/src/tests/eval.test.ts` re-scores `holdout.csv` only when the recorded provider is mock. A Grok file has to parse (`parseEvalResults`), which requires a `misses` array of `{ field: "workType" | "substance", title, expected, got }`. `correct` is at most `total`, accuracy is `correct/total` to one decimal, and `holdoutSize` is the number of rows in `holdout.csv`. Each miss title has to be a holdout row whose expected label for that field is `expected`. `got` has to be a different classifier label for that field. The misses in each field add up to total minus correct. The mock re-score still runs, against `server/src/tests/fixtures/mock-holdout-results.json`, regenerated with that `misses` array. The committed Grok file does not have `misses` yet, so that check fails until the rerun is copied in.
 
 | File | Change |
 |---|---|

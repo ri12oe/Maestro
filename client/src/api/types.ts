@@ -251,6 +251,14 @@ export interface EvalConfusionPair {
   count: number;
 }
 
+/** One holdout row the classifier labeled wrong. */
+export interface EvalMiss {
+  field: 'workType' | 'substance';
+  title: string;
+  expected: string;
+  got: string;
+}
+
 /** Classifier accuracy on the hand-labeled holdout. About the AI, not a person. */
 export interface EvalResults {
   provider: string;
@@ -265,6 +273,7 @@ export interface EvalResults {
     workType: EvalConfusionPair[];
     substance: EvalConfusionPair[];
   };
+  misses: EvalMiss[];
 }
 
 export type EvalResponse = { available: false } | (EvalResults & { available: true });

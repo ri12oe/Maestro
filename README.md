@@ -78,7 +78,7 @@ npm run lint
 npm test
 ```
 
-`npm run lint` runs ESLint in `server/` and then in `client/`. `npm test` runs the server test suite, then the client test suite.
+`npm run lint` runs ESLint in `server/`, then in `client/`, then `check:railway`. That script typechecks `.railway/railway.ts` with `tsc --noEmit` and lints that file. The client and server tsconfigs do not include it. `npm test` runs the server test suite, then the client test suite.
 
 ## Demo
 

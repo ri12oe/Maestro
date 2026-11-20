@@ -3,7 +3,7 @@ import type {
 } from './types.ts';
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public resetAt: string | null = null) {
     super(message);
   }
 }
@@ -16,7 +16,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const message = (body && typeof body.error === 'string') ? body.error : `Request failed (${res.status})`;
-    throw new ApiError(message, res.status);
+    const resetAt = body && typeof body.resetAt === 'string' ? body.resetAt : null;
+    throw new ApiError(message, res.status, resetAt);
   }
   return body as T;
 }
@@ -82,7 +83,7 @@ export const api = {
     request<ClassifyResult>(`/teams/${teamId}/classify`, { method: 'POST' }),
 
   createTeam: (input: { name: string; repo_owner: string; repo_name: string }) =>
-    request<{ id: number }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
+    request<{ id: number; reused?: boolean }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
 
   deleteTeam: (teamId: number) =>
     request<{ ok: true }>(`/teams/${teamId}`, { method: 'DELETE' }),

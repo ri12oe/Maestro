@@ -275,7 +275,89 @@ export function runMigration(dbPath: string): void {
     })();
   }
 
-  // Recreate the view after the columns exist. DROP is safe when it is missing.
+  /**
+   * migration_009: a commit sha is unique per team, not across the whole file.
+   *
+   * The old column constraint `github_sha TEXT UNIQUE` kept a fork, or any
+   * shared sha, from storing that commit on a second team. SQLite cannot drop
+   * a column UNIQUE, so the table is rebuilt. schema.sql already declares
+   * UNIQUE (team_id, github_sha); a fresh file skips the rebuild. NULL shas
+   * (manual log rows) stay allowed more than once. Ids are copied, so
+   * classifications and task matches keep pointing at the same rows.
+   * Running this twice is a no-op: the migration name is recorded, and a
+   * database that already has the composite unique is not rebuilt.
+   */
+  if (!appliedSet.has('migration_009_contribution_sha_per_team')) {
+    const defined = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'contributions'")
+      .get() as { sql: string } | undefined;
+    const alreadyPerTeam = /UNIQUE\s*\(\s*team_id\s*,\s*github_sha\s*\)/i.test(defined?.sql ?? '');
+    if (!alreadyPerTeam) {
+      // foreign_keys cannot change inside a transaction. Turn them off so the
+      // drop does not fail while classifications still reference this table.
+      db.pragma('foreign_keys = OFF');
+      try {
+        const present = new Set(
+          (db.prepare('PRAGMA table_info(contributions)').all() as Array<{ name: string }>).map(col => col.name),
+        );
+        const copyCols = [
+          'id', 'team_id', 'member_id', 'source', 'github_sha', 'github_pr_number',
+          'title', 'body', 'kind', 'link', 'diff_summary', 'files_changed', 'additions', 'deletions',
+          'paths', 'url', 'embedding', 'authored_at', 'synced_at', 'match_checked_task_id',
+        ].filter(name => present.has(name));
+        const colList = copyCols.join(', ');
+        db.transaction(() => {
+          db.exec(`
+            CREATE TABLE contributions_new (
+              id                INTEGER PRIMARY KEY AUTOINCREMENT,
+              team_id           INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+              member_id         INTEGER NOT NULL REFERENCES members(id),
+              source            TEXT    NOT NULL CHECK (source IN ('commit', 'manual')),
+              github_sha        TEXT,
+              github_pr_number  INTEGER,
+              title             TEXT    NOT NULL,
+              body              TEXT,
+              kind              TEXT,
+              link              TEXT,
+              diff_summary      TEXT,
+              files_changed     INTEGER,
+              additions         INTEGER,
+              deletions         INTEGER,
+              paths             TEXT,
+              url               TEXT,
+              embedding         BLOB,
+              authored_at       TEXT    NOT NULL,
+              synced_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+              match_checked_task_id INTEGER,
+              UNIQUE (team_id, github_sha)
+            );
+            INSERT INTO contributions_new (${colList})
+            SELECT ${colList} FROM contributions;
+            DROP TABLE contributions;
+            ALTER TABLE contributions_new RENAME TO contributions;
+          `);
+          const sequence = db
+            .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'")
+            .get();
+          if (sequence) {
+            db.exec(`
+              UPDATE sqlite_sequence
+              SET seq = IFNULL((SELECT MAX(id) FROM contributions), 0)
+              WHERE name = 'contributions'
+            `);
+          }
+        })();
+      } finally {
+        db.pragma('foreign_keys = ON');
+      }
+    }
+    db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
+      'migration_009_contribution_sha_per_team',
+    );
+  }
+
+  // Recreate the view after correction columns exist and the sha migration
+  // has finished. DROP is safe when the view is missing.
   db.exec(viewSql);
 
   db.close();

@@ -165,7 +165,7 @@ export async function syncTeam(teamId: number, stage: SyncStage = 'all'): Promis
     VALUES
       (@team_id, @member_id, 'commit', @github_sha, @github_pr_number, @title,
        @diff_summary, @files_changed, @additions, @deletions, @url, @paths, @authored_at)
-    ON CONFLICT (github_sha) DO NOTHING
+    ON CONFLICT (team_id, github_sha) DO NOTHING
   `);
 
   const syncTx = db.transaction(() => {
@@ -277,14 +277,14 @@ export async function syncTeam(teamId: number, stage: SyncStage = 'all'): Promis
   const taskCount = (db.prepare(
     'SELECT COUNT(*) AS n FROM tasks WHERE team_id = ?',
   ).get(teamId) as { n: number }).n;
-  const notice = taskCount === 0 ? NO_ISSUES : null;
+  const notice = taskCount === 0 && !issues.capped ? NO_ISSUES : null;
   const ingested: SyncResult = {
     ...emptyResult(),
     newContributions,
     updatedTasks: issues.length,
     newMembers,
     notice,
-    capped: commits.capped || issues.capped,
+    capped: commits.capped || issues.capped || pulls.capped,
   };
 
   // Ingest alone is the first real step on the connect screen. `all` continues

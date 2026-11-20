@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { dayLabel, daysAgo, shortDate } from './dates.ts';
+import { dayLabel, daysAgo, formatResetAt, shortDate } from './dates.ts';
 
 /**
  * Node reads the timezone from `process.env.TZ` when local date parts are read.
@@ -21,6 +21,15 @@ function useTz(tz: string): void {
 function localDate(year: number, month: number, day: number, hour = 0, minute = 0): Date {
   return new Date(year, month - 1, day, hour, minute, 0, 0);
 }
+
+describe('formatResetAt', () => {
+  it('shows the reset in a local time zone and does not keep the Zulu timestamp', () => {
+    const formatted = formatResetAt('2026-11-20T16:00:00.000Z', 'America/New_York', 'en-US');
+    expect(formatted).toBe('Nov 20, 2026, 11:00 AM');
+    expect(formatted).not.toContain('Z');
+    expect(formatted).not.toContain('16:00');
+  });
+});
 
 describe('daysAgo', () => {
   it('labels 23:59 on the previous local day as yesterday just after midnight', () => {

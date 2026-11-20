@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import db from '../db/client.js';
-import { GitHubApiError } from '../ingestion/github.js';
+import { GitHubApiError, RepoPathError, fetchRepo, isGitHubRepo, repoIsPublic } from '../ingestion/github.js';
 import { IngestError, syncTeam, type SyncStage } from '../ingestion/sync.js';
+import { beginSync, clientIp, endSync, overLimit, requestLimits } from '../ingestion/limits.js';
 import { classifyTeam } from '../ai/classifier.js';
 import { runReasoner } from '../ai/reasoner.js';
+
+const PUBLIC_ONLY = 'Maestro can only analyze public repositories.';
+const TOO_MANY = 'Too many requests. Wait a minute, then press Try again.';
+const SYNC_BUSY = 'A sync is already running';
 
 const SYNC_STAGES: readonly SyncStage[] = ['ingest', 'classify', 'match', 'reason', 'all'];
 
@@ -42,14 +47,20 @@ function isDeadline(value: unknown): value is string | null {
   return value === null || (typeof value === 'string' && isIsoDate(value));
 }
 
-/** Turn GitHub/API failures into messages a student can act on. */
-export function explainSyncError(err: unknown, teamId: number): { status: number; error: string } {
-  if (err instanceof IngestError) return { status: err.status, error: err.message };
+/** Turn GitHub/API failures into messages a student can act on. The GitHub body is logged, not returned. */
+export function explainSyncError(
+  err: unknown,
+  teamId: number,
+  repoLabel?: string,
+): { status: number; error: string; resetAt?: string } {
+  if (err instanceof IngestError || err instanceof RepoPathError) {
+    return { status: err.status, error: err.message };
+  }
 
   const message = err instanceof Error ? err.message : String(err);
   const team = db.prepare('SELECT repo_owner, repo_name FROM teams WHERE id = ?').get(teamId) as
     | { repo_owner: string; repo_name: string } | undefined;
-  const repo = team ? `${team.repo_owner}/${team.repo_name}` : 'the repository';
+  const repo = repoLabel ?? (team ? `${team.repo_owner}/${team.repo_name}` : 'the repository');
   const gh = err instanceof GitHubApiError
     ? err.status
     : Number(/GitHub .*failed: (\d{3})/.exec(message)?.[1]);
@@ -58,7 +69,7 @@ export function explainSyncError(err: unknown, teamId: number): { status: number
   if (code === 404) {
     return {
       status: 404,
-      error: `GitHub couldn't find ${repo}. Check the spelling, or paste a public repository. A private repository only works when the server token can read it. Then press Try again.`,
+      error: `GitHub couldn't find ${repo}. Check the spelling, then press Try again. ${PUBLIC_ONLY}`,
     };
   }
   if (code === 401) {
@@ -68,13 +79,22 @@ export function explainSyncError(err: unknown, teamId: number): { status: number
     };
   }
   if (code === 403 || code === 429) {
-    const reset = err instanceof GitHubApiError ? err.resetAt : null;
-    const when = reset
-      ? `Try again after ${reset}.`
+    const resetAt = err instanceof GitHubApiError && err.resetAt ? err.resetAt : undefined;
+    const when = resetAt
+      ? 'Try again after the limit resets.'
       : 'Wait for the limit to reset, then press Try again.';
-    return { status: 503, error: `GitHub is rate-limiting requests right now. ${when}` };
+    return {
+      status: 503,
+      error: `GitHub is rate-limiting requests right now. ${when}`,
+      ...(resetAt ? { resetAt } : {}),
+    };
   }
-  return { status: 500, error: `Sync failed: ${message}` };
+  console.error('[sync]', message);
+  return { status: 500, error: 'Sync failed. Press Try again.' };
+}
+
+function sendExplained(res: { status: (code: number) => { json: (body: unknown) => void } }, explained: { status: number; error: string; resetAt?: string }): void {
+  res.status(explained.status).json(explained.resetAt ? { error: explained.error, resetAt: explained.resetAt } : { error: explained.error });
 }
 
 // GET /api/teams — list teams (for the team picker on the Connect screen)
@@ -89,8 +109,10 @@ router.get('/', (_req, res) => {
   res.json(teams);
 });
 
-// POST /api/teams — create a team
-router.post('/', (req, res) => {
+// POST /api/teams — create a team, or return the one that already has this repository.
+// A new row is stored only after GitHub says the repository is public. Reuse does
+// not call GitHub and does not sync. Teams already in the database keep syncing.
+router.post('/', async (req, res) => {
   const { name, repo_owner, repo_name } = req.body as Record<string, unknown>;
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -108,10 +130,33 @@ router.post('/', (req, res) => {
 
   const owner = repo_owner.trim();
   const repo = repo_name.trim();
+  if (!isGitHubRepo(owner, repo)) {
+    res.status(400).json({ error: 'Enter the repository as owner/repo.' });
+    return;
+  }
+  if (overLimit(`create:${clientIp(req)}`, requestLimits.createPerIp)) {
+    res.status(429).json({ error: TOO_MANY });
+    return;
+  }
+
   const existing = findTeamByRepo(owner, repo);
   if (existing) {
     res.status(200).json({ ...existing, reused: true });
     return;
+  }
+
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    try {
+      const info = await fetchRepo(owner, repo, token);
+      if (!repoIsPublic(info)) {
+        res.status(403).json({ error: PUBLIC_ONLY });
+        return;
+      }
+    } catch (err) {
+      sendExplained(res, explainSyncError(err, 0, `${owner}/${repo}`));
+      return;
+    }
   }
 
   const result = db
@@ -207,12 +252,23 @@ router.post('/:teamId/sync', async (req, res) => {
     return;
   }
 
+  const ip = clientIp(req);
+  if (overLimit(`sync-ip:${ip}`, requestLimits.syncPerIp) || overLimit(`sync-team:${teamId}`, requestLimits.syncPerTeam)) {
+    res.status(429).json({ error: TOO_MANY });
+    return;
+  }
+  if (!beginSync(teamId)) {
+    res.status(409).json({ error: SYNC_BUSY });
+    return;
+  }
+
   try {
     const result = await syncTeam(teamId, stage);
     res.json({ ok: true, stage, ...result });
   } catch (err) {
-    const { status, error } = explainSyncError(err, teamId);
-    res.status(status).json({ error });
+    sendExplained(res, explainSyncError(err, teamId));
+  } finally {
+    endSync(teamId);
   }
 });
 

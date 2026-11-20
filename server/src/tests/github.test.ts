@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { authorKey, fetchCommits, fetchIssues, isBotAuthor, PATCH_LINE_LIMIT, COMMIT_WINDOW, ISSUE_WINDOW, GitHubApiError } from '../ingestion/github.js';
+import { authorKey, fetchCommits, fetchIssues, fetchPulls, isBotAuthor, isGitHubRepo, PATCH_LINE_LIMIT, COMMIT_WINDOW, ISSUE_WINDOW, PR_WINDOW, GitHubApiError, RepoPathError } from '../ingestion/github.js';
 
 // ── authorKey ────────────────────────────────────────────────────────────────
 
@@ -268,6 +268,47 @@ describe('fetchIssues', () => {
     expect(issues).toHaveLength(ISSUE_WINDOW);
     expect(issues.capped).toBe(true);
     expect(issues[0].number).toBe(1);
+  });
+
+  it('keeps paging when a page is only pull requests', async () => {
+    const prs = Array.from({ length: 100 }, (_, i) => makeIssue({ number: i + 1, pull_request: true }));
+    const issues = await fetchIssues('o', 'r', 'token', makeIssueFetch([
+      prs,
+      [makeIssue({ number: 501, title: 'Real issue' })],
+    ]));
+    expect(issues.map(issue => issue.number)).toEqual([501]);
+    expect(issues.capped).toBe(false);
+  });
+});
+
+describe('fetchPulls', () => {
+  it('pages up to the cap and marks older pull requests capped', async () => {
+    const page = Array.from({ length: 100 }, (_, i) => ({
+      number: i + 1,
+      head: { sha: `sha${i}` },
+      merge_commit_sha: null,
+    }));
+    const pulls = await fetchPulls('o', 'r', 'token', async () => mockResponse(page));
+    expect(pulls).toHaveLength(PR_WINDOW);
+    expect(pulls.capped).toBe(true);
+    expect(pulls[0].number).toBe(1);
+  });
+});
+
+describe('repository path', () => {
+  it.each([
+    ['acme', '..'],
+    ['acme', '../../user'],
+    ['acme', 'ok?name'],
+    ['../evil', 'app'],
+  ])('rejects %s/%s before any request', async (owner, repo) => {
+    expect(isGitHubRepo(owner, repo)).toBe(false);
+    let called = false;
+    await expect(fetchCommits(owner, repo, 'token', async () => {
+      called = true;
+      return mockResponse([]);
+    })).rejects.toBeInstanceOf(RepoPathError);
+    expect(called).toBe(false);
   });
 });
 

@@ -67,12 +67,20 @@ describe('StudyBuddy seed marker', () => {
         `INSERT INTO members (team_id, github_login, email, display_name)
          VALUES (?, 'ada', 'ada@real.dev', 'Ada Lovelace')`,
       ).run(teamId).lastInsertRowid as number;
-      // Last demo commit token. The seed inserts the team, the other commits,
-      // and then this sha, which is already taken.
+      // The sha is unique per team, so this row on Capstone does not block the demo.
+      // The trigger aborts the seed's own insert of that same sha, mid-transaction.
       db.prepare(
         `INSERT INTO contributions (team_id, member_id, source, github_sha, title, authored_at)
          VALUES (?, ?, 'commit', ?, 'Keep this commit', '2031-01-01T00:00:00Z')`,
       ).run(teamId, memberId, demoCommitSha('pri0006ffff'));
+      db.exec(`
+        CREATE TRIGGER abort_last_demo_sha
+        BEFORE INSERT ON contributions
+        WHEN NEW.github_sha = 'demo:studybuddy:pri0006ffff'
+        BEGIN
+          SELECT RAISE(ABORT, 'demo sha already stored');
+        END
+      `);
 
       const before = counts(db);
       process.env.SEED_DEMO = '1';
@@ -92,6 +100,7 @@ describe('StudyBuddy seed marker', () => {
         logSpy.mockRestore();
       }
 
+      db.exec('DROP TRIGGER abort_last_demo_sha');
       db.prepare('DELETE FROM contributions WHERE github_sha = ?').run(demoCommitSha('pri0006ffff'));
       await seedDemoOnStartup(db, TODAY);
 

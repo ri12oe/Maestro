@@ -1461,4 +1461,6 @@ The ingest window is the latest 30 commits, 20 pull requests, and 30 issues. Com
 | `client/src/pages/Start.tsx`, `Today.tsx` | Real steps, then the team page. The no-issues notice is shown there. |
 | `docs/PLAN.md`, `README.md` | The window, the errors, and how to try your own repository. |
 
-`npm run lint` passed. `npm test`: server 26 files, 251 passed (251); client 3 files, 21 passed (21). That main had 240 server tests and 21 client tests. Not deployed.
+A follow-up on the same branch, still session 54 because PR #49 has not merged: a new team is stored only when `GET /repos/:owner/:repo` says the repository is public. The 404 copy no longer says a private repository can be read with the server token. Re-sync of a team already stored is not gated, so Maestro (`ri12oe/Maestro`, id 1) and mira (id 2) keep syncing. Reuse opens that team and does not sync or write a deadline. Owner and repo are checked before any GitHub URL is built, and the path segments are encoded. One sync runs per team at a time (`409`). Create and sync share a fixed per-minute window (`429`). A GitHub 403 or 429 returns `resetAt`, and Start shows that time in the viewer's local zone. `github_sha` is unique per team. An unmapped GitHub error is logged and the response stays short.
+
+`npm run lint` passed. `npm test` after the follow-up: server 27 files, 265 passed (265); client 3 files, 22 passed (22). That main had 240 server tests and 21 client tests. Not deployed. PR #49 was still open, so this entry stays session 54.

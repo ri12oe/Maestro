@@ -120,7 +120,7 @@ Limits:
 - Only that recent window is read, so the first connect stays around a minute and inside GitHub's rate limit. Older commits and issues are left out. The Start form says the same numbers.
 - Labels are written a few at a time (four contributions at once).
 - A repository with no issues still opens. The contribution map works. There is no task plan to match until the repository has issues. Plan says to add some and sync.
-- A repository with no commits in the window, a missing or private repository, a GitHub rate limit (the message includes the reset time when GitHub sent one), and a missing `GITHUB_TOKEN` each say what to do next.
+- Maestro only analyzes public repositories. A new team is stored after GitHub says the repository is public. A missing repository, an empty window, a GitHub rate limit (Start shows the reset time in your local time), and a missing `GITHUB_TOKEN` each say what to do next. Pasting a repository that is already connected opens that team and does not sync it.
 - The token stays in `.env`. There are no accounts and no webhooks.
 
 ## Tests and eval

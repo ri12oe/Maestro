@@ -1,9 +1,9 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Check, FolderGit2, Plus } from 'lucide-react';
-import { api } from '../api/client.ts';
+import { ApiError, api } from '../api/client.ts';
 import { useApi } from '../hooks/useApi.ts';
-import { timeAgo } from '../dates.ts';
+import { formatResetAt, timeAgo } from '../dates.ts';
 import Bulb, { LogoMark } from '../components/Bulb.tsx';
 import { effectiveDeadline } from '../deadline.ts';
 import { useTheme } from '../lib/prefs.ts';
@@ -25,11 +25,18 @@ function calendarDay(value: string | null): string | null {
   return match ? match[1] : null;
 }
 
+const OWNER_RE = /^[A-Za-z0-9-]{1,39}$/;
+const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+
 /** Accepts "owner/repo", "github.com/owner/repo" or a full URL (with or without .git). */
 export function parseRepo(input: string): { owner: string; repo: string } | null {
   const cleaned = input.trim().replace(/^https?:\/\//i, '').replace(/^(www\.)?github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
-  const m = /^([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)$/.exec(cleaned);
-  return m ? { owner: m[1], repo: m[2] } : null;
+  const m = /^([^/]+)\/([^/]+)$/.exec(cleaned);
+  if (!m) return null;
+  const owner = m[1];
+  const repo = m[2];
+  if (!OWNER_RE.test(owner) || !REPO_RE.test(repo) || repo === '.' || repo === '..') return null;
+  return { owner, repo };
 }
 
 type Phase = 'form' | 'connecting' | 'failed';
@@ -98,8 +105,14 @@ function Connect({ hasTeams }: { hasTeams: boolean }) {
     try {
       let id = teamId;
       if (!id) {
-        id = (await api.createTeam({ name: parsed.repo, repo_owner: parsed.owner, repo_name: parsed.repo })).id;
+        const created = await api.createTeam({ name: parsed.repo, repo_owner: parsed.owner, repo_name: parsed.repo });
+        id = created.id;
         setTeamId(id);
+        // An existing team is opened as it is. Sync and the deadline stay on Settings and Sync now.
+        if (created.reused) {
+          navigate(`/t/${id}`);
+          return;
+        }
       }
 
       const ingested = await api.sync(id, 'ingest');
@@ -122,7 +135,10 @@ function Connect({ hasTeams }: { hasTeams: boolean }) {
 
       navigate(`/t/${id}`, ingested.notice ? { state: { connectNotice: ingested.notice } } : undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const localReset = err instanceof ApiError && err.resetAt ? formatResetAt(err.resetAt) : null;
+      setError(localReset
+        ? `GitHub is rate-limiting requests right now. Try again after ${localReset}.`
+        : (err instanceof Error ? err.message : String(err)));
       setPhase('failed');
     }
   }

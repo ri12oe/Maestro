@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS contributions (
   team_id           INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   member_id         INTEGER NOT NULL REFERENCES members(id),
   source            TEXT    NOT NULL CHECK (source IN ('commit', 'manual')),
-  github_sha        TEXT    UNIQUE,        -- null for manual entries
+  github_sha        TEXT,                  -- null for manual entries; unique per team, not across teams
   github_pr_number  INTEGER,               -- PR reference (informational only)
   title             TEXT    NOT NULL,      -- first line of commit message or manual title
   body              TEXT,                  -- manual entry description; null for commits
@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS contributions (
   embedding         BLOB,                  -- Float32 vector for task-matching
   authored_at       TEXT    NOT NULL,
   synced_at         TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  match_checked_task_id INTEGER            -- highest task id this commit has been checked against
+  match_checked_task_id INTEGER,           -- highest task id this commit has been checked against
+  UNIQUE (team_id, github_sha)
 );
 
 -- classifications: AI label for each contribution (cached by contribution_id)

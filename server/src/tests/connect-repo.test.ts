@@ -80,7 +80,20 @@ function happyIssue() {
   };
 }
 
+function isRepoLookup(url: string): boolean {
+  return /\/repos\/[^/]+\/[^/]+$/.test(url);
+}
+
 async function githubFetch(url: string): Promise<Response> {
+  if (isRepoLookup(url)) {
+    if (mode === 'missing') return githubResponse(404, { message: 'Not Found' });
+    if (mode === 'limited') {
+      return githubResponse(403, { message: 'API rate limit exceeded' }, {
+        'x-ratelimit-reset': String(RESET_EPOCH),
+      });
+    }
+    return githubResponse(200, { private: false, visibility: 'public' });
+  }
   if (mode === 'missing') return githubResponse(404, { message: 'Not Found' });
   if (mode === 'limited') {
     return githubResponse(403, { message: 'API rate limit exceeded' }, {
@@ -227,23 +240,27 @@ describe('connect a public repository', () => {
     expect(demoRows.n).toBe(1);
   });
 
-  it('explains a missing or private repository and says to try again', async () => {
+  it('explains a missing repository and does not suggest that a private one would work', async () => {
     mode = 'missing';
-    const created = await createTeam('nope', 'missing');
-    const res = await request(app).post(`/api/teams/${created.body.id}/sync`).send({ stage: 'ingest' });
+    const res = await createTeam('nope', 'missing');
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/couldn't find nope\/missing/);
-    expect(res.body.error).toMatch(/private/);
+    expect(res.body.error).toMatch(/public repositories/);
     expect(res.body.error).toMatch(/Try again/);
+    expect(res.body.error).not.toMatch(/token can read/);
+    expect(db.prepare("SELECT id FROM teams WHERE repo_name = 'missing'").get()).toBeUndefined();
   });
 
-  it('explains a rate limit with the reset time', async () => {
+  it('returns resetAt for a rate limit and leaves the Zulu time out of the message', async () => {
     mode = 'limited';
-    const created = await createTeam('acme', 'limited');
-    const res = await request(app).post(`/api/teams/${created.body.id}/sync`).send({ stage: 'ingest' });
+    const id = db.prepare(
+      "INSERT INTO teams (name, repo_owner, repo_name, last_synced_at) VALUES ('Limited', 'acme', 'limited', '2026-11-01T00:00:00Z')",
+    ).run().lastInsertRowid as number;
+    const res = await request(app).post(`/api/teams/${id}/sync`).send({ stage: 'ingest' });
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/rate-limiting/);
-    expect(res.body.error).toContain('2026-11-20T16:00:00.000Z');
+    expect(res.body.error).not.toContain('2026-11-20T16:00:00.000Z');
+    expect(res.body.resetAt).toBe('2026-11-20T16:00:00.000Z');
   });
 
   it('explains an empty repository and does not invent commits', async () => {

@@ -1,0 +1,59 @@
+{
+  "provider": "mock",
+  "model": "mock:prompt-v2",
+  "evaluatedAt": "2026-11-20T14:23:17.306Z",
+  "date": "2026-11-20",
+  "set": "holdout",
+  "holdoutSize": 10,
+  "workType": {
+    "correct": 5,
+    "total": 10,
+    "accuracy": 50
+  },
+  "substance": {
+    "correct": 5,
+    "total": 10,
+    "accuracy": 50
+  },
+  "confusion": {
+    "workType": [
+      {
+        "expected": "docs",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "fix",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "formatting",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "generated",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "refactor",
+        "got": "feature",
+        "count": 1
+      }
+    ],
+    "substance": [
+      {
+        "expected": "high",
+        "got": "low",
+        "count": 3
+      },
+      {
+        "expected": "medium",
+        "got": "low",
+        "count": 2
+      }
+    ]
+  }
+}

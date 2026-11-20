@@ -5,21 +5,27 @@
  * that file is missing. A file that is not usable is 500 with a fixed error.
  * The site password gates this path. /api/health stays open.
  *
- * The committed file's counts must match a fresh mock run. The card shows
- * those counts, so a hand-edited number fails this test.
+ * A mock results file is re-scored against holdout.csv. That check uses a
+ * fixture, so it still runs when the committed file is a Grok run. The
+ * committed file is re-scored only when its provider is mock. A Grok file
+ * must parse, its counts must agree with correct/total and the holdout row
+ * count, and each listed miss must be a real holdout row.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { tmpdir } from 'os';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import request from 'supertest';
 import { sitePassword } from '../middleware/sitePassword.js';
 import { createEvalRouter } from '../routes/eval.js';
-import { buildResultsFile, loadLabeledSet, scoreLabeledRows } from '../ai/eval/measure.js';
-import { committedResultsPath, parseEvalResults } from '../ai/eval/results.js';
+import { buildResultsFile, loadLabeledSet, scoreLabeledRows, type LabeledCommit } from '../ai/eval/measure.js';
+import { accuracyPercent, committedResultsPath, parseEvalResults, type AccuracyCount, type ConfusionPair, type EvalResults } from '../ai/eval/results.js';
 import { modelVersion } from '../ai/classifier.js';
+
+const mockFixturePath = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'mock-holdout-results.json');
 
 process.env.AI_PROVIDER = 'mock';
 
@@ -108,19 +114,101 @@ describe('GET /api/eval', () => {
     expect(res.body).toEqual({ available: true, ...parsed });
   });
 
-  it('matches a fresh mock run of the holdout set', async () => {
-    const committed = parseEvalResults(JSON.parse(readFileSync(committedResultsPath(), 'utf8')));
-    if (!committed) throw new Error('committed results.json failed to parse');
-    expect(committed.provider).toBe('mock');
-    expect(committed.model).toBe(modelVersion());
+  it('matches a fresh mock run of the holdout fixture', async () => {
+    const fixture = readResults(mockFixturePath);
+    expect(fixture.provider).toBe('mock');
+    await expectFreshMock(fixture);
+  });
 
+  it('re-scores the committed file only when its provider is mock', async () => {
+    const committed = readResults(committedResultsPath());
     const rows = loadLabeledSet('holdout.csv');
-    const fresh = buildResultsFile(await scoreLabeledRows(rows), {
-      provider: 'mock',
-      model: modelVersion(),
-      evaluatedAt: committed.evaluatedAt,
-    });
-    expect(committed).toEqual(fresh);
-    expect(committed.holdoutSize).toBe(rows.length);
+    if (committed.provider === 'mock') {
+      await expectFreshMock(committed);
+      return;
+    }
+    expect(committed.provider).toBe('grok');
+    expectGrokCounts(committed, rows);
+  });
+
+  it('rejects a listed miss that is not a holdout row', () => {
+    const rows = loadLabeledSet('holdout.csv');
+    const problem = missProblem(
+      [{ expected: 'not-a-label', got: 'feature', count: 1 }],
+      rows.map(row => row.expected_work_type),
+      9,
+      rows.length,
+    );
+    expect(problem).toMatch(/holdout/);
   });
 });
+
+function readResults(path: string): EvalResults {
+  const parsed = parseEvalResults(JSON.parse(readFileSync(path, 'utf8')));
+  if (!parsed) throw new Error(`${path} failed to parse`);
+  return parsed;
+}
+
+async function expectFreshMock(recorded: EvalResults): Promise<void> {
+  expect(recorded.provider).toBe('mock');
+  expect(recorded.model).toBe(modelVersion());
+  const rows = loadLabeledSet('holdout.csv');
+  const fresh = buildResultsFile(await scoreLabeledRows(rows), {
+    provider: 'mock',
+    model: modelVersion(),
+    evaluatedAt: recorded.evaluatedAt,
+  });
+  expect(recorded).toEqual(fresh);
+  expect(recorded.holdoutSize).toBe(rows.length);
+}
+
+function expectGrokCounts(recorded: EvalResults, rows: LabeledCommit[]): void {
+  expect(recorded.holdoutSize).toBe(rows.length);
+  expectCountAgrees(recorded.workType, rows.length);
+  expectCountAgrees(recorded.substance, rows.length);
+  expect(missProblem(
+    recorded.confusion.workType,
+    rows.map(row => row.expected_work_type),
+    recorded.workType.correct,
+    recorded.workType.total,
+  )).toBeNull();
+  expect(missProblem(
+    recorded.confusion.substance,
+    rows.map(row => row.expected_substance),
+    recorded.substance.correct,
+    recorded.substance.total,
+  )).toBeNull();
+}
+
+function expectCountAgrees(count: AccuracyCount, holdoutSize: number): void {
+  expect(count.total).toBe(holdoutSize);
+  expect(count.correct).toBeGreaterThanOrEqual(0);
+  expect(count.correct).toBeLessThanOrEqual(count.total);
+  expect(count.accuracy).toBe(Number(accuracyPercent(count.correct, count.total)));
+  expect(count.accuracy).toBe(Number(((count.correct / count.total) * 100).toFixed(1)));
+}
+
+/**
+ * Confusion pairs are the misses the results file lists.
+ * Each expected label has to be the expected label of that many holdout rows,
+ * and the listed counts have to add up to total - correct.
+ */
+function missProblem(
+  pairs: ConfusionPair[],
+  labels: string[],
+  correct: number,
+  total: number,
+): string | null {
+  const listed = pairs.reduce((sum, pair) => sum + pair.count, 0);
+  if (listed !== total - correct) return `listed ${listed} misses, expected ${total - correct}`;
+  const remaining = new Map<string, number>();
+  for (const label of labels) remaining.set(label, (remaining.get(label) ?? 0) + 1);
+  for (const pair of pairs) {
+    const available = remaining.get(pair.expected) ?? 0;
+    if (pair.count > available) {
+      return `"${pair.expected}" is not the expected label of ${pair.count} holdout row(s)`;
+    }
+    remaining.set(pair.expected, available - pair.count);
+  }
+  return null;
+}

@@ -1522,3 +1522,25 @@ Root `package.json` adds `check:railway`. It runs `tsc --noEmit --strict --modul
 | `docs/RAILWAY.md` | The same command. |
 
 `npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 276 passed (276); client 3 files, 22 passed (22). Not deployed.
+
+## 2026-11-20 — Session 59: Grok holdout on the accuracy card (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+This is session 59. Sessions 57 and 58 are the Railway config work on main.
+
+The committed holdout file was the offline mock run (work type 50.0%, substance 50.0%). It is now the Grok measurement from 2026-11-20, copied byte for byte. Provider `grok`, model `grok:grok-4.20-0309-non-reasoning:prompt-v2`. Work type 90.0% (9/10). Substance 90.0% (9/10). The two misses are "Bump dependency versions in package.json" (expected fix, got generated) and "Regenerate prisma client after schema change" (expected low, got medium).
+
+The card line under each percentage is `90.0% · Grok (grok-4.20-0309-non-reasoning), 10 holdout commits`. The corner badge says Grok. An offline mock file still reads `50.0% · offline mock, 10 holdout commits` and its badge says Offline mock.
+
+`server/src/tests/eval.test.ts` re-scores `holdout.csv` only when the recorded provider is mock. A Grok file has to parse (`parseEvalResults`). `correct` is at most `total`, accuracy is `correct/total` to one decimal, and `holdoutSize` is the number of rows in `holdout.csv`. Each listed confusion miss has to be the expected label of that many holdout rows. The mock re-score still runs, against `server/src/tests/fixtures/mock-holdout-results.json`.
+
+| File | Change |
+|---|---|
+| `server/src/ai/eval/results.json` | The Grok holdout run above. |
+| `server/src/tests/fixtures/mock-holdout-results.json` | The previous mock holdout run. |
+| `server/src/tests/eval.test.ts` | Re-score a mock file. Check a Grok file's counts and misses. |
+| `client/src/evalAccuracy.ts`, `client/src/app/AccuracyCard.tsx`, `client/src/evalAccuracy.test.ts` | A Grok credit names the model. The badge says Grok. |
+| `docs/PLAN.md`, `README.md` | The card's figure is the Grok 90.0% run. |
+
+`npm run lint` passed. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Main had 276 server tests and 22 client tests. Not deployed.

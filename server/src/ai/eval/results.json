@@ -1,58 +1,33 @@
 {
-  "provider": "mock",
-  "model": "mock:prompt-v2",
-  "evaluatedAt": "2026-11-20T14:23:17.306Z",
+  "provider": "grok",
+  "model": "grok:grok-4.20-0309-non-reasoning:prompt-v2",
+  "evaluatedAt": "2026-11-20T17:56:47.197Z",
   "date": "2026-11-20",
   "set": "holdout",
   "holdoutSize": 10,
   "workType": {
-    "correct": 5,
+    "correct": 9,
     "total": 10,
-    "accuracy": 50
+    "accuracy": 90
   },
   "substance": {
-    "correct": 5,
+    "correct": 9,
     "total": 10,
-    "accuracy": 50
+    "accuracy": 90
   },
   "confusion": {
     "workType": [
       {
-        "expected": "docs",
-        "got": "feature",
-        "count": 1
-      },
-      {
         "expected": "fix",
-        "got": "feature",
-        "count": 1
-      },
-      {
-        "expected": "formatting",
-        "got": "feature",
-        "count": 1
-      },
-      {
-        "expected": "generated",
-        "got": "feature",
-        "count": 1
-      },
-      {
-        "expected": "refactor",
-        "got": "feature",
+        "got": "generated",
         "count": 1
       }
     ],
     "substance": [
       {
-        "expected": "high",
-        "got": "low",
-        "count": 3
-      },
-      {
-        "expected": "medium",
-        "got": "low",
-        "count": 2
+        "expected": "low",
+        "got": "medium",
+        "count": 1
       }
     ]
   }

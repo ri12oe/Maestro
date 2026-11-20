@@ -30,8 +30,10 @@ afterAll(() => {
   try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows may hold the file briefly */ }
 });
 
+let teamSeq = 0;
 async function newTeam(): Promise<number> {
-  const created = await request(app).post('/api/teams').send({ name: 'Alpha', repo_owner: 'acme', repo_name: 'app' });
+  teamSeq += 1;
+  const created = await request(app).post('/api/teams').send({ name: 'Alpha', repo_owner: 'acme', repo_name: `app-${teamSeq}` });
   expect(created.status).toBe(201);
   return created.body.id as number;
 }

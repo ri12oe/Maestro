@@ -218,10 +218,10 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/teams` | Create team (name, repo_owner, repo_name) |
+| `POST` | `/api/teams` | Create a team (`name`, `repo_owner`, `repo_name`). If a team already has that owner and repo (compared case-insensitively), the response is `200` with that existing row and `reused: true`. The oldest row wins. Its name is not changed. A new team is `201`. The seeded StudyBuddy row is only reused when the request is `studybuddy-org/studybuddy-app`. |
 | `GET` | `/api/teams/:teamId` | Get team info, including `deadline` |
 | `PATCH` | `/api/teams/:teamId` | Set or clear the team deadline. Body: `{ "deadline": "YYYY-MM-DD" }` or `{ "deadline": null }`. `400` if `deadline` is missing or not that shape. `404` if the team does not exist. |
-| `POST` | `/api/teams/:teamId/sync` | Trigger a full GitHub sync (commits + Issues) |
+| `POST` | `/api/teams/:teamId/sync` | Run a sync stage. Body `{ "stage": "ingest" \| "classify" \| "match" \| "reason" \| "all" }`. A missing `stage` means `all`: ingest, then classify, then match, then the risk reasoner. That is what Sync now does. The connect screen calls the four stages in that order so its progress list is each real step. Ingest reads the latest 30 commits, 20 pull requests, and 30 issues (`COMMIT_WINDOW`, `PR_WINDOW`, `ISSUE_WINDOW` in `server/src/ingestion/github.ts`). Older history is left out. A pull request is not its own row; its number is stored on a commit when that commit is the pull request's head or merge commit. `422` when the repository has no commits in the window and the team has none stored yet. The message says to push a commit and press Try again. A repository with no issues still syncs; `notice` says there is no task plan to match and the contribution map still works. `404` when GitHub returns 404 (missing or private). `503` on a GitHub 403 or 429, including the reset time when GitHub sent one. `503` when `GITHUB_TOKEN` is unset. `400` when `stage` is not one of those five. |
 
 ### Members
 
@@ -459,6 +459,14 @@ Plain-language summary of the last 7 days, plus a neutral check-in the team can 
 ### Label corrections — built
 
 A dispute can correct the work type, the substance, or both. The first correction copies the AI label into `original_work_type` and `original_substance`. A second correction changes the effective label and leaves that AI label in place. Undo restores the original AI label, not the intermediate correction. `effective_classifications` is the read path for the contribution map, People, Report, the digest, and the reasoner's work-type counts. The reasoner runs again after a correction or an undo. If that run throws, the route still returns 200 with `risksRefreshed: false` and a warning; the label stays saved, and People reloads and shows the warning. Sync does not overwrite a corrected row. The People form has optional pickers; the row shows "Corrected by team", the original AI label, and Undo. The correction is about the label. It does not score or rank the person. Every member uses the same form. A Plan row for a task with no issue number opens that task with `?task=<id>`, the same path the digest uses.
+
+## Connecting a public repository
+
+A judge pastes `owner/repo` or a GitHub URL on Start. Connect creates the team, or opens the existing one for that repository, then runs ingest, classify, match, and the risk reasoner. The progress list advances when each of those calls returns. The team page opens when the reasoner finishes. No second click is required for the contribution map, risks, suggestions, and digest to be there.
+
+The ingest window is the latest 30 commits, 20 pull requests, and 30 issues. The form states that cap. Classification already runs four contributions at a time. Commit authors are created as members during ingest (the same rule as Milestone 1). The team removes anyone who is not on it from Settings. They are not held back for a separate add step. When the team has no deadline yet, Connect stores the latest milestone date before the reasoner runs, so the first risk pass can use it. Settings can change it.
+
+An empty window, a 404, a rate limit, and a missing token each return a message that says what to do next. A repository with no issues still opens. Today shows the notice, and Plan already says to add issues and sync.
 
 ## Open Decisions
 

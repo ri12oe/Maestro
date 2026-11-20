@@ -10,7 +10,7 @@ The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PA
 
 ## Screens
 
-- **Start** (`/`). Your teams, or connect a repository on one screen: paste `owner/repo` or a GitHub URL, Maestro syncs it and fills in the team from commit authors and the deadline from milestones, then you confirm and open it.
+- **Start** (`/`). Your teams, or connect a repository on one screen: paste `owner/repo` or a GitHub URL. Maestro reads the latest commits and issues, labels the work, matches it to issues, checks risks, and opens the team. Commit authors are the members. The deadline comes from milestones when the team has not set one. Both can be changed in Settings. Pasting a repository that is already connected opens that team.
 - **Today** (`/t/:teamId`). Maestro's short brief on where the project stands, then "Needs the team": each risk and the swap that would fix it on one card, with Accept swap, Copy check-in and Not a problem. A weekly digest card summarizes the last 7 days (highlights, risks, and a neutral check-in to copy). Side cards show the team's work mix, this week's activity and what's due soon.
 - **Plan** (`/t/:teamId/plan` and `/t/:teamId/plan/:issue`). Every task with a deadline strip, grouped by at risk, in progress, not started and done. A task opens in a panel with Maestro's note, any suggested swap and the work matched to it.
 - **People** (`/t/:teamId/people` and `/t/:teamId/people/:memberId`). The team's work on one scale, alphabetical, and a panel per person with their work mix, contributions, tasks and logged work. "Wrong label?" disputes a label in place. Optional work-type and substance pickers correct the label. The row then says "Corrected by team", keeps the original AI label visible, and offers Undo. Everyone sees the same correction.
@@ -106,6 +106,22 @@ StudyBuddy has 4 members (Rio, Sam, Priya, Jordan) and 31 contributions (28 comm
 The team id is not fixed. SQLite assigns it on insert. A new row prints `Created team StudyBuddy (id=N)` and, when the run finishes, `Team id: N`. If the done marker is already there, the command prints `StudyBuddy demo already seeded (id=N). Skipping seed.` and inserts nothing. After that team has been deleted, it prints `StudyBuddy demo was already seeded (id=N) and is not recreated. Skipping seed.`
 
 Open http://localhost:5173/t/N with that id. Start at http://localhost:5173 lists StudyBuddy and links to the same path.
+
+## Try it on your own repo
+
+1. Put a read-only GitHub personal access token in `GITHUB_TOKEN` in `.env`. The copied file has a placeholder, not a real token. Restart the server after you set it.
+2. From the repo root, in two terminals: `npm run dev:server` and `npm run dev:client`. Open http://localhost:5173.
+3. On Start, paste `owner/repo` or the repository's GitHub URL and press Connect.
+4. Maestro reads the latest 30 commits, 20 pull requests, and 30 issues, labels the commits, matches them to issues, and checks the plan. The team page opens when that finishes. The same repository again opens the existing team instead of creating another one.
+5. People who committed are on the team. Change the list, or the deadline, in Settings.
+
+Limits:
+
+- Only that recent window is read, so the first connect stays around a minute and inside GitHub's rate limit. Older commits and issues are left out. The Start form says the same numbers.
+- Labels are written a few at a time (four contributions at once).
+- A repository with no issues still opens. The contribution map works. There is no task plan to match until the repository has issues. Plan says to add some and sync.
+- A repository with no commits in the window, a missing or private repository, a GitHub rate limit (the message includes the reset time when GitHub sent one), and a missing `GITHUB_TOKEN` each say what to do next.
+- The token stays in `.env`. There are no accounts and no webhooks.
 
 ## Tests and eval
 

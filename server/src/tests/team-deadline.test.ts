@@ -50,7 +50,7 @@ describe('PATCH /api/teams/:teamId deadline', () => {
   it('sets a deadline, reads it back, and clears it', async () => {
     const created = await request(app)
       .post('/api/teams')
-      .send({ name: 'Alpha', repo_owner: 'acme', repo_name: 'app' });
+      .send({ name: 'Alpha', repo_owner: 'acme', repo_name: 'deadline-app' });
     expect(created.status).toBe(201);
     expect(created.body.deadline).toBeNull();
     const teamId = created.body.id as number;

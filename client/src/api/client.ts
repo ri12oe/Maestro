@@ -1,5 +1,5 @@
 import type {
-  AskResult, ClassifyResult, Contribution, Digest, DisputeResult, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Substance, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary, WorkType,
+  AskResult, ClassifyResult, Contribution, Digest, DisputeResult, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Substance, Suggestion, SyncResult, SyncStage, Task, Team, TeamListItem, TeamSummary, WorkType,
 } from './types.ts';
 
 export class ApiError extends Error {
@@ -87,8 +87,9 @@ export const api = {
   deleteTeam: (teamId: number) =>
     request<{ ok: true }>(`/teams/${teamId}`, { method: 'DELETE' }),
 
-  sync: (teamId: number) =>
-    request<SyncResult>(`/teams/${teamId}/sync`, { method: 'POST' }),
+  /** `all` reads GitHub, then classifies, matches, and reasons. The connect screen runs the stages one at a time. */
+  sync: (teamId: number, stage: SyncStage = 'all') =>
+    request<SyncResult>(`/teams/${teamId}/sync`, { method: 'POST', body: JSON.stringify({ stage }) }),
 
   dismissRisk: (teamId: number, riskId: number) =>
     request<{ ok: true }>(`/teams/${teamId}/risks/${riskId}/dismiss`, { method: 'POST' }),

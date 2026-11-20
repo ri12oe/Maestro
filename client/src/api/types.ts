@@ -162,14 +162,23 @@ export interface DisputeResult {
   warning?: string;
 }
 
+export type SyncStage = 'ingest' | 'classify' | 'match' | 'reason' | 'all';
+
 export interface SyncResult {
   ok: true;
+  stage: SyncStage;
   newContributions: number;
   updatedTasks: number;
   newMembers: number;
   classified: number;
   classifyFailed: number;
   relinked: number;
+  risksDetected: number;
+  /** Set when the repository has no issues to match. Null otherwise. */
+  notice: string | null;
+  /** True when older commits or issues were left outside the window. */
+  capped: boolean;
+  window: { commits: number; issues: number; pulls: number };
 }
 
 export interface ClassifyResult {

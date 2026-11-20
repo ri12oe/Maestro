@@ -1441,3 +1441,24 @@ A second correction still keeps the first AI label. Undo restores that original 
 | `docs/PLAN.md` | The 200 warning, and undo after two corrections. |
 
 `npm run lint` passed. `npm test`: server 27 files, 249 passed (249); client 3 files, 21 passed (21). The branch before this follow-up had 247 server tests and 21 client tests. Not deployed.
+
+## 2026-11-20 — Session 56: A public repo finishes on the team page (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+This is session 56. Sessions 54 and 55 are the dispute-label work on main.
+
+A judge can paste a public GitHub repository on Start and get the contribution map, risks, suggestions, and digest without another required click. Connect creates the team, or opens the one that already has that owner and repo, then runs ingest, classify, match, and the risk reasoner. The progress list advances when each call returns.
+
+The ingest window is the latest 30 commits, 20 pull requests, and 30 issues. Commit authors are still created as members during ingest. The team removes anyone who is not on it from Settings. A missing or private repository, a rate limit (with the reset time when GitHub sent one), an empty window, a repository with no issues, and a missing `GITHUB_TOKEN` each say what to do next. No issues still opens the team. The seeded StudyBuddy row is not rewritten by a different repository.
+
+| File | Change |
+|---|---|
+| `server/src/ingestion/github.ts` | Window, rate-limit error with reset time, recent pull requests. |
+| `server/src/ingestion/sync.ts` | Stages: ingest, classify, match, reason, or all. Empty-window error. No-issues notice. |
+| `server/src/routes/teams.ts` | Reuse an existing owner/repo. Explain 404, 429/403, empty, and a missing token. |
+| `server/src/tests/connect-repo.test.ts`, `github.test.ts` | Mocked GitHub. Happy path, reuse, 404, rate limit, empty, no issues. |
+| `client/src/pages/Start.tsx`, `Today.tsx` | Real steps, then the team page. The no-issues notice is shown there. |
+| `docs/PLAN.md`, `README.md` | The window, the errors, and how to try your own repository. |
+
+`npm run lint` passed. `npm test`: server 26 files, 251 passed (251); client 3 files, 21 passed (21). That main had 240 server tests and 21 client tests. Not deployed.

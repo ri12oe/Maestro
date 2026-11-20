@@ -97,7 +97,10 @@ function readLabel(teamId: number, contributionId: number): LabelRow | undefined
   `).get(contributionId, teamId) as LabelRow | undefined;
 }
 
-function labelPayload(row: LabelRow) {
+/** Shown when the label is saved and the reasoner then throws. Risks catch up on the next sync. */
+export const RISK_REFRESH_WARNING = 'Label saved, but risks could not be refreshed. They will update on the next sync.';
+
+function labelPayload(row: LabelRow, risksRefreshed: boolean) {
   return {
     ok: true as const,
     disputed: (row.disputed ? 1 : 0) as 0 | 1,
@@ -106,14 +109,18 @@ function labelPayload(row: LabelRow) {
     original_work_type: row.original_work_type,
     original_substance: row.original_substance,
     corrected_at: row.corrected_at,
+    risksRefreshed,
+    ...(risksRefreshed ? {} : { warning: RISK_REFRESH_WARNING }),
   };
 }
 
 // POST /api/teams/:teamId/contributions/:contributionId/dispute
 // A note alone flags the label. work_type and/or substance replace the
 // effective label and keep the AI label in original_* so it can be undone.
-// { undo: true } restores that AI label. A correction or an undo re-runs the
-// risk reasoner before the response, the same step a sync finishes with.
+// { undo: true } restores the original AI label, including after a second
+// correction. A correction or an undo re-runs the risk reasoner before the
+// response, the same step a sync finishes with. If that run throws, the label
+// stays saved and the response is still 200, with risksRefreshed false.
 router.post('/:contributionId/dispute', async (req: Request<TeamParams & { contributionId: string }>, res: Response) => {
   const parsed = DisputeBody.safeParse(req.body ?? {});
   if (!parsed.success) {
@@ -186,19 +193,21 @@ router.post('/:contributionId/dispute', async (req: Request<TeamParams & { contr
     `).run(disputeNote, contributionId);
   }
 
+  // The label UPDATE above is already committed. A reasoner failure must not
+  // turn that into a 500, or the client skips reload and the next undo 409s.
+  let risksRefreshed = true;
   if (refreshRisks) {
     try {
       await runReasoner(teamId);
     } catch (err) {
+      risksRefreshed = false;
       console.error('[dispute] risk refresh failed:', err instanceof Error ? err.message : err);
-      res.status(500).json({ error: 'The label was saved, but risks could not be refreshed' });
-      return;
     }
   }
 
   const saved = readLabel(teamId, contributionId);
   if (!saved) { res.status(404).json({ error: 'Classification not found' }); return; }
-  res.json(labelPayload(saved));
+  res.json(labelPayload(saved, risksRefreshed));
 });
 
 export default router;

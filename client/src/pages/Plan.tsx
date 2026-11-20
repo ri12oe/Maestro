@@ -161,15 +161,15 @@ function TaskRow({ t, group, level, selected }: { t: Task; group: Group; level?:
   const ownerName = member?.displayName ?? t.assignee_name ?? t.assignee_login;
   const stale = t.status === 'open' && t.last_activity_at && (Date.now() - new Date(t.last_activity_at).getTime()) / 86_400_000 > STALE_DAYS;
   const overdue = t.status === 'open' && t.due_date && t.due_date < new Date().toISOString().slice(0, 10);
-  const href = t.github_issue_number != null ? `${base}/plan/${t.github_issue_number}` : undefined;
+  const href = t.github_issue_number != null ? `${base}/plan/${t.github_issue_number}` : `${base}/plan?task=${t.id}`;
   const Icon = group === 'done' ? CircleCheck : group === 'todo' ? CircleDashed : CircleDot;
   return (
-    <tr onClick={() => href && navigate(href)} className={`h-12 cursor-pointer border-t border-line hover:bg-surface-2 ${selected ? 'bg-surface-3' : ''}`}>
+    <tr onClick={() => navigate(href)} className={`h-12 cursor-pointer border-t border-line hover:bg-surface-2 ${selected ? 'bg-surface-3' : ''}`}>
       <td className="pl-4"><Icon size={16} aria-hidden="true" style={{ color: group === 'done' ? 'var(--ok)' : level ? riskColor(level) : 'var(--fg-muted)' }} /></td>
       <td className="px-2 font-mono text-code text-fg-muted">{t.github_issue_number != null ? `#${t.github_issue_number}` : '—'}</td>
       <td className="px-2">
         <span className="inline-flex flex-wrap items-center gap-2">
-          {href ? <Link to={href} onClick={e => e.stopPropagation()} className="font-medium text-fg hover:underline hover:underline-offset-[3px]">{t.title}</Link> : <span className="font-medium">{t.title}</span>}
+          <Link to={href} onClick={e => e.stopPropagation()} className="font-medium text-fg hover:underline hover:underline-offset-[3px]">{t.title}</Link>
           {level && <RiskBadge level={level} />}
         </span>
       </td>

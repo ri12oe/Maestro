@@ -156,6 +156,10 @@ export interface DisputeResult {
   original_work_type: WorkType | null;
   original_substance: Substance | null;
   corrected_at: string | null;
+  /** False when the label was saved and the risk reasoner then threw. */
+  risksRefreshed: boolean;
+  /** Present when risksRefreshed is false. The label itself was saved. */
+  warning?: string;
 }
 
 export interface SyncResult {

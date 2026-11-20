@@ -289,4 +289,62 @@ describe('POST /api/teams/:teamId/contributions/:contributionId/dispute', () => 
     expect(second.status).toBe(409);
     expect(storedLabel(correctedId).work_type).toBe('feature');
   });
+
+  it('undo after two corrections restores the original AI label', async () => {
+    expect(storedLabel(correctedId)).toMatchObject({
+      work_type: 'feature',
+      substance: 'high',
+      original_work_type: null,
+      original_substance: null,
+    });
+
+    const first = await request(app)
+      .post(`/api/teams/${teamId}/contributions/${correctedId}/dispute`)
+      .send({ work_type: 'docs', substance: 'medium', note: 'first correction' });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({
+      work_type: 'docs',
+      substance: 'medium',
+      original_work_type: 'feature',
+      original_substance: 'high',
+      risksRefreshed: true,
+    });
+
+    const second = await request(app)
+      .post(`/api/teams/${teamId}/contributions/${correctedId}/dispute`)
+      .send({ work_type: 'test', substance: 'low', note: 'second correction' });
+    expect(second.status).toBe(200);
+    expect(second.body).toMatchObject({
+      work_type: 'test',
+      substance: 'low',
+      original_work_type: 'feature',
+      original_substance: 'high',
+    });
+    expect(storedLabel(correctedId)).toMatchObject({
+      work_type: 'test',
+      substance: 'low',
+      original_work_type: 'feature',
+      original_substance: 'high',
+    });
+
+    const undone = await request(app)
+      .post(`/api/teams/${teamId}/contributions/${correctedId}/dispute`)
+      .send({ undo: true });
+    expect(undone.status).toBe(200);
+    expect(undone.body).toMatchObject({
+      work_type: 'feature',
+      substance: 'high',
+      original_work_type: null,
+      original_substance: null,
+      corrected_at: null,
+      disputed: 0,
+    });
+    expect(storedLabel(correctedId)).toMatchObject({
+      work_type: 'feature',
+      substance: 'high',
+      original_work_type: null,
+      original_substance: null,
+      corrected_at: null,
+    });
+  });
 });

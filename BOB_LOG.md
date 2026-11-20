@@ -1420,3 +1420,24 @@ Seeded StudyBuddy, mock classifier, Rio Chen's "Scaffold React app with Vite and
 | `docs/PLAN.md`, `README.md` | The dispute route, the view, and the People form. |
 
 `npm run lint` passed. `npm test`: server 26 files, 247 passed (247); client 3 files, 21 passed (21). That main had 240 server tests and 21 client tests. Not deployed.
+
+## 2026-11-20 — Session 55: A saved label survives a reasoner failure (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The correction and the undo wrote the label, then called `runReasoner`. A throw from the reasoner returned 500. People treated that as a failed save and did not reload, so the row still showed the old label and the next Undo was 409.
+
+The label UPDATE stays committed. If the reasoner throws, the route returns 200 with the saved label, `risksRefreshed: false`, and `warning`: "Label saved, but risks could not be refreshed. They will update on the next sync." People reloads on that 200 and shows the warning as the toast. A following undo restores the label.
+
+A second correction still keeps the first AI label. Undo restores that original label, not the intermediate one. A Plan row for a task with no issue number opens `?task=<id>`, the same path the digest uses.
+
+| File | Change |
+|---|---|
+| `server/src/routes/contributions.ts` | 200 and a warning when the reasoner throws after the label is saved. |
+| `server/src/tests/dispute-reasoner-failure.test.ts` | Reasoner throws on correct and on the following undo. Both are 200. The label sticks, and the undo restores the AI label. |
+| `server/src/tests/dispute-correction.test.ts` | Two corrections, then undo, restores the original AI label. |
+| `client/src/pages/People.tsx`, `client/src/api/types.ts` | Reload after a saved label. The warning is the toast. |
+| `client/src/pages/Plan.tsx` | A task with no issue number is a link to `?task=<id>`. |
+| `docs/PLAN.md` | The 200 warning, and undo after two corrections. |
+
+`npm run lint` passed. `npm test`: server 27 files, 249 passed (249); client 3 files, 21 passed (21). The branch before this follow-up had 247 server tests and 21 client tests. Not deployed.

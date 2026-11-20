@@ -221,15 +221,15 @@ function ContributionItem({ c, teamId, disputeOpen = false }: { c: Contribution;
     setBusy(true); setErr(null);
     const parts = [reason, note.trim()].filter(Boolean);
     try {
-      await api.dispute(teamId, c.id, {
+      const saved = await api.dispute(teamId, c.id, {
         note: parts.join(': ') || null,
         ...(workType ? { work_type: workType } : {}),
         ...(substance ? { substance } : {}),
       });
       setOpen(false);
-      toast.show(correcting
+      toast.show(saved.warning ?? (correcting
         ? 'Label corrected. Everyone sees the same label.'
-        : 'Dispute sent. The team can see it on the Maestro page.');
+        : 'Dispute sent. The team can see it on the Maestro page.'));
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -238,8 +238,8 @@ function ContributionItem({ c, teamId, disputeOpen = false }: { c: Contribution;
   async function undo() {
     setBusy(true); setErr(null);
     try {
-      await api.dispute(teamId, c.id, { undo: true });
-      toast.show('Restored the original AI label.');
+      const saved = await api.dispute(teamId, c.id, { undo: true });
+      toast.show(saved.warning ?? 'Restored the original AI label.');
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }

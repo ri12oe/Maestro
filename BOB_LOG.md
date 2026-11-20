@@ -1544,3 +1544,24 @@ The card line under each percentage is `90.0% · Grok (grok-4.20-0309-non-reason
 | `docs/PLAN.md`, `README.md` | The card's figure is the Grok 90.0% run. |
 
 `npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Main had 276 server tests and 22 client tests. Not deployed.
+
+## 2026-11-20 — Session 60: Declare the production /data volume (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+This is session 60. Session 59 is the Grok holdout card on main.
+
+`.railway/railway.ts` from session 57 (PR #51) did not declare the volume. `railway config plan` against production would detach `/data`, and that disk holds `maestro.db`. `railway config pull` of the live project shows `maestro-volume`: region `sfo`, 500 MB, `allowOnlineResize`, usage alerts at 80, 95, and 100, mounted on Maestro at `/data`, and listed in the project resources. The file now declares that volume and that mount. `partial` stays `"Maestro"`. `start` stays `npm start`. `healthcheck` stays `/api/health`. `deploy.restartPolicyType` stays `ON_FAILURE`.
+
+`docs/RAILWAY.md` no longer says to leave the volume out of the file. Sections 1 and 2, and "What stayed out", say the volume must be declared or `railway config apply` detaches it, and to read `railway config plan` before apply. Milestone 4 todo 3 in `docs/PLAN.md` says the same.
+
+Evaluating the file with `railway/iac` produced a volume resource named `maestro-volume` (`volume.maestro-volume`) and a Maestro attachment `volumeAttachments["maestro-volume"].mountPath` of `/data`. The same evaluation still has `startCommand` `npm start`, `healthcheckPath` `/api/health`, `restartPolicyType` `ON_FAILURE`, builder `RAILPACK`, build command `npm run build`, no healthcheck timeout, and `variables.managed` `false`. This session does not run `railway config plan`, `railway config apply`, cutover, or a deploy.
+
+| File | Change |
+|---|---|
+| `.railway/railway.ts` | `maestro-volume` mounted at `/data`, and included in project resources. |
+| `docs/RAILWAY.md` | The volume must be declared. Check the plan before apply. |
+| `docs/PLAN.md` | Milestone 4 todo 3 names the declared volume. |
+| `BOB_LOG.md` | This entry. |
+
+`npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Same counts as session 59. Not deployed.

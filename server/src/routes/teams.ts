@@ -9,6 +9,7 @@ import { runReasoner } from '../ai/reasoner.js';
 const PUBLIC_ONLY = 'Maestro can only analyze public repositories.';
 const TOO_MANY = 'Too many requests. Wait a minute, then press Try again.';
 const SYNC_BUSY = 'A sync is already running';
+const NO_TOKEN = 'The server has no GitHub token configured. Set the GITHUB_TOKEN environment variable (in .env locally, or in your host\'s variables), restart the server, then press Try again.';
 
 const SYNC_STAGES: readonly SyncStage[] = ['ingest', 'classify', 'match', 'reason', 'all'];
 
@@ -146,17 +147,19 @@ router.post('/', async (req, res) => {
   }
 
   const token = process.env.GITHUB_TOKEN;
-  if (token) {
-    try {
-      const info = await fetchRepo(owner, repo, token);
-      if (!repoIsPublic(info)) {
-        res.status(403).json({ error: PUBLIC_ONLY });
-        return;
-      }
-    } catch (err) {
-      sendExplained(res, explainSyncError(err, 0, `${owner}/${repo}`));
+  if (!token) {
+    res.status(503).json({ error: NO_TOKEN });
+    return;
+  }
+  try {
+    const info = await fetchRepo(owner, repo, token);
+    if (!repoIsPublic(info)) {
+      res.status(403).json({ error: PUBLIC_ONLY });
       return;
     }
+  } catch (err) {
+    sendExplained(res, explainSyncError(err, 0, `${owner}/${repo}`));
+    return;
   }
 
   const result = db
@@ -240,9 +243,7 @@ router.post('/:teamId/sync', async (req, res) => {
   }
 
   if (!process.env.GITHUB_TOKEN) {
-    res.status(503).json({
-      error: 'The server has no GitHub token configured. Set the GITHUB_TOKEN environment variable (in .env locally, or in your host\'s variables), restart the server, then press Try again.',
-    });
+    res.status(503).json({ error: NO_TOKEN });
     return;
   }
 

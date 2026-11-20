@@ -20,6 +20,7 @@ const { default: teamsRouter } = await import('../routes/teams.js');
 const { requestLimits, resetRequestLimits } = await import('../ingestion/limits.js');
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use('/api/teams', teamsRouter);
 
@@ -99,6 +100,26 @@ describe('new teams stay public', () => {
     expect(db.prepare('SELECT id FROM teams WHERE repo_name = ?').get(repo)).toBeUndefined();
   });
 
+  it('refuses a new team when the GitHub token is unset and still opens an existing one', async () => {
+    const id = db.prepare(
+      "INSERT INTO teams (name, repo_owner, repo_name) VALUES ('Kept', 'acme', 'kept')",
+    ).run().lastInsertRowid as number;
+    const saved = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    try {
+      const reused = await request(app).post('/api/teams').send({ name: 'Kept', repo_owner: 'acme', repo_name: 'kept' });
+      expect(reused.status).toBe(200);
+      expect(reused.body).toMatchObject({ id, reused: true });
+
+      const created = await request(app).post('/api/teams').send({ name: 'New', repo_owner: 'acme', repo_name: 'needs-token' });
+      expect(created.status).toBe(503);
+      expect(created.body.error).toMatch(/Set the GITHUB_TOKEN environment variable/);
+      expect(db.prepare("SELECT id FROM teams WHERE repo_name = 'needs-token'").get()).toBeUndefined();
+    } finally {
+      process.env.GITHUB_TOKEN = saved;
+    }
+  });
+
   it('refuses a private repository before storing a team', async () => {
     repoVisibility = { private: true, visibility: 'private' };
     const res = await request(app).post('/api/teams').send({ name: 'Secret', repo_owner: 'acme', repo_name: 'secret' });
@@ -165,5 +186,18 @@ describe('sync guards', () => {
     expect(synced.status).toBe(200);
     expect(again.status).toBe(429);
     expect(again.body.error).toMatch(/Wait a minute/);
+  });
+
+  it('gives two X-Forwarded-For addresses separate create buckets', async () => {
+    requestLimits.createPerIp = 1;
+    const first = await request(app).post('/api/teams').set('X-Forwarded-For', '203.0.113.10')
+      .send({ name: 'A', repo_owner: 'acme', repo_name: 'fwd-a' });
+    const same = await request(app).post('/api/teams').set('X-Forwarded-For', '203.0.113.10')
+      .send({ name: 'A2', repo_owner: 'acme', repo_name: 'fwd-a2' });
+    const other = await request(app).post('/api/teams').set('X-Forwarded-For', '203.0.113.20')
+      .send({ name: 'B', repo_owner: 'acme', repo_name: 'fwd-b' });
+    expect(first.status).toBe(201);
+    expect(same.status).toBe(429);
+    expect(other.status).toBe(201);
   });
 });

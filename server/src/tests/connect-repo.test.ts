@@ -303,15 +303,15 @@ describe('connect a public repository', () => {
     expect(tasks.body).toEqual([]);
   });
 
-  it('explains a missing GitHub token', async () => {
+  it('refuses to store a new team when the GitHub token is unset', async () => {
     const saved = process.env.GITHUB_TOKEN;
     delete process.env.GITHUB_TOKEN;
     try {
       const created = await createTeam('acme', 'needs-token');
-      const res = await request(app).post(`/api/teams/${created.body.id}/sync`).send({ stage: 'ingest' });
-      expect(res.status).toBe(503);
-      expect(res.body.error).toMatch(/Set the GITHUB_TOKEN environment variable/);
-      expect(res.body.error).toMatch(/Try again/);
+      expect(created.status).toBe(503);
+      expect(created.body.error).toMatch(/Set the GITHUB_TOKEN environment variable/);
+      expect(created.body.error).toMatch(/Try again/);
+      expect(db.prepare("SELECT id FROM teams WHERE repo_name = 'needs-token'").get()).toBeUndefined();
     } finally {
       process.env.GITHUB_TOKEN = saved;
     }

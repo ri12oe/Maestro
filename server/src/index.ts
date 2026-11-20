@@ -25,6 +25,10 @@ const PORT = process.env.PORT ?? 3001;
 
 const app = express();
 
+// Railway is one proxy in front of the process. req.ip is then the visitor,
+// so the create and sync limits are per person rather than one shared proxy address.
+app.set('trust proxy', 1);
+
 // Optional password gate (only active when SITE_PASSWORD is set)
 app.use(sitePassword());
 

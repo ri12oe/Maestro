@@ -1506,3 +1506,19 @@ The migration guide, checked 2026-11-20, says one service cannot be managed by b
 | `docs/PLAN.md` | Milestone 4 todo 3 names this file as the only Railway config. |
 
 `npm run lint` passed. `npm test`: server 29 files, 276 passed (276); client 3 files, 22 passed (22). Same counts as session 56. Not deployed.
+
+## 2026-11-20 — Session 58: Typecheck and lint .railway/railway.ts (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+This is session 58, on the same branch as session 57. The client and server tsconfigs include only `src`, so nothing in those builds checked `.railway/railway.ts`.
+
+Root `package.json` adds `check:railway`. It runs `tsc --noEmit --strict --module nodenext --moduleResolution nodenext .railway/railway.ts`, then `eslint .railway/railway.ts`. Root `npm run lint` runs the server lint, the client lint, then that script. There is no other CI workflow in the repo.
+
+| File | Change |
+|---|---|
+| `package.json` | `check:railway`, and `lint` calls it. |
+| `README.md` | The lint line names that script. |
+| `docs/RAILWAY.md` | The same command. |
+
+`npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 276 passed (276); client 3 files, 22 passed (22). Not deployed.

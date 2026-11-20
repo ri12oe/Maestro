@@ -351,28 +351,48 @@ ${renderContext(f)}
 /** A task or contribution behind a sentence. `url` is set when the contribution has one. */
 export interface DigestEvidence { type: 'task' | 'contribution'; id: number; url: string | null }
 
+/** One digest sentence. Every sentence cites the tasks or contributions it is about. */
+export interface DigestClaim { text: string; evidence: DigestEvidence[] }
+
 export interface Digest {
-  /** ISO date the 7-day window opens on (today minus `days`). */
-  weekOf: string;
-  /** Two to four sentences about the project. */
-  summary: string;
-  highlights: Array<{ text: string; evidence: DigestEvidence[] }>;
-  risks: Array<{ text: string; evidence: DigestEvidence[] }>;
-  /** Neutral message the team can send. About tasks and risks, not people. */
+  /** Length of the rolling window. `?days=` defaults to 7 and is clamped to 1–30. */
+  days: number;
+  /** YYYY-MM-DD of the window's start and end instants (last `days` × 24 hours). */
+  windowStart: string;
+  windowEnd: string;
+  /** Two to four sentences. Each one has evidence. */
+  summary: DigestClaim[];
+  highlights: DigestClaim[];
+  risks: DigestClaim[];
+  /** Joined check-in the team can paste. The same sentences are in `checkInClaims`. */
   checkIn: string;
+  checkInClaims: DigestClaim[];
   generatedAt: string;
 }
 
-const DigestSchema = z.object({
-  summary: z.string(),
-  highlights: z.array(z.object({ text: z.string(), source_ids: z.array(z.string()) })),
-  risks: z.array(z.object({ text: z.string(), source_ids: z.array(z.string()) })),
-  check_in: z.string(),
+const ClaimSchema = z.object({
+  text: z.string(),
+  source_ids: z.array(z.string()),
 });
 
-/** Start of the rolling window, as YYYY-MM-DD. The route caches on this. */
+const DigestSchema = z.object({
+  summary: z.array(ClaimSchema),
+  highlights: z.array(ClaimSchema),
+  risks: z.array(ClaimSchema),
+  check_in: z.array(ClaimSchema),
+});
+
+/** Start and end dates of the rolling window. The route caches on the start date. */
+export function digestWindowDates(today = new Date(), days = 7): { windowStart: string; windowEnd: string } {
+  return {
+    windowStart: day(new Date(today.getTime() - days * DAY).toISOString()),
+    windowEnd: day(today.toISOString()),
+  };
+}
+
+/** Start of the rolling window, as YYYY-MM-DD. */
 export function digestWeekOf(today = new Date(), days = 7): string {
-  return day(new Date(today.getTime() - days * DAY).toISOString());
+  return digestWindowDates(today, days).windowStart;
 }
 
 interface StoredRisk { id: number; task_id: number | null; level: 'high' | 'medium' | 'low'; description: string; evidence: string }
@@ -481,8 +501,12 @@ const PERSON_COMPARE = [
   /\bone teammate\b/i,
   /\btop contributor\b/i,
   /\b(leaderboards?)\b/i,
-  /\b(laziest|slack(?:er|ing)?|freeload\w*)\b/i,
+  /\b(laziest|slack(?:er|ing)?|freeload\w*|slacking)\b/i,
   /\bpull(?:ing)? (?:their|his|her) weight\b/i,
+  /\bcarrying the team\b/i,
+  /\b(most|least|best|worst)[- ]productive\b/i,
+  /\b(most|least|best|worst) (worker|contributor|member|person|teammate)s?\b/i,
+  /\bdoes the (most|least)\b(?!\s+recent\b)/i,
   /\b(rank(?:ing|ed|s)?|grad(?:e|es|ed|ing)|scor(?:e|es|ed|ing)) (?:people|members|the team|everyone)\b/i,
 ];
 
@@ -498,40 +522,80 @@ function neutralTaskRisk(t: TaskFact): string {
 }
 
 interface DigestBody {
-  summary: string;
-  highlights: Array<{ text: string; evidence: DigestEvidence[] }>;
-  risks: Array<{ text: string; evidence: DigestEvidence[] }>;
-  checkIn: string;
+  summary: DigestClaim[];
+  highlights: DigestClaim[];
+  risks: DigestClaim[];
+  checkInClaims: DigestClaim[];
+}
+
+function dedupeEvidence(items: DigestEvidence[]): DigestEvidence[] {
+  const seen = new Set<string>();
+  const out: DigestEvidence[] = [];
+  for (const e of items) {
+    const key = `${e.type}${e.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out.slice(0, 8);
+}
+
+function claim(text: string, evidence: DigestEvidence[]): DigestClaim {
+  return { text, evidence: dedupeEvidence(evidence) };
+}
+
+/** Open tasks, or any tasks, so a sentence with no contribution still has a dispute path. */
+function boardEvidence(f: TeamFacts): DigestEvidence[] {
+  const open = f.tasks.filter(t => t.status === 'open');
+  return (open.length ? open : f.tasks).slice(0, 4).map(taskEvidence);
+}
+
+function orBoard(evidence: DigestEvidence[], f: TeamFacts): DigestEvidence[] {
+  const items = dedupeEvidence(evidence);
+  return items.length ? items : boardEvidence(f);
+}
+
+function span(days: number): string {
+  return `the last ${days} day${days === 1 ? '' : 's'}`;
 }
 
 /** Deterministic digest. Used for mock mode and when the model output is unusable. */
-function fallbackDigest(f: TeamFacts, w: DigestWindow): DigestBody {
+function fallbackDigest(f: TeamFacts, w: DigestWindow, days: number): DigestBody {
   const commits = w.recent.filter(c => c.source === 'commit').length;
   const logged = w.recent.filter(c => c.source === 'manual').length;
+  const recentEvidence = w.recent.slice(0, 8).map(contribEvidence);
   let activity: string;
   if (w.recent.length === 0) {
-    activity = `${f.teamName} had a quiet week: no commits or logged work in the last 7 days.`;
+    activity = `${f.teamName} had no commits or logged work in ${span(days)}.`;
   } else if (commits && logged) {
-    activity = `${f.teamName} had ${plural(commits, 'commit')} and ${plural(logged, 'logged entry', 'logged entries')} in the last 7 days.`;
+    activity = `${f.teamName} had ${plural(commits, 'commit')} and ${plural(logged, 'logged entry', 'logged entries')} in ${span(days)}.`;
   } else if (logged) {
-    activity = `${f.teamName} logged ${plural(logged, 'off-repo entry', 'off-repo entries')} in the last 7 days, and no commits landed.`;
+    activity = `${f.teamName} logged ${plural(logged, 'off-repo entry', 'off-repo entries')} in ${span(days)}, and no commits landed.`;
   } else {
-    activity = `${f.teamName} had ${plural(commits, 'commit')} in the last 7 days, and no off-repo work was logged.`;
+    activity = `${f.teamName} had ${plural(commits, 'commit')} in ${span(days)}, and no off-repo work was logged.`;
   }
 
+  const closedMatched = w.recent.filter(c => c.taskId != null && w.closed.some(t => t.id === c.taskId));
+  const closedEvidence = orBoard([...w.closed.map(taskEvidence), ...closedMatched.map(contribEvidence)], f);
   const closedText = w.closed.length
-    ? `${w.closed.map(taskLabel).join(', ')} closed in that window.`
-    : 'No tasks closed in that window.';
+    ? `The latest matched work on ${w.closed.map(taskLabel).join(', ')} was in ${span(days)}.`
+    : `No closed task had matched work in ${span(days)}.`;
 
+  const riskEvidence = orBoard(w.stuck.slice(0, 4).map(taskEvidence), f);
   const riskText = w.stuck.length
     ? `${w.stuck.slice(0, 2).map(t => `${taskLabel(t)}${t.due ? ` (due ${nice(t.due)})` : ''}`).join(' and ')} ${w.stuck.length === 1 ? 'is' : 'are'} still open and flagged.`
     : 'No open risks are flagged right now.';
 
-  const parts = [activity, closedText, riskText];
-  if (w.storedDeadline) parts.push(`The team deadline is ${nice(w.storedDeadline)}.`);
-  else if (w.pending[0]) {
+  const summary: DigestClaim[] = [
+    claim(activity, orBoard(recentEvidence, f)),
+    claim(closedText, closedEvidence),
+    claim(riskText, riskEvidence),
+  ];
+  if (w.storedDeadline) {
+    summary.push(claim(`The team deadline is ${nice(w.storedDeadline)}.`, orBoard(f.tasks.filter(t => t.status === 'open').map(taskEvidence), f)));
+  } else if (w.pending[0]) {
     const t = f.tasks.find(x => x.id === w.pending[0].taskId);
-    parts.push(`A move is suggested for ${t ? taskLabel(t) : w.pending[0].title}.`);
+    summary.push(claim(`A move is suggested for ${t ? taskLabel(t) : w.pending[0].title}.`, t ? [taskEvidence(t)] : boardEvidence(f)));
   }
 
   const byTask = new Map<number, ContributionFact[]>();
@@ -543,21 +607,22 @@ function fallbackDigest(f: TeamFacts, w: DigestWindow): DigestBody {
       byTask.set(c.taskId, list);
     } else loose.push(c);
   }
-  const highlights: DigestBody['highlights'] = [];
+  const highlights: DigestClaim[] = [];
   for (const [taskId, cs] of byTask) {
     const t = f.tasks.find(x => x.id === taskId)!;
-    const bits = cs.slice(0, 3).map(workLine);
-    const lead = t.status === 'closed' ? `${taskLabel(t)} closed this week` : taskLabel(t);
-    highlights.push({
-      text: `${lead}: ${bits.join('; ')}.`,
-      evidence: [taskEvidence(t), ...cs.slice(0, 3).map(contribEvidence)],
-    });
+    const shown = cs.slice(0, 3);
+    const bits = shown.map(workLine);
+    const lead = t.status === 'closed'
+      ? `${taskLabel(t)}, latest matched work in ${span(days)}`
+      : taskLabel(t);
+    highlights.push(claim(`${lead}: ${bits.join('; ')}.`, [taskEvidence(t), ...shown.map(contribEvidence)]));
   }
   if (loose.length) {
-    highlights.push({
-      text: `Other work this week: ${loose.slice(0, 3).map(workLine).join('; ')}.`,
-      evidence: loose.slice(0, 3).map(contribEvidence),
-    });
+    const shown = loose.slice(0, 3);
+    highlights.push(claim(
+      `Other work in ${span(days)}: ${shown.map(workLine).join('; ')}.`,
+      shown.map(contribEvidence),
+    ));
   }
 
   const risks: DigestBody['risks'] = [];
@@ -592,60 +657,66 @@ function fallbackDigest(f: TeamFacts, w: DigestWindow): DigestBody {
     });
   }
 
-  const check: string[] = [`Checking in on ${f.teamName}.`];
+  const primary = w.stuck[0]
+    ? [taskEvidence(w.stuck[0])]
+    : orBoard([...w.closed.map(taskEvidence), ...recentEvidence], f);
+  const checkInClaims: DigestClaim[] = [claim(`Checking in on ${f.teamName}.`, primary)];
   if (w.stuck[0]) {
-    check.push(`${taskLabel(w.stuck[0])} is still open${w.stuck[0].due ? ` and due ${nice(w.stuck[0].due)}` : ''}.`);
+    checkInClaims.push(claim(
+      `${taskLabel(w.stuck[0])} is still open${w.stuck[0].due ? ` and due ${nice(w.stuck[0].due)}` : ''}.`,
+      [taskEvidence(w.stuck[0])],
+    ));
   } else if (w.closed.length) {
-    check.push(`${w.closed.map(taskLabel).join(' and ')} closed this week.`);
+    checkInClaims.push(claim(`The latest matched work on ${w.closed.map(taskLabel).join(' and ')} was in ${span(days)}.`, closedEvidence));
   } else if (w.recent.length) {
-    check.push('Work landed this week, and nothing is flagged as a risk.');
+    checkInClaims.push(claim(`Work landed in ${span(days)}, and nothing is flagged as a risk.`, orBoard(recentEvidence, f)));
   } else {
-    check.push('No new commits or logged work this week, and nothing is flagged as a risk.');
+    checkInClaims.push(claim(`No new commits or logged work in ${span(days)}, and nothing is flagged as a risk.`, boardEvidence(f)));
   }
   if (w.pending[0]) {
     const t = f.tasks.find(x => x.id === w.pending[0].taskId);
-    check.push(`If it helps the plan, there is a suggested move for ${t ? taskLabel(t) : w.pending[0].title}.`);
+    checkInClaims.push(claim(
+      `If it helps the plan, there is a suggested move for ${t ? taskLabel(t) : w.pending[0].title}.`,
+      t ? [taskEvidence(t)] : boardEvidence(f),
+    ));
   }
-  if (w.storedDeadline) check.push(`The team deadline is ${nice(w.storedDeadline)}.`);
-  check.push('Does the plan still look right?');
+  if (w.storedDeadline) {
+    checkInClaims.push(claim(`The team deadline is ${nice(w.storedDeadline)}.`, orBoard(f.tasks.filter(t => t.status === 'open').map(taskEvidence), f)));
+  }
+  checkInClaims.push(claim('Does the plan still look right?', primary));
 
   return {
-    summary: parts.slice(0, 4).join(' '),
+    summary: summary.slice(0, 4),
     highlights: highlights.slice(0, 4),
     risks: risks.slice(0, 4),
-    checkIn: check.join(' '),
+    checkInClaims,
   };
 }
 
-function sentenceCount(text: string): number {
-  return text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean).length;
-}
-
 function mentionsWork(text: string): boolean {
-  return /#\d+|\btasks?\b|\brisks?\b|\bdue\b|\bopen\b|\bdeadline\b/i.test(text);
+  return /#\d+|\btasks?\b|\brisks?\b|\bdue\b|\bopen\b|\bdeadline\b|\bwork\b/i.test(text);
 }
 
-/** Model text is kept only when it is fair, sourced, and the right length. */
+function toClaims(items: Array<{ text: string; source_ids: string[] }>, f: TeamFacts): DigestClaim[] {
+  return items.slice(0, 4).map(item => claim(item.text.trim(), evidenceFromIds(item.source_ids, f)))
+    .filter(c => c.text && c.evidence.length && !comparesPeople(c.text));
+}
+
+/** Model text is kept only when every sentence is fair and cites real evidence. */
 function fromModel(out: z.infer<typeof DigestSchema>, f: TeamFacts, w: DigestWindow): DigestBody | null {
-  const summary = out.summary.trim();
-  const checkIn = out.check_in.trim();
-  if (!summary || !checkIn || comparesPeople(summary) || comparesPeople(checkIn)) return null;
-  const n = sentenceCount(summary);
-  if (n < 2 || n > 4) return null;
-  if ((w.stuck.length || w.pending.length || w.closed.length) && !mentionsWork(checkIn)) return null;
+  const spoken = [...out.summary, ...out.highlights, ...out.risks, ...out.check_in];
+  if (spoken.some(item => comparesPeople(item.text))) return null;
 
-  const highlights = out.highlights.slice(0, 4).map(h => ({
-    text: h.text.trim(),
-    evidence: evidenceFromIds(h.source_ids, f),
-  })).filter(h => h.text && h.evidence.length && !comparesPeople(h.text));
-  const risks = out.risks.slice(0, 4).map(r => ({
-    text: r.text.trim(),
-    evidence: evidenceFromIds(r.source_ids, f),
-  })).filter(r => r.text && r.evidence.length && !comparesPeople(r.text));
-
+  const summary = toClaims(out.summary, f);
+  const highlights = toClaims(out.highlights, f);
+  const risks = toClaims(out.risks, f);
+  const checkInClaims = toClaims(out.check_in, f);
+  if (summary.length < 2 || summary.length > 4 || summary.length !== out.summary.length) return null;
+  if (!checkInClaims.length || checkInClaims.length !== Math.min(out.check_in.length, 4)) return null;
+  if ((w.stuck.length || w.pending.length || w.closed.length) && !checkInClaims.some(c => mentionsWork(c.text))) return null;
   if (w.recent.length > 0 && highlights.length === 0) return null;
   if (w.stuck.length > 0 && risks.length === 0) return null;
-  return { summary, highlights, risks, checkIn };
+  return { summary, highlights, risks, checkInClaims };
 }
 
 export async function digest(teamId: number, days = 7, today = new Date(), db: BetterSqlite3.Database = defaultDb): Promise<Digest | null> {
@@ -653,16 +724,19 @@ export async function digest(teamId: number, days = 7, today = new Date(), db: B
   if (!f) return null;
   const windowDays = Math.min(30, Math.max(1, days));
   const w = digestWindow(f, windowDays, db);
-  const fallback = fallbackDigest(f, w);
+  const fallback = fallbackDigest(f, w, windowDays);
+  const dates = digestWindowDates(f.today, windowDays);
 
   let body = fallback;
   if ((process.env.AI_PROVIDER ?? 'mock') === 'grok') {
     const prompt = `You are Maestro. Write the team's weekly digest.
 ${RULES}
-- summary: 2 to 4 sentences on the last ${windowDays} days, ending ${day(f.today.toISOString())} (the window opens ${digestWeekOf(f.today, windowDays)}). State what landed, what closed, and what is flagged. No scores.
-- highlights: up to 4 items. Each text is one sentence about work that happened. source_ids lists the T<id> or C<id> lines it uses, or a contribution url copied from the data. Every item needs at least one real id. Skip the list when nothing landed.
+- The window is the last ${windowDays} days, from ${dates.windowStart} through ${dates.windowEnd}. Use that number of days. Do not say "this week" unless the window is 7 days, and even then prefer "the last ${windowDays} days".
+- summary: 2 to 4 items. Each text is one sentence. source_ids lists the T<id> or C<id> lines that sentence is about, or a contribution url copied from the data. Every sentence needs at least one real id, including a count of commits.
+- highlights: up to 4 items about work that happened. Same source_ids rule. Empty array when nothing landed.
 - risks: up to 4 items about open risks, quiet tasks, or a suggested task move. Same source_ids rule. Empty array when nothing is flagged and no move is suggested.
-- check_in: 2 to 4 sentences the team could paste in chat. Name tasks and risks. Do not accuse anyone, apologize for anyone, or say who did more or less. Do not write "top contributor".
+- Do not say a task closed in the window. You only know the latest matched work. Say that instead.
+- check_in: 2 to 4 items, one sentence each, the message the team could paste. Each needs source_ids. Name tasks and risks. Do not accuse anyone, rank anyone, or say who did more or less. Do not write "top contributor", "least productive", "best productive", "carrying the team", or "slacking".
 - Talk about the project. Do not rank, grade, or score people.
 
 <data>
@@ -686,11 +760,14 @@ ${w.pending.map(p => `- #${p.number ?? '?'} ${p.title}`).join('\n') || '- none'}
   }
 
   return {
-    weekOf: digestWeekOf(f.today, windowDays),
+    days: windowDays,
+    windowStart: dates.windowStart,
+    windowEnd: dates.windowEnd,
     summary: body.summary,
     highlights: body.highlights,
     risks: body.risks,
-    checkIn: body.checkIn,
+    checkIn: body.checkInClaims.map(c => c.text).join(' '),
+    checkInClaims: body.checkInClaims,
     generatedAt: new Date().toISOString(),
   };
 }

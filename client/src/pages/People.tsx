@@ -1,5 +1,5 @@
-import { useId, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useEffect, useId, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { ExternalLink, GitCommitHorizontal, MessageSquareWarning, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Contribution, MemberSummary } from '../api/types.ts';
@@ -22,7 +22,10 @@ function barLabel(m: MemberSummary): string {
 export default function People() {
   const { base, summary, loading, error, reload } = useTeam();
   const { memberId } = useParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
+  const disputeRaw = Number(params.get('dispute'));
+  const disputeId = Number.isFinite(disputeRaw) && disputeRaw > 0 ? disputeRaw : null;
   const members = sortedMembers(summary?.members);
   const max = Math.max(1, ...members.map(m => m.totalWeight));
   const selected = members.find(m => String(m.memberId) === memberId) ?? null;
@@ -71,19 +74,31 @@ export default function People() {
         ))}
       </ul>
 
-      <PersonSheet member={selected} onClose={() => navigate(`${base}/people`, { replace: true })} />
+      <PersonSheet member={selected} disputeId={disputeId} onClose={() => navigate(`${base}/people`, { replace: true })} />
     </Page>
   );
 }
 
 type Tab = 'contributions' | 'tasks' | 'logged';
 
-function PersonSheet({ member, onClose }: { member: MemberSummary | null; onClose: () => void }) {
+function PersonSheet({ member, disputeId, onClose }: { member: MemberSummary | null; disputeId: number | null; onClose: () => void }) {
   const { teamId, base, tasks, version, me, openLog } = useTeam();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('contributions');
   const contribs = useApi(() => (member ? api.contributions(teamId, { memberId: member.memberId }) : Promise.resolve([])), [teamId, member?.memberId, version]);
   const all = contribs.data ?? [];
+
+  useEffect(() => {
+    if (!disputeId || !contribs.data) return;
+    const row = contribs.data.find(c => c.id === disputeId);
+    if (!row) return;
+    setTab(row.source === 'manual' ? 'logged' : 'contributions');
+  }, [disputeId, contribs.data]);
+
+  useEffect(() => {
+    if (!disputeId) return;
+    document.getElementById(`contribution-${disputeId}`)?.scrollIntoView({ block: 'center' });
+  }, [disputeId, contribs.data, tab]);
   const list = tab === 'logged' ? all.filter(c => c.source === 'manual') : all.filter(c => c.source !== 'manual');
   const theirTasks = (tasks ?? []).filter(t => member?.login && t.assignee_login === member.login);
   const mix = member ? categoryShares(member.substanceShares) : [];
@@ -152,7 +167,7 @@ function PersonSheet({ member, onClose }: { member: MemberSummary | null; onClos
                   return (
                     <li key={c.id}>
                       {header && <div className="pt-3 pb-1.5 text-caption tracking-[0.06em] text-fg-muted uppercase">{dayLabel(c.authored_at)}</div>}
-                      <ContributionItem c={c} teamId={teamId} />
+                      <ContributionItem c={c} teamId={teamId} disputeOpen={c.id === disputeId} />
                     </li>
                   );
                 })}
@@ -167,10 +182,14 @@ function PersonSheet({ member, onClose }: { member: MemberSummary | null; onClos
 
 const REASONS = ['Wrong kind of work', 'Wrong substance', 'Wrong task', 'This wasn’t mine'];
 
-function ContributionItem({ c, teamId }: { c: Contribution; teamId: number }) {
+function ContributionItem({ c, teamId, disputeOpen = false }: { c: Contribution; teamId: number; disputeOpen?: boolean }) {
   const { reload } = useTeam();
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(disputeOpen && !c.disputed);
+
+  useEffect(() => {
+    if (disputeOpen && !c.disputed) setOpen(true);
+  }, [disputeOpen, c.disputed]);
   const [reason, setReason] = useState(REASONS[0]);
   const [should, setShould] = useState('');
   const [note, setNote] = useState('');
@@ -195,7 +214,7 @@ function ContributionItem({ c, teamId }: { c: Contribution; teamId: number }) {
   }
 
   return (
-    <div className="group grid grid-cols-[16px_minmax(0,1fr)] gap-3 border-t border-line py-2.5">
+    <div id={`contribution-${c.id}`} className="group grid grid-cols-[16px_minmax(0,1fr)] gap-3 border-t border-line py-2.5">
       <Icon size={16} className="mt-0.5 text-fg-muted" aria-hidden="true" />
       <div className="flex min-w-0 flex-col gap-1.5">
         <div>

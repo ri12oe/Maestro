@@ -188,14 +188,24 @@ export interface DigestEvidence extends SourceRef {
   url: string | null;
 }
 
+/** One digest sentence and the tasks or contributions it is about. */
+export interface DigestClaim {
+  text: string;
+  evidence: DigestEvidence[];
+}
+
 export interface Digest {
-  /** YYYY-MM-DD the 7-day window opens on. */
-  weekOf: string;
-  summary: string;
-  highlights: Array<{ text: string; evidence: DigestEvidence[] }>;
-  risks: Array<{ text: string; evidence: DigestEvidence[] }>;
-  /** Neutral message the team can send. About the project, not a person. */
+  /** Rolling window length. Defaults to 7. */
+  days: number;
+  /** YYYY-MM-DD of the window's start and end. */
+  windowStart: string;
+  windowEnd: string;
+  summary: DigestClaim[];
+  highlights: DigestClaim[];
+  risks: DigestClaim[];
+  /** Joined check-in the team can paste. */
   checkIn: string;
+  checkInClaims: DigestClaim[];
   generatedAt: string;
 }
 

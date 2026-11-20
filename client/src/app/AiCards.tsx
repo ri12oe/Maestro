@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { CircleCheck, Copy, Gauge, RefreshCw, TriangleAlert } from 'lucide-react';
 import { api } from '../api/client.ts';
-import type { Digest, PlanCheck, PlanVerdict } from '../api/types.ts';
+import type { Contribution, Digest, DigestClaim, DigestEvidence, PlanCheck, PlanVerdict } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { shortDate, timeAgo } from '../dates.ts';
 import Bulb from '../components/Bulb.tsx';
-import { Badge, Button, EmptyState, ErrorState, IconButton, Skeleton } from '../ui/primitives.tsx';
+import { Badge, Button, ErrorState, IconButton, Skeleton } from '../ui/primitives.tsx';
 import { useToast } from '../ui/overlays.tsx';
 import { SourceChips } from './Sources.tsx';
 import { useTeam } from './team.tsx';
@@ -99,7 +99,24 @@ function CopyCheckIn({ text }: { text: string }) {
   );
 }
 
-function EvidenceList({ label, items }: { label: string; items: Array<{ text: string; evidence: Digest['highlights'][number]['evidence'] }> }) {
+/** Contribution dispute when the sentence cites one; otherwise the task it is about. */
+function DisputeLink({ evidence, contributions }: { evidence: DigestEvidence[]; contributions: Contribution[] | null }) {
+  const { base, tasks } = useTeam();
+  const contrib = evidence.find(e => e.type === 'contribution');
+  const taskEv = evidence.find(e => e.type === 'task');
+  let to: string | null = null;
+  if (contrib) {
+    const row = contributions?.find(c => c.id === contrib.id);
+    if (row) to = `${base}/people/${row.member_id}?dispute=${row.id}`;
+  } else if (taskEv) {
+    const t = tasks?.find(x => x.id === taskEv.id);
+    if (t?.github_issue_number != null) to = `${base}/plan/${t.github_issue_number}`;
+  }
+  if (!to) return null;
+  return <Link to={to} className="self-start text-label text-fg-muted underline underline-offset-[3px] hover:text-fg">Dispute</Link>;
+}
+
+function ClaimList({ label, items, contributions }: { label: string; items: DigestClaim[]; contributions: Contribution[] | null }) {
   if (!items.length) return null;
   return (
     <div className="flex flex-col gap-2">
@@ -109,6 +126,7 @@ function EvidenceList({ label, items }: { label: string; items: Array<{ text: st
           <li key={i} className="flex min-w-0 flex-col gap-1.5">
             <span>{item.text}</span>
             <SourceChips sources={item.evidence.slice(0, 3)} />
+            <DisputeLink evidence={item.evidence} contributions={contributions} />
           </li>
         ))}
       </ul>
@@ -122,28 +140,21 @@ export function DigestCard() {
   const [refresh, setRefresh] = useState(0);
   const digest = useApi<Digest>(() => api.digest(teamId, 7, refresh > 0), [teamId, version, refresh]);
   const d = digest.data;
-  const quiet = !!d && d.highlights.length === 0 && d.risks.length === 0;
-
+  const needsContribs = !!d && [...d.summary, ...d.highlights, ...d.risks, ...d.checkInClaims].some(c => c.evidence.some(e => e.type === 'contribution'));
+  const contribs = useApi(() => (needsContribs ? api.contributions(teamId) : Promise.resolve([])), [teamId, version, needsContribs]);
   return (
     <section aria-labelledby="digest-h" className="flex flex-col gap-3 rounded-[10px] border border-line bg-surface-1 p-5">
       <div id="digest-h" className="contents"><AiHeader title="Weekly digest" at={d?.generatedAt} onRefresh={() => setRefresh(r => r + 1)} refreshing={digest.loading && !!d} /></div>
       {digest.error ? <ErrorState message={digest.error} onRetry={() => setRefresh(r => r + 1)} /> : null}
       {!digest.error && !d ? <div className="flex flex-col gap-2"><Skeleton w="40%" h={14} /><Skeleton w="95%" h={16} /><Skeleton w="80%" h={14} /><Skeleton w="70%" h={14} /></div> : null}
-      {d && !digest.error && quiet && (
-        <EmptyState bulb="none" heading="A quiet week" line={d.summary}>
-          <p className="text-pretty">{d.checkIn}</p>
-          {d.checkIn && <CopyCheckIn text={d.checkIn} />}
-        </EmptyState>
-      )}
-      {d && !digest.error && !quiet && (
+      {d && !digest.error && (
         <>
-          <p className="text-caption font-normal text-fg-muted">Week of {shortDate(d.weekOf)}</p>
-          <p className="text-brief text-pretty">{d.summary}</p>
-          <EvidenceList label="Highlights" items={d.highlights} />
-          <EvidenceList label="Risks" items={d.risks} />
+          <p className="text-caption font-normal text-fg-muted">Last {d.days} day{d.days === 1 ? '' : 's'} ({shortDate(d.windowStart)} to {shortDate(d.windowEnd)})</p>
+          <ClaimList label="Summary" items={d.summary} contributions={contribs.data} />
+          <ClaimList label="Highlights" items={d.highlights} contributions={contribs.data} />
+          <ClaimList label="Risks" items={d.risks} contributions={contribs.data} />
           <div className="flex flex-col gap-3 border-t border-line pt-3">
-            <h3 className="text-caption tracking-[0.04em] text-fg-muted uppercase">Check-in</h3>
-            <p className="text-pretty">{d.checkIn}</p>
+            <ClaimList label="Check-in" items={d.checkInClaims} contributions={contribs.data} />
             {d.checkIn && <div className="flex justify-end"><CopyCheckIn text={d.checkIn} /></div>}
           </div>
         </>

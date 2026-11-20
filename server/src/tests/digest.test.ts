@@ -29,12 +29,16 @@ const BLAME = /top contributor|leaderboard|laziest|slack(?:er|ing)|freeload|pull
 const NAMES = /\b(Sam|Jordan|Priya|Rio)\b/;
 
 interface Evidence { type: 'task' | 'contribution'; id: number; url: string | null }
+interface Claim { text: string; evidence: Evidence[] }
 interface DigestBody {
-  weekOf: string;
-  summary: string;
-  highlights: Array<{ text: string; evidence: Evidence[] }>;
-  risks: Array<{ text: string; evidence: Evidence[] }>;
+  days: number;
+  windowStart: string;
+  windowEnd: string;
+  summary: Claim[];
+  highlights: Claim[];
+  risks: Claim[];
   checkIn: string;
+  checkInClaims: Claim[];
   generatedAt: string;
 }
 
@@ -63,10 +67,14 @@ describe('GET /api/teams/:teamId/digest', () => {
     expect(res.status).toBe(200);
     const body = res.body as DigestBody;
 
-    expect(body.weekOf).toBe('2031-01-08');
-    expect(typeof body.summary).toBe('string');
-    expect(sentences(body.summary).length).toBeGreaterThanOrEqual(2);
-    expect(sentences(body.summary).length).toBeLessThanOrEqual(4);
+    expect(body.days).toBe(7);
+    expect(body.windowStart).toBe('2031-01-08');
+    expect(body.windowEnd).toBe('2031-01-15');
+    const summary = body.summary.map(s => s.text).join(' ');
+    expect(sentences(summary).length).toBeGreaterThanOrEqual(2);
+    expect(sentences(summary).length).toBeLessThanOrEqual(4);
+    expect(summary).toMatch(/last 7 days/);
+    expect(summary).not.toMatch(/closed this week|closed in that window/);
     expect(body.checkIn.length).toBeGreaterThan(0);
     expect(Array.isArray(body.highlights)).toBe(true);
     expect(Array.isArray(body.risks)).toBe(true);
@@ -75,7 +83,7 @@ describe('GET /api/teams/:teamId/digest', () => {
 
     const taskIds = new Set((db.prepare('SELECT id FROM tasks WHERE team_id = ?').all(teamId) as Array<{ id: number }>).map(t => t.id));
     const contribIds = new Set((db.prepare('SELECT id FROM contributions WHERE team_id = ?').all(teamId) as Array<{ id: number }>).map(c => c.id));
-    for (const item of [...body.highlights, ...body.risks]) {
+    for (const item of [...body.summary, ...body.checkInClaims, ...body.highlights, ...body.risks]) {
       expect(item.text.length).toBeGreaterThan(0);
       expect(item.evidence.length).toBeGreaterThan(0);
       for (const e of item.evidence) {
@@ -94,11 +102,11 @@ describe('GET /api/teams/:teamId/digest', () => {
   it('keeps the check-in neutral: tasks and risks, not blame or a ranking', async () => {
     const res = await request(app).get(`/api/teams/${teamId}/digest`);
     const body = res.body as DigestBody;
-    const prose = [body.summary, body.checkIn, ...body.highlights.map(h => h.text), ...body.risks.map(r => r.text)].join('\n');
+    const prose = [body.summary.map(s => s.text).join(' '), body.checkIn, ...body.highlights.map(h => h.text), ...body.risks.map(r => r.text)].join('\n');
 
     expect(body.checkIn.length).toBeGreaterThan(0);
     expect(prose).not.toMatch(BLAME);
-    expect(body.summary).not.toMatch(NAMES);
+    expect(body.summary.map(s => s.text).join(' ')).not.toMatch(NAMES);
     expect(body.checkIn).not.toMatch(NAMES);
     expect(body.checkIn).not.toMatch(/sam-builds|rio-dev|priya-code|jordan-qa/);
     expect(body.checkIn).toMatch(/#\d+|Auth flow|task|risk|due|open/i);
@@ -119,5 +127,13 @@ describe('GET /api/teams/:teamId/digest', () => {
 
     const fresh = await request(app).get(`/api/teams/${teamId}/digest?refresh=1`);
     expect(JSON.stringify(fresh.body.highlights)).toContain('CACHE_MARKER');
+  });
+
+  it('rebuilds the digest when a risk is rewritten', async () => {
+    const first = await request(app).get(`/api/teams/${teamId}/digest`);
+    db.prepare(`UPDATE risks SET description = description || ' REWRITTEN', generated_at = '2031-02-01T00:00:00Z' WHERE team_id = ? AND level = 'high'`).run(teamId);
+    const next = await request(app).get(`/api/teams/${teamId}/digest`);
+    expect(JSON.stringify(next.body.risks)).toContain('REWRITTEN');
+    expect(JSON.stringify(next.body.risks)).not.toBe(JSON.stringify((first.body as DigestBody).risks));
   });
 });

@@ -25,7 +25,7 @@ The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PA
 
 - **Ask Maestro.** Ask in plain words from the sidebar, the Today page or ⌘K ("What's blocking #12?", "What has Priya worked on?"). Answers use only the team's commits, Issues and logged work, and every answer links to its sources.
 - **Deadline check.** On Today. The verdict (on track, tight, behind) is arithmetic: open tasks against days left and the recent pace of closing tasks. Maestro then writes up to three next steps about specific tasks.
-- **Weekly digest.** On Today. A 2–4 sentence summary of the last 7 days, highlights and open risks with evidence, and a neutral check-in the team can copy. The check-in names tasks and risks. It does not score or rank anyone.
+- **Weekly digest.** On Today. A summary of the last 7 days, highlights and open risks, and a neutral check-in the team can copy. Every sentence links to the task or contribution it is about, and each one can be disputed. The check-in names tasks and risks. It does not score or rank anyone.
 
 The same guardrails apply to all three. Maestro never ranks, grades or compares people, and it never guesses why someone was quiet. Questions like "who's the laziest?" are refused before any model call. Sources the model cites are checked against real data, and commit messages are passed to the model as data, not instructions. The deadline check is cached until the team's data changes. The weekly digest is cached per team per week until that data changes. With `AI_PROVIDER=mock` they return template text built from the same facts.
 

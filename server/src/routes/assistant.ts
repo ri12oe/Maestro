@@ -31,8 +31,8 @@ function digestCacheVersion(teamId: number, weekOf: string): string {
       (SELECT deadline FROM teams WHERE id = @t) AS deadline,
       (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) FROM contributions WHERE team_id = @t) AS contribs,
       (SELECT COUNT(*) || ':' || IFNULL(SUM(status = 'closed'), 0) FROM tasks WHERE team_id = @t) AS tasks,
-      (SELECT COUNT(*) FROM risks WHERE team_id = @t AND dismissed = 0) AS risks,
-      (SELECT COUNT(*) || ':' || IFNULL(SUM(status = 'pending'), 0) FROM suggestions WHERE team_id = @t) AS suggestions,
+      (SELECT IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(generated_at), '') || ':' || IFNULL(SUM(length(description)), 0) || ':' || COUNT(*) FROM risks WHERE team_id = @t AND dismissed = 0) AS risks,
+      (SELECT IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(generated_at), '') || ':' || IFNULL(SUM(length(IFNULL(rationale, '') || IFNULL(checkin_message, ''))), 0) || ':' || IFNULL(SUM(status = 'pending'), 0) FROM suggestions WHERE team_id = @t) AS suggestions,
       (SELECT COUNT(*) || ':' || IFNULL(MAX(classified_at), '') FROM classifications cl JOIN contributions c ON c.id = cl.contribution_id WHERE c.team_id = @t) AS labels
   `).get({ t: teamId }) as Record<string, unknown>;
   return `${weekOf}|${Object.values(row).join('|')}`;

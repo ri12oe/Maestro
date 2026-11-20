@@ -414,8 +414,8 @@ export function templateDescription(risk: DetectedRisk): string {
   }
   if (risk.kind === 'single_point_of_failure') {
     const dir = s.directory ? `${s.directory}/` : 'one area of the code';
-    const share = s.commitShare != null ? ` (${s.commitShare}% of the last ${s.totalCommits} changes)` : '';
-    return `Only one person has changed ${dir} recently${share}. If they are unavailable near the deadline, nobody else knows this part of the project.`;
+    const count = typeof s.totalCommits === 'number' ? ` (the last ${s.totalCommits})` : '';
+    return `Recent changes to ${dir} all came through a single contributor${count}, so knowledge of this area isn't shared yet. Pairing on it before the deadline lowers the risk.`;
   }
   return `Open work is unevenly spread: one teammate holds ${s.taskCount} open tasks, including at least one that is behind, while others have room for more.`;
 }
@@ -504,7 +504,8 @@ Your task:
    around the project's health — never blame or single out a person. Use passive voice where helpful.
    Be specific: for a task risk, start with the task as "#<number> <title>" and include the numbers
    from its signal (days since last activity, days until due). For a directory risk, name the
-   directory and the share. Do not invent facts or reasons that are not in the signal.
+   directory and how many recent changes it covers. Talk about the area and the project risk.
+   Do not write "only one person". Do not invent facts or reasons that are not in the signal.
 2. Propose 0–3 task-swap suggestions. Each suggestion must include:
    - task_number: the GitHub issue number (integer)
    - from_login: the GitHub login of the current assignee

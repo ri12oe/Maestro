@@ -95,6 +95,13 @@ describe('GET /api/teams/:teamId/digest', () => {
     expect(urls.some(u => typeof u === 'string' && u.startsWith('https://'))).toBe(true);
 
     expect(body.risks.some(r => /#12|Auth flow/.test(r.text))).toBe(true);
+    const spof = body.risks.find(r => /server\//.test(r.text));
+    expect(spof?.text).toMatch(/Recent changes to server\/ all came through a single contributor \(the last \d+\)/);
+    expect(spof?.text).not.toMatch(/Only one person/);
+    expect(spof?.evidence.length).toBeGreaterThan(0);
+    expect(spof?.evidence.every(e => e.type === 'contribution')).toBe(true);
+    const prose = [body.summary.map(s => s.text).join(' '), body.checkIn, ...body.highlights.map(h => h.text), ...body.risks.map(r => r.text)].join('\n');
+    expect(prose).not.toMatch(/Only one person/);
     expect(body.checkIn).toMatch(/#12|Auth flow/);
     expect(body.checkIn).toMatch(/open|due|risk|task/i);
   });

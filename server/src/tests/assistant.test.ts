@@ -388,6 +388,55 @@ describe('routes', () => {
     expect(JSON.stringify(d)).not.toMatch(/least productive/);
   });
 
+  it('falls back when the model says only one person changed an area', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    const fetchSpy = vi.fn(async () => {
+      const content = JSON.stringify({
+        summary: [
+          { text: 'Two commits landed in the last 7 days.', source_ids: [`C${c3}`, `T${schema}`] },
+          { text: '#12 Login flow is still open.', source_ids: [`T${login}`] },
+        ],
+        highlights: [{ text: 'The schema had matched work.', source_ids: [`T${schema}`] }],
+        risks: [{ text: 'Only one person has changed server/ recently (100% of the last 11 changes).', source_ids: [`C${c3}`] }],
+        check_in: [
+          { text: 'Checking in on the open tasks.', source_ids: [`T${login}`] },
+          { text: 'Does the plan still look right?', source_ids: [`T${login}`] },
+        ],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(JSON.stringify(d)).not.toMatch(/Only one person/);
+    expect(claimText(d?.summary)).toMatch(/Alpha had 2 commits/);
+  });
+
+  it('keeps a sentence about who fits a task', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({
+        summary: [
+          { text: 'Priya is the best person for this task.', source_ids: [`T${login}`] },
+          { text: '#12 Login flow is still open.', source_ids: [`T${login}`] },
+        ],
+        highlights: [{ text: 'The schema had matched work.', source_ids: [`T${schema}`] }],
+        risks: [{ text: '#12 Login flow is open and due Nov 20.', source_ids: [`T${login}`] }],
+        check_in: [
+          { text: 'Checking in: #12 Login flow is still open.', source_ids: [`T${login}`] },
+          { text: 'Does the plan still look right?', source_ids: [`T${login}`] },
+        ],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(claimText(d?.summary)).toMatch(/best person for this task/);
+  });
+
   it('falls back when the digest model is down', async () => {
     process.env.AI_PROVIDER = 'grok';
     process.env.XAI_API_KEY = 'test-key';

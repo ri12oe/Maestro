@@ -110,7 +110,7 @@ function DisputeLink({ evidence, contributions }: { evidence: DigestEvidence[]; 
     if (row) to = `${base}/people/${row.member_id}?dispute=${row.id}`;
   } else if (taskEv) {
     const t = tasks?.find(x => x.id === taskEv.id);
-    if (t?.github_issue_number != null) to = `${base}/plan/${t.github_issue_number}`;
+    if (t) to = t.github_issue_number != null ? `${base}/plan/${t.github_issue_number}` : `${base}/plan?task=${t.id}`;
   }
   if (!to) return null;
   return <Link to={to} className="self-start text-label text-fg-muted underline underline-offset-[3px] hover:text-fg">Dispute</Link>;

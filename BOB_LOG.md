@@ -1340,7 +1340,7 @@ Production already has the old seed's team: id 3, name StudyBuddy, repo `studybu
 
 **AI source:** Grok bots
 
-The Maestro page shows an "Is the AI right?" card. It is the classifier's measured accuracy on the hand-labeled holdout, not a score of anyone on the team. The card says every label can be disputed.
+The Maestro page shows an "Is the AI right?" card. It is the classifier's measured accuracy on the 10-commit holdout (`holdout.csv`), not the 30-commit main set (`commits.csv`) and not a score of anyone on the team. Each percentage is followed by the provider and that holdout size (`50.0% · offline mock, 10 holdout commits`). The corner badge stays. The card says every label can be disputed.
 
 `npm run eval:results` (`server/`) runs `holdout.csv` through the same classifier as `npm run eval` and writes `server/src/ai/eval/results.json`. The file records the provider and model that scored the rows, the date, the holdout size, work-type and substance accuracy, and a confusion summary. `GET /api/eval` returns that file, or `200` `{ available: false }` when it is missing. A file that is not usable is `500` `{ error: "Eval results could not be read." }`. The route uses the same site-password gate as the other API routes.
 
@@ -1359,4 +1359,4 @@ Holdout, 10 commits, mock (`mock:prompt-v2`): work type 50.0% (5/10), substance 
 | `client/src/api/client.ts`, `client/src/api/types.ts` | `evalResults()` and the response shape. |
 | `docs/PLAN.md`, `README.md` | The endpoint, the script, and the Maestro card. |
 
-`npm run lint` passed. `npm test`: server 24 files, 228 passed (228); client 3 files, 20 passed (20). Main had 222 server tests and 15 client tests. Main's latest entry before this one is session 51. Not deployed.
+`npm run lint` passed. `npm test`: server 24 files, 228 passed (228); client 3 files, 21 passed (21). Main had 222 server tests and 15 client tests. Main's latest entry before this one is session 51. Not deployed.

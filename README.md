@@ -15,7 +15,7 @@ The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PA
 - **Plan** (`/t/:teamId/plan` and `/t/:teamId/plan/:issue`). Every task with a deadline strip, grouped by at risk, in progress, not started and done. A task opens in a panel with Maestro's note, any suggested swap and the work matched to it.
 - **People** (`/t/:teamId/people` and `/t/:teamId/people/:memberId`). The team's work on one scale, alphabetical, and a panel per person with their work mix, contributions, tasks and logged work. "Wrong label?" disputes a label in place.
 - **Report** (`/t/:teamId/report`). The record for peer evaluations: team activity by week and each person's completed tasks, notable work and off-repo work. Off until anyone on the team turns it on in Settings. Export PDF prints it.
-- **Maestro** (`/t/:teamId/maestro`). What the AI labeled, disputes, changes still waiting for a label, how Maestro decides, and an "Is the AI right?" card. The card shows the classifier's measured accuracy on hand-labeled holdout commits, the date, and the provider that produced the numbers. Those numbers are about the AI, not anyone on the team. Every label can be disputed.
+- **Maestro** (`/t/:teamId/maestro`). What the AI labeled, disputes, changes still waiting for a label, how Maestro decides, and an "Is the AI right?" card. The card shows the classifier's measured accuracy on the 10-commit holdout, not the 30-commit main set. Each percentage is followed by the provider and that holdout size (`50.0% · offline mock, 10 holdout commits` when the offline mock produced it). Those numbers are about the AI, not anyone on the team. Every label can be disputed.
 - **Settings** (`/t/:teamId/settings` and `/t/:teamId/settings/:section`). Members, team deadline, the report switch, theme, and deleting the team.
 - **Log work** is available from anywhere: the sidebar button, the mobile **+**, or the `L` key.
 
@@ -115,9 +115,9 @@ npm run eval --workspace=server
 npm run eval:results --workspace=server
 ```
 
-`npm test` runs the server test suite, then the client test suite. `npm run eval` is a script in `server/` (the root `package.json` has no `eval` script). It scores the classifier on the hand-labeled commits and prints accuracy and the misses. Mock mode stays offline.
+`npm test` runs the server test suite, then the client test suite. `npm run eval` is a script in `server/` (the root `package.json` has no `eval` script). With no `--set`, it scores the 30-commit main set (`commits.csv`) and prints accuracy and the misses. That printout is not what the card shows. Mock mode stays offline.
 
-`npm run eval:results --workspace=server` scores the holdout set and rewrites `server/src/ai/eval/results.json`. `GET /api/eval` serves that file, and the Maestro page shows it. The file records the provider that ran (`mock` when `AI_PROVIDER` is unset or `mock`).
+`npm run eval:results --workspace=server` scores the 10-commit holdout (`holdout.csv`), not that 30-commit main set, and rewrites `server/src/ai/eval/results.json`. `GET /api/eval` serves that file, and the Maestro page shows it. The file records the provider that ran (`mock` when `AI_PROVIDER` is unset or `mock`).
 
 ## Production
 

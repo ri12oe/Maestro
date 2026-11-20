@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACCURACY_EXPLANATION,
   DISPUTE_REMINDER,
+  accuracyCredit,
   accuracyPercentLabel,
   holdoutLine,
   recordedLine,
@@ -15,8 +16,18 @@ describe('accuracy card copy', () => {
   });
 
   it('names the holdout size', () => {
-    expect(holdoutLine(10)).toBe('Accuracy on 10 hand-labeled holdout commits.');
-    expect(holdoutLine(1)).toBe('Accuracy on 1 hand-labeled holdout commit.');
+    expect(holdoutLine(10)).toBe('Accuracy on the 10-commit holdout.');
+    expect(holdoutLine(1)).toBe('Accuracy on the 1-commit holdout.');
+  });
+
+  it('puts the provider and the holdout size on the line under the percentage', () => {
+    expect(accuracyCredit({ accuracy: 50, provider: 'mock', holdoutSize: 10 }))
+      .toBe('50.0% · offline mock, 10 holdout commits');
+    expect(accuracyCredit({ accuracy: 80, provider: 'grok', holdoutSize: 10 }))
+      .toBe('80.0% · grok, 10 holdout commits');
+    expect(accuracyCredit({ accuracy: 100, provider: 'grok', holdoutSize: 1 }))
+      .toBe('100.0% · grok, 1 holdout commit');
+    expect(accuracyCredit({ accuracy: 50, provider: 'mock', holdoutSize: 10 })).not.toMatch(/30/);
   });
 
   it('credits the offline mock classifier when that provider produced the file', () => {

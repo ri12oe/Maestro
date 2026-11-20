@@ -5,6 +5,7 @@ import { Badge, Card, EmptyState, ErrorState, Skeleton } from '../ui/primitives.
 import {
   ACCURACY_EXPLANATION,
   DISPUTE_REMINDER,
+  accuracyCredit,
   accuracyPercentLabel,
   holdoutLine,
   recordedLine,
@@ -43,8 +44,8 @@ export function AccuracyCard() {
         <div className="flex flex-col gap-3">
           <p className="text-fg-muted">{holdoutLine(ready.holdoutSize)}</p>
           <dl className="grid grid-cols-2 gap-4">
-            <AccuracyFigure label="Work type" correct={ready.workType.correct} total={ready.workType.total} accuracy={ready.workType.accuracy} />
-            <AccuracyFigure label="Substance" correct={ready.substance.correct} total={ready.substance.total} accuracy={ready.substance.accuracy} />
+            <AccuracyFigure label="Work type" correct={ready.workType.correct} total={ready.workType.total} accuracy={ready.workType.accuracy} provider={ready.provider} holdoutSize={ready.holdoutSize} />
+            <AccuracyFigure label="Substance" correct={ready.substance.correct} total={ready.substance.total} accuracy={ready.substance.accuracy} provider={ready.provider} holdoutSize={ready.holdoutSize} />
           </dl>
           <p className="text-label font-normal text-fg-muted">
             {recordedLine({ dateLabel: shortDate(ready.date), provider: ready.provider, model: ready.model })}
@@ -57,13 +58,14 @@ export function AccuracyCard() {
   );
 }
 
-function AccuracyFigure({ label, correct, total, accuracy }: {
-  label: string; correct: number; total: number; accuracy: number;
+function AccuracyFigure({ label, correct, total, accuracy, provider, holdoutSize }: {
+  label: string; correct: number; total: number; accuracy: number; provider: string; holdoutSize: number;
 }) {
   return (
     <div>
       <dt className="text-caption text-fg-muted">{label}</dt>
       <dd className="text-[28px] leading-9 font-semibold tracking-[-0.02em]">{accuracyPercentLabel(accuracy)}</dd>
+      <dd className="text-caption font-normal text-fg-muted">{accuracyCredit({ accuracy, provider, holdoutSize })}</dd>
       <dd className="text-caption font-normal text-fg-muted">{correct} of {total}</dd>
     </div>
   );

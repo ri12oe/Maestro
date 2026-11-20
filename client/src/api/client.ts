@@ -1,5 +1,5 @@
 import type {
-  AskResult, ClassifyResult, Contribution, Digest, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
+  AskResult, ClassifyResult, Contribution, Digest, DisputeResult, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Substance, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary, WorkType,
 } from './types.ts';
 
 export class ApiError extends Error {
@@ -109,10 +109,15 @@ export const api = {
   }) =>
     request<ManualEntry>(`/teams/${teamId}/manual`, { method: 'POST', body: JSON.stringify(input) }),
 
-  dispute: (teamId: number, contributionId: number, note: string) =>
-    request<{ ok: true }>(`/teams/${teamId}/contributions/${contributionId}/dispute`, {
+  dispute: (teamId: number, contributionId: number, input: {
+    note?: string | null;
+    work_type?: WorkType;
+    substance?: Substance;
+    undo?: boolean;
+  }) =>
+    request<DisputeResult>(`/teams/${teamId}/contributions/${contributionId}/dispute`, {
       method: 'POST',
-      body: JSON.stringify({ note: note.trim() || null }),
+      body: JSON.stringify(input),
     }),
 
   /** Measured classifier accuracy. The provider in the body is the one that scored the holdout. */

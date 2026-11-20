@@ -7,6 +7,8 @@
  *
  * Rules:
  *   - Skip contributions that already have a classifications row.
+ *     That cache includes a disputed or corrected row: sync must not replace
+ *     a label a person set. work_type on that row is the effective label.
  *   - Write a task_matches row only when task_number is a real task
  *     AND match_confidence is not 'low'.
  *   - Never overwrite a task_matches row that a person set by hand
@@ -31,9 +33,12 @@ import { completeJSON } from './provider.js';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
+export const WORK_TYPES = ['feature', 'fix', 'test', 'refactor', 'docs', 'formatting', 'generated', 'design', 'other'] as const;
+export const SUBSTANCES = ['low', 'medium', 'high'] as const;
+
 export const ClassificationSchema = z.object({
-  work_type: z.enum(['feature', 'fix', 'test', 'refactor', 'docs', 'formatting', 'generated', 'design', 'other']),
-  substance: z.enum(['low', 'medium', 'high']),
+  work_type: z.enum(WORK_TYPES),
+  substance: z.enum(SUBSTANCES),
   // Trim first, then require one or more characters. An empty or whitespace-only
   // summary fails this parse. completeJSON retries that once and then throws, so
   // classifyTeam and rematchNewTasks count it failed and leave it to be tried again.
@@ -418,7 +423,9 @@ export async function classifyTeam(
     )
     .all(teamId) as TaskRow[];
 
-  // Load contributions that do NOT yet have a classifications row
+  // One classification row per contribution is the cache. A disputed row
+  // (disputed = 1) or a human correction (corrected_at set) already has that
+  // row, so it is not selected and the model cannot overwrite it.
   const unclassified = db
     .prepare(
       `SELECT c.id, c.title, c.body, c.diff_summary,
@@ -426,7 +433,12 @@ export async function classifyTeam(
               c.source, c.kind
        FROM contributions c
        LEFT JOIN classifications cl ON cl.contribution_id = c.id
-       WHERE c.team_id = ? AND cl.id IS NULL`,
+       WHERE c.team_id = ?
+         AND cl.id IS NULL
+         AND c.id NOT IN (
+           SELECT contribution_id FROM classifications
+           WHERE disputed = 1 OR corrected_at IS NOT NULL
+         )`,
     )
     .all(teamId) as ContribRow[];
 
@@ -435,6 +447,8 @@ export async function classifyTeam(
   const provider = process.env.AI_PROVIDER ?? 'mock';
   const mv = modelVersion();
 
+  // DO NOTHING keeps a row that appeared after this query, including a
+  // correction saved while this run was in flight. Never UPDATE the label.
   const insertClassification = db.prepare(`
     INSERT INTO classifications
       (contribution_id, work_type, substance, summary, classified_at, model_version)

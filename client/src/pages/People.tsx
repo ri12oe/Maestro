@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { ExternalLink, GitCommitHorizontal, MessageSquareWarning, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
-import type { Contribution, MemberSummary } from '../api/types.ts';
+import type { Contribution, MemberSummary, Substance, WorkType } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
 import { dayLabel, shortDate } from '../dates.ts';
 import { shortCommitSha } from '../sha.ts';
@@ -181,33 +181,65 @@ function PersonSheet({ member, disputeId, onClose }: { member: MemberSummary | n
 }
 
 const REASONS = ['Wrong kind of work', 'Wrong substance', 'Wrong task', 'This wasn’t mine'];
+const WORK_TYPE_OPTIONS = Object.keys(WORK_TYPE_LABEL) as WorkType[];
+const SUBSTANCE_OPTIONS: Array<{ value: Substance; label: string }> = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
+function originalLabel(c: Contribution): string | null {
+  if (!c.corrected_at || !c.original_work_type) return null;
+  const type = WORK_TYPE_LABEL[c.original_work_type];
+  const substance = c.original_substance ? `, ${c.original_substance}` : '';
+  return `AI label: ${type}${substance}`;
+}
 
 function ContributionItem({ c, teamId, disputeOpen = false }: { c: Contribution; teamId: number; disputeOpen?: boolean }) {
   const { reload } = useTeam();
   const toast = useToast();
-  const [open, setOpen] = useState(disputeOpen && !c.disputed);
+  const corrected = Boolean(c.corrected_at);
+  const disputed = Boolean(c.disputed);
+  const [open, setOpen] = useState(disputeOpen && !disputed);
 
   useEffect(() => {
-    if (disputeOpen && !c.disputed) setOpen(true);
-  }, [disputeOpen, c.disputed]);
+    if (disputeOpen && !c.disputed && !c.corrected_at) setOpen(true);
+  }, [disputeOpen, c.disputed, c.corrected_at]);
   const [reason, setReason] = useState(REASONS[0]);
-  const [should, setShould] = useState('');
+  const [workType, setWorkType] = useState<WorkType | null>(null);
+  const [substance, setSubstance] = useState<Substance | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [disputed, setDisputed] = useState(!!c.disputed);
   const noteId = useId();
   const Icon = c.source === 'manual' ? NotebookPen : GitCommitHorizontal;
   const href = c.url ?? c.link ?? undefined;
+  const correcting = workType != null || substance != null;
+  const aiLabel = originalLabel(c);
 
   async function send() {
     setBusy(true); setErr(null);
-    // The API keeps one note per dispute, so the reason and the suggested label lead it.
-    const parts = [reason, should && `should be ${should}`, note.trim()].filter(Boolean);
+    const parts = [reason, note.trim()].filter(Boolean);
     try {
-      await api.dispute(teamId, c.id, parts.join(': '));
-      setDisputed(true); setOpen(false);
-      toast.show('Dispute sent. The team can see it on the Maestro page.');
+      const saved = await api.dispute(teamId, c.id, {
+        note: parts.join(': ') || null,
+        ...(workType ? { work_type: workType } : {}),
+        ...(substance ? { substance } : {}),
+      });
+      setOpen(false);
+      toast.show(saved.warning ?? (correcting
+        ? 'Label corrected. Everyone sees the same label.'
+        : 'Dispute sent. The team can see it on the Maestro page.'));
+      reload();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function undo() {
+    setBusy(true); setErr(null);
+    try {
+      const saved = await api.dispute(teamId, c.id, { undo: true });
+      toast.show(saved.warning ?? 'Restored the original AI label.');
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -228,12 +260,20 @@ function ContributionItem({ c, teamId, disputeOpen = false }: { c: Contribution;
           {c.source === 'manual' ? <Badge>{c.kind ?? 'Logged'}</Badge> : <WorkTypeTag type={c.work_type} />}
           <SubstanceDots value={c.substance} />
           {c.task_number != null && <span className="rounded-full bg-surface-2 px-1.5 font-mono text-[11.5px] text-fg-muted">#{c.task_number}</span>}
-          {disputed && <Badge tone="maestro"><MessageSquareWarning size={12} aria-hidden="true" />Disputed</Badge>}
-          {!disputed && c.work_type && c.source !== 'manual' && !open && (
+          {corrected && (
+            <>
+              <Badge tone="maestro"><MessageSquareWarning size={12} aria-hidden="true" />Corrected by team</Badge>
+              {aiLabel && <span className="text-caption font-normal text-fg-muted">{aiLabel}</span>}
+              <Button size="sm" variant="ghost" className="h-6" onClick={() => void undo()} busy={busy} disabled={busy}>Undo</Button>
+            </>
+          )}
+          {!corrected && disputed && <Badge tone="maestro"><MessageSquareWarning size={12} aria-hidden="true" />Disputed</Badge>}
+          {!corrected && !disputed && c.work_type && c.source !== 'manual' && !open && (
             <Button size="sm" variant="ghost" className="ml-auto h-6 opacity-100 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100 coarse:opacity-100"
               onClick={() => setOpen(true)} aria-label={`Dispute the label on “${c.summary ?? c.title}”`}>Wrong label?</Button>
           )}
         </div>
+        {err && !open && <p className="text-label font-normal text-risk-high" role="alert">{err}</p>}
         {open && (
           <div className="mt-1 flex animate-pop-in flex-col gap-3 rounded-lg border border-line-strong bg-surface-2 p-3">
             <fieldset className="flex flex-col gap-1.5">
@@ -245,20 +285,31 @@ function ContributionItem({ c, teamId, disputeOpen = false }: { c: Contribution;
                 ))}
               </div>
             </fieldset>
-            {reason === 'Wrong kind of work' && (
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="What it should be">
-                {(['feature', 'fix', 'test', 'refactor', 'docs', 'design', 'formatting', 'other'] as const).filter(t => t !== c.work_type).map(t => (
-                  <button key={t} type="button" aria-pressed={should === WORK_TYPE_LABEL[t]} onClick={() => setShould(WORK_TYPE_LABEL[t])}
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-1 text-label">Work type (optional)</legend>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Corrected work type">
+                {WORK_TYPE_OPTIONS.map(t => (
+                  <button key={t} type="button" aria-pressed={workType === t} onClick={() => setWorkType(current => current === t ? null : t)}
                     className="h-7 rounded-full border border-line-strong bg-surface-1 px-2.5 text-[12.5px] text-fg-muted aria-pressed:border-fg aria-pressed:text-fg">{WORK_TYPE_LABEL[t]}</button>
                 ))}
               </div>
-            )}
+            </fieldset>
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-1 text-label">Substance (optional)</legend>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Corrected substance">
+                {SUBSTANCE_OPTIONS.map(s => (
+                  <button key={s.value} type="button" aria-pressed={substance === s.value} onClick={() => setSubstance(current => current === s.value ? null : s.value)}
+                    className="h-7 rounded-full border border-line-strong bg-surface-1 px-2.5 text-[12.5px] text-fg-muted aria-pressed:border-fg aria-pressed:text-fg">{s.label}</button>
+                ))}
+              </div>
+              <p className="text-caption font-normal text-fg-muted">Corrects the label on this change. It does not score anyone.</p>
+            </fieldset>
             <label htmlFor={noteId} className="sr-only">Note (optional)</label>
             <textarea id={noteId} rows={2} className={textareaClass} value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note (optional)" />
             {err && <p className="text-label font-normal text-risk-high" role="alert">{err}</p>}
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
-              <Button size="sm" variant="primary" onClick={() => void send()} busy={busy}>Send dispute</Button>
+              <Button size="sm" variant="primary" onClick={() => void send()} busy={busy}>{correcting ? 'Save correction' : 'Send dispute'}</Button>
             </div>
           </div>
         )}

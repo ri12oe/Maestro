@@ -154,8 +154,13 @@ AI-generated label for each contribution. Cached by `contribution_id`.
 | `summary` | TEXT | One-line AI summary |
 | `disputed` | INTEGER | 0 or 1 (boolean) |
 | `dispute_note` | TEXT | Member's dispute comment |
+| `original_work_type` | TEXT | AI `work_type`, stored while a correction is active. NULL when the row still shows the AI label. Same enum as `work_type`. |
+| `original_substance` | TEXT | AI `substance`, stored while a correction is active. NULL otherwise. `low` / `medium` / `high`. |
+| `corrected_at` | TEXT | ISO-8601 while the team's correction is the effective label. NULL otherwise. |
 | `classified_at` | TEXT | ISO-8601 |
 | `model_version` | TEXT | Which model/prompt version produced this |
+
+`work_type` and `substance` are the effective label: the team's correction while `corrected_at` is set, otherwise the AI label. Reads go through the `effective_classifications` view, which exposes those columns. Sync classifies a contribution only when it has no classifications row, so a disputed or corrected row is not sent back through the model.
 
 ### Table: `task_matches`
 Embedding-based link from a contribution to the Issue it best matches. Only created when cosine similarity ≥ 0.5.
@@ -239,7 +244,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 |---|---|---|
 | `GET` | `/api/teams/:teamId/contributions` | All contributions; query params: `?memberId=`, `?source=`, `?taskId=` |
 | `GET` | `/api/teams/:teamId/contributions/:contributionId` | Single contribution with classification |
-| `POST` | `/api/teams/:teamId/contributions/:contributionId/dispute` | Flag a label as wrong |
+| `POST` | `/api/teams/:teamId/contributions/:contributionId/dispute` | Flag a label, or correct it. Body: `{ note?, work_type?, substance?, undo? }`. `note` is an optional string. `work_type` and `substance` are optional and must be the existing enums (`feature`, `fix`, `test`, `refactor`, `docs`, `formatting`, `generated`, `design`, `other`; `low`, `medium`, `high`). Anything else is `400` `{ error }`. When either label is sent, it becomes the effective label, the AI label is copied into `original_work_type` and `original_substance`, `corrected_at` is set, and `disputed` is 1. A second correction keeps that first AI label. `{ undo: true }` restores that original AI label, not the previous correction, and clears `original_*`, `corrected_at`, `disputed`, and the note. The map, People, Report, and digest read the effective label from `effective_classifications`. The risk reasoner runs again, synchronously, before the response, the same step a sync finishes with. The label UPDATE is committed first. If the reasoner throws, the response is still `200`: the label stays saved, `risksRefreshed` is `false`, and `warning` is `Label saved, but risks could not be refreshed. They will update on the next sync.` When the reasoner finishes, `risksRefreshed` is `true` and `warning` is omitted. `409` `{ error: "This label has no correction to undo" }` when there is nothing to undo. `undo` together with a new label is `400`. A note alone sets `disputed` and does not change the label or re-run the reasoner. `404` when the team, the contribution, or the classification does not exist. Response `{ ok: true, disputed, work_type, substance, original_work_type, original_substance, corrected_at, risksRefreshed, warning? }`. The correction is about the label, not a score of the person. Every member can dispute. |
 
 ### Manual Work Log
 
@@ -278,7 +283,7 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/teams/:teamId/digest` | Rolling window, default 7 days (`?days=` clamped to 1–30). Body: `days`, `windowStart` and `windowEnd` (`YYYY-MM-DD` of the window), `summary`, `highlights`, `risks`, and `checkInClaims` (each sentence is `{ text, evidence }`), plus `checkIn` (those check-in sentences joined, for copying). `evidence` items are `{ type: "task" \| "contribution", id, url }`. Every sentence, including the summary and the check-in, has at least one evidence item. `404` `{ error: "Team not found" }` when the team does not exist. Same site-password gate as the other `/api/teams` routes. Cached per team per window until contributions, tasks, risk or suggestion text, labels, or the deadline change. `?refresh=1` skips the cache. `AI_PROVIDER=mock` builds the text from the team's rows and does not call the schema-only mock. The check-in names tasks and risks. It does not score, grade, or rank people. A closed task is described by its latest matched work in the window, not as "closed this week". |
+| `GET` | `/api/teams/:teamId/digest` | Rolling window, default 7 days (`?days=` clamped to 1–30). Body: `days`, `windowStart` and `windowEnd` (`YYYY-MM-DD` of the window), `summary`, `highlights`, `risks`, and `checkInClaims` (each sentence is `{ text, evidence }`), plus `checkIn` (those check-in sentences joined, for copying). `evidence` items are `{ type: "task" \| "contribution", id, url }`. Every sentence, including the summary and the check-in, has at least one evidence item. `404` `{ error: "Team not found" }` when the team does not exist. Same site-password gate as the other `/api/teams` routes. Cached per team per window until contributions, tasks, risk or suggestion text, labels, or the deadline change. The label key includes `corrected_at` and each contribution's effective work type and substance, so a correction or an undo misses the cache. A summary-only edit does not. `?refresh=1` skips the cache. `AI_PROVIDER=mock` builds the text from the team's rows and does not call the schema-only mock. The check-in names tasks and risks. It does not score, grade, or rank people. A closed task is described by its latest matched work in the window, not as "closed this week". |
 
 ---
 
@@ -450,6 +455,10 @@ Plain-language summary of the last 7 days, plus a neutral check-in the team can 
 - Server: `GET /api/teams/:teamId/digest` in `server/src/routes/assistant.ts`. The writing is in `server/src/ai/assistant.ts` (`DigestSchema` through `completeJSON` when `AI_PROVIDER=grok`). Mock mode and a failed model call use a deterministic fallback built from the team's rows.
 - Fairness: no scores, grades, or rankings. A model answer that compares people is discarded and the fallback is returned. The check-in talks about tasks and risks.
 - Client: the Weekly digest card on Today (`client/src/app/AiCards.tsx`), with loading, empty, and error states, evidence chips, and Copy check-in (toast: "Check-in message copied.").
+
+### Label corrections — built
+
+A dispute can correct the work type, the substance, or both. The first correction copies the AI label into `original_work_type` and `original_substance`. A second correction changes the effective label and leaves that AI label in place. Undo restores the original AI label, not the intermediate correction. `effective_classifications` is the read path for the contribution map, People, Report, the digest, and the reasoner's work-type counts. The reasoner runs again after a correction or an undo. If that run throws, the route still returns 200 with `risksRefreshed: false` and a warning; the label stays saved, and People reloads and shows the warning. Sync does not overwrite a corrected row. The People form has optional pickers; the row shows "Corrected by team", the original AI label, and Undo. The correction is about the label. It does not score or rank the person. Every member uses the same form. A Plan row for a task with no issue number opens that task with `?task=<id>`, the same path the digest uses.
 
 ## Open Decisions
 

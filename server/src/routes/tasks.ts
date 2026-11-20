@@ -34,7 +34,7 @@ router.get('/:taskId', (req: Request<TeamParams & { taskId: string }>, res: Resp
     SELECT c.*, cl.work_type, cl.substance, cl.summary, tm.similarity_score
     FROM task_matches tm
     JOIN contributions c ON c.id = tm.contribution_id
-    LEFT JOIN classifications cl ON cl.contribution_id = c.id
+    LEFT JOIN effective_classifications cl ON cl.contribution_id = c.id
     WHERE tm.task_id = ?
     ORDER BY tm.similarity_score DESC
   `).all(Number(req.params.taskId));

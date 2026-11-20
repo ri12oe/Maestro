@@ -8,6 +8,7 @@ import { LogoMark } from '../components/Bulb.tsx';
 import { firstName, useTeam } from '../app/team.tsx';
 import { useToast } from '../ui/overlays.tsx';
 import { AccuracyCard } from '../app/AccuracyCard.tsx';
+import { WORK_TYPE_LABEL } from '../workTypes.ts';
 import { Button, Card, EmptyState, ErrorState, Page, Skeleton, WorkTypeTag } from '../ui/primitives.tsx';
 
 const STEPS = [
@@ -77,7 +78,12 @@ export default function MaestroPage() {
                   <tr key={c.id} className="h-14 border-t border-line">
                     <td className="pr-2 pl-5"><div>{c.summary ?? c.title}</div><div className="font-mono text-[11.5px] text-fg-muted">{shortCommitSha(c.github_sha)} · {shortDate(c.authored_at)}</div></td>
                     <td className="px-2">{nameOf(c.member_id)}</td>
-                    <td className="px-2"><WorkTypeTag type={c.work_type} /></td>
+                    <td className="px-2">
+                      <WorkTypeTag type={c.corrected_at ? c.original_work_type : c.work_type} />
+                      {c.corrected_at && c.work_type && (
+                        <div className="text-caption font-normal text-fg-muted">Corrected to {WORK_TYPE_LABEL[c.work_type]}{c.substance ? `, ${c.substance}` : ''}</div>
+                      )}
+                    </td>
                     <td className="px-2 pr-5 text-fg-muted">{c.dispute_note ?? '—'}</td>
                   </tr>
                 ))}

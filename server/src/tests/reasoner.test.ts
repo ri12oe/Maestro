@@ -316,7 +316,7 @@ function getSummaryData(db: Database.Database, tid: number) {
   return memberRows.map(m => {
     const classRows = db.prepare(`
       SELECT cl.work_type, cl.substance, COUNT(*) AS n
-      FROM classifications cl
+      FROM effective_classifications cl
       JOIN contributions c ON c.id = cl.contribution_id
       WHERE c.member_id = ?
       GROUP BY cl.work_type, cl.substance

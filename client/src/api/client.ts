@@ -1,5 +1,5 @@
 import type {
-  AskResult, ClassifyResult, Contribution, Digest, PlanCheck, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
+  AskResult, ClassifyResult, Contribution, Digest, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary,
 } from './types.ts';
 
 export class ApiError extends Error {
@@ -114,4 +114,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ note: note.trim() || null }),
     }),
+
+  /** Measured classifier accuracy. The provider in the body is the one that scored the holdout. */
+  evalResults: () => request<EvalResponse>('/eval'),
 };

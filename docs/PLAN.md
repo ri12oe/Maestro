@@ -50,8 +50,10 @@ Maestro/
 │   │   │   ├── provider.ts          # completeJSON; implementation chosen by AI_PROVIDER env var (mock | grok)
 │   │   │   ├── classifier.ts        # Commit → structured label; runs after sync
 │   │   │   ├── eval/
-│   │   │   │   ├── commits.csv      # 30 hand-labeled commits for accuracy measurement
-│   │   │   │   └── run.ts           # npm run eval — prints accuracy and misses
+│   │   │   │   ├── commits.csv      # 30-commit main set. npm run eval prints it. The card does not
+│   │   │   │   ├── holdout.csv      # 10-commit holdout. The card and GET /api/eval use this set
+│   │   │   │   ├── results.json     # accuracy on the 10-commit holdout, not the 30-commit main set
+│   │   │   │   └── run.ts           # npm run eval prints accuracy; eval:results writes results.json
 │   │   │   └── reasoner.ts          # Deterministic risk signals; LLM writes explanations + swaps
 │   │   ├── routes/
 │   │   │   ├── teams.ts
@@ -258,6 +260,12 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 | `GET` | `/api/teams/:teamId/suggestions` | All pending suggestions |
 | `POST` | `/api/teams/:teamId/suggestions/:suggestionId/respond` | Accept / discuss / dismiss, or set an accepted suggestion back to `pending` |
 
+### Classifier accuracy
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/eval` | The classifier's measured accuracy on the 10-commit holdout (`server/src/ai/eval/holdout.csv`), not the 30-commit main set in `commits.csv`. The body is `server/src/ai/eval/results.json`. `200` `{ available: true, provider, model, evaluatedAt, date, set: "holdout", holdoutSize, workType, substance, confusion }` when the file is present and the percentages match the counts. `workType` and `substance` are `{ correct, total, accuracy }`. `accuracy` is the one-decimal percent the eval script prints. `holdoutSize` is 10 for that file. `confusion` counts expected label to predicted label. `200` `{ available: false }` when the file is missing. `500` `{ error: "Eval results could not be read." }` when the file is not usable. The body does not include a path. Same site-password gate as the other routes. These numbers describe the classifier, not anyone on the team. `npm run eval:results` in `server/` rewrites the file from a real holdout run and records the provider that scored it. `npm run eval` with no `--set` prints the 30-commit main set and does not write this file. |
+
 ### Dashboard Summary (aggregated)
 
 | Method | Path | Description |
@@ -431,3 +439,11 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 |---|---|---|
 | 1 | xAI Grok model name? | `grok-3-mini` (set via `GROK_MODEL` env var) |
 | 2 | Sync frequency in production — manual trigger only, or periodic? | Manual trigger only for MVP |
+
+---
+
+## Classifier accuracy
+
+The Maestro page (`/t/:teamId/maestro`) includes an "Is the AI right?" card. It shows work-type accuracy and substance accuracy on the 10-commit holdout (`holdout.csv`), not the 30-commit main set (`commits.csv`) that `npm run eval` prints by default. Under each percentage is the provider and that holdout size, for example `50.0% · offline mock, 10 holdout commits`. The corner badge stays. The date and model are on the card too. The figures come from `server/src/ai/eval/results.json`, served by `GET /api/eval`. They check the classifier. They are not a score of anyone on the team. The card says every label can be disputed.
+
+`npm run eval:results --workspace=server` runs the holdout set and rewrites that file. The `provider` field is whatever `AI_PROVIDER` was for that run (`mock` when it is unset). The card labels an offline mock result as such. A missing file is `200` `{ available: false }`, and the card shows an empty state. The server build copies `results.json` into `dist/ai/eval/` so a production process can read it next to the compiled route.

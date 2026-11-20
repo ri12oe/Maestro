@@ -1335,3 +1335,28 @@ Production already has the old seed's team: id 3, name StudyBuddy, repo `studybu
 | `README.md`, `docs/PLAN.md`, `docs/RAILWAY.md`, `.env.example` | Seeded once means the done marker. A deleted demo stays deleted. A real team named StudyBuddy is left as it is. |
 
 `npm run lint` passed. `npm test` after rebasing onto `2157edb`: server 23 files, 222 passed (222); client 2 files, 15 passed (15). That main had 217 server tests and 11 client tests. Not deployed.
+
+## 2026-11-20 — Session 52: Is the AI right? (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The Maestro page shows an "Is the AI right?" card. It is the classifier's measured accuracy on the 10-commit holdout (`holdout.csv`), not the 30-commit main set (`commits.csv`) and not a score of anyone on the team. Each percentage is followed by the provider and that holdout size (`50.0% · offline mock, 10 holdout commits`). The corner badge stays. The card says every label can be disputed.
+
+`npm run eval:results` (`server/`) runs `holdout.csv` through the same classifier as `npm run eval` and writes `server/src/ai/eval/results.json`. The file records the provider and model that scored the rows, the date, the holdout size, work-type and substance accuracy, and a confusion summary. `GET /api/eval` returns that file, or `200` `{ available: false }` when it is missing. A file that is not usable is `500` `{ error: "Eval results could not be read." }`. The route uses the same site-password gate as the other API routes.
+
+No `XAI_API_KEY` was available here, so this file was produced with `AI_PROVIDER=mock` on 2026-11-20. The card labels that as the offline mock classifier. Re-run `AI_PROVIDER=grok npm run eval:results --workspace=server` (with `XAI_API_KEY` and `GROK_MODEL` set) to replace it with a Grok measurement. The card will then show that provider.
+
+Holdout, 10 commits, mock (`mock:prompt-v2`): work type 50.0% (5/10), substance 50.0% (5/10).
+
+| File | Change |
+|---|---|
+| `server/src/ai/eval/measure.ts`, `results.ts`, `run.ts` | Shared scoring. `eval:results` writes the holdout file and refuses a partial run. |
+| `server/src/ai/eval/results.json` | The mock holdout run above. |
+| `server/src/routes/eval.ts`, `server/src/index.ts` | `GET /api/eval`. |
+| `server/src/tests/eval.test.ts` | With and without the file, unusable file, site password, and a fresh mock run matching the committed counts. |
+| `client/src/app/AccuracyCard.tsx`, `client/src/pages/MaestroPage.tsx` | The card, with loading, empty, and error states. |
+| `client/src/evalAccuracy.ts`, `client/src/evalAccuracy.test.ts` | The sentences the card shows. Mock is named as the offline classifier. |
+| `client/src/api/client.ts`, `client/src/api/types.ts` | `evalResults()` and the response shape. |
+| `docs/PLAN.md`, `README.md` | The endpoint, the script, and the Maestro card. |
+
+`npm run lint` passed. `npm test`: server 24 files, 228 passed (228); client 3 files, 21 passed (21). Main had 222 server tests and 15 client tests. Main's latest entry before this one is session 51. Not deployed.

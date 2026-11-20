@@ -5,25 +5,26 @@
  *           npm run eval -- --limit 10
  *           npm run eval -- --set holdout
  *           npm run eval -- --set all
+ *           npm run eval:results
  *
  * Prints per-set:
  *   - Provider and model
  *   - work_type accuracy (% correct)
  *   - substance accuracy (% correct)
  *   - List of misses (title, expected, got)
+ *
+ * `npm run eval:results` is `--set holdout --out src/ai/eval/results.json`.
+ * That file is what GET /api/eval and the "Is the AI right?" card show.
+ * The provider written there is the one that scored the rows.
  */
 
 import '../../loadEnv.js';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { classifyOne, modelVersion } from '../classifier.js';
+import { writeFileSync } from 'fs';
+import { modelVersion } from '../classifier.js';
+import { buildResultsFile, loadLabeledSet, scoreLabeledRows, type Score } from './measure.js';
+import { parseEvalResults } from './results.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// ── CLI flags ─────────────────────────────────────────────────────────────────
-
-function parseArgs(): { limit: number | null; set: 'main' | 'holdout' | 'all' } {
+function parseArgs(): { limit: number | null; set: 'main' | 'holdout' | 'all'; out: string | null } {
   const args = process.argv.slice(2);
 
   const limitIdx = args.indexOf('--limit');
@@ -40,127 +41,82 @@ function parseArgs(): { limit: number | null; set: 'main' | 'holdout' | 'all' } 
     if (val === 'holdout' || val === 'all' || val === 'main') set = val;
   }
 
-  return { limit, set };
+  const outIdx = args.indexOf('--out');
+  let out: string | null = null;
+  if (outIdx !== -1) {
+    const val = args[outIdx + 1];
+    if (!val || val.startsWith('--')) {
+      console.error('--out needs a file path');
+      process.exit(1);
+    }
+    out = val;
+  }
+
+  return { limit, set, out };
 }
 
-const { limit, set: evalSet } = parseArgs();
-
-// ── Provider / model banner ───────────────────────────────────────────────────
+const { limit, set: evalSet, out } = parseArgs();
 
 const provider = process.env.AI_PROVIDER ?? 'mock';
 const mv = modelVersion();
 console.log(`=== Classifier Eval ===`);
 console.log(`Provider: ${provider}  Model: ${mv}`);
 
-// ── CSV parsing ───────────────────────────────────────────────────────────────
+function printScore(label: string, score: Score): void {
+  const wtAcc = ((score.workTypeCorrect / score.total) * 100).toFixed(1);
+  const subAcc = ((score.substanceCorrect / score.total) * 100).toFixed(1);
 
-interface LabeledCommit {
-  title: string;
-  diff_summary: string;
-  files_changed: string;
-  additions: string;
-  deletions: string;
-  expected_work_type: string;
-  expected_substance: string;
-}
+  console.log(`\n--- ${label} (${score.total} commits) ---`);
+  console.log(`work_type  accuracy: ${wtAcc}%  (${score.workTypeCorrect}/${score.total})`);
+  console.log(`substance  accuracy: ${subAcc}%  (${score.substanceCorrect}/${score.total})`);
 
-function parseCsv(content: string): LabeledCommit[] {
-  const lines = content.trim().split('\n');
-  const header = lines[0].split(',');
-
-  return lines.slice(1).map(line => {
-    const fields: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) {
-        fields.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    fields.push(current);
-
-    const row: Record<string, string> = {};
-    header.forEach((h, i) => { row[h.trim()] = (fields[i] ?? '').trim(); });
-    return row as unknown as LabeledCommit;
-  });
-}
-
-function loadSet(filename: string): LabeledCommit[] {
-  const csvPath = join(__dirname, filename);
-  return parseCsv(readFileSync(csvPath, 'utf-8'));
-}
-
-// ── Evaluation runner ─────────────────────────────────────────────────────────
-
-interface Miss {
-  title: string;
-  field: 'work_type' | 'substance';
-  expected: string;
-  got: string;
-}
-
-async function runEval(label: string, rows: LabeledCommit[]): Promise<void> {
-  let wtCorrect = 0;
-  let subCorrect = 0;
-  const misses: Miss[] = [];
-
-  for (const row of rows) {
-    const diff = row.diff_summary.replace(/\\n/g, '\n');
-    const stats = {
-      filesChanged: Number(row.files_changed) || null,
-      additions:    Number(row.additions)    || null,
-      deletions:    Number(row.deletions)    || null,
-    };
-    const result = await classifyOne(row.title, diff, [], stats);
-
-    if (result.work_type === row.expected_work_type) {
-      wtCorrect++;
-    } else {
-      misses.push({ title: row.title, field: 'work_type', expected: row.expected_work_type, got: result.work_type });
-    }
-
-    if (result.substance === row.expected_substance) {
-      subCorrect++;
-    } else {
-      misses.push({ title: row.title, field: 'substance', expected: row.expected_substance, got: result.substance });
-    }
-  }
-
-  const total  = rows.length;
-  const wtAcc  = ((wtCorrect  / total) * 100).toFixed(1);
-  const subAcc = ((subCorrect / total) * 100).toFixed(1);
-
-  console.log(`\n--- ${label} (${total} commits) ---`);
-  console.log(`work_type  accuracy: ${wtAcc}%  (${wtCorrect}/${total})`);
-  console.log(`substance  accuracy: ${subAcc}%  (${subCorrect}/${total})`);
-
-  if (misses.length === 0) {
+  if (score.misses.length === 0) {
     console.log('✅ No misses!');
   } else {
-    console.log(`Misses (${misses.length}):`);
-    for (const m of misses) {
+    console.log(`Misses (${score.misses.length}):`);
+    for (const m of score.misses) {
       console.log(`  [${m.field}] "${m.title.slice(0, 60)}"`);
       console.log(`    expected: ${m.expected}  got: ${m.got}`);
     }
   }
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+async function runSet(label: string, filename: string): Promise<Score> {
+  let rows = loadLabeledSet(filename);
+  if (limit !== null) rows = rows.slice(0, limit);
+  const score = await scoreLabeledRows(rows);
+  printScore(label, score);
+  return score;
+}
+
+let holdoutScore: Score | null = null;
 
 if (evalSet === 'main' || evalSet === 'all') {
-  let mainRows = loadSet('commits.csv');
-  if (limit !== null) mainRows = mainRows.slice(0, limit);
-  await runEval('main set (commits.csv)', mainRows);
+  await runSet('main set (commits.csv)', 'commits.csv');
 }
 
 if (evalSet === 'holdout' || evalSet === 'all') {
-  let holdoutRows = loadSet('holdout.csv');
-  if (limit !== null) holdoutRows = holdoutRows.slice(0, limit);
-  await runEval('holdout set (holdout.csv)', holdoutRows);
+  holdoutScore = await runSet('holdout set (holdout.csv)', 'holdout.csv');
+}
+
+if (out) {
+  if (limit !== null) {
+    console.error('Refusing to write results for a limited run.');
+    process.exit(1);
+  }
+  if (!holdoutScore) {
+    console.error('Refusing to write results without the holdout set. Pass --set holdout.');
+    process.exit(1);
+  }
+  const file = buildResultsFile(holdoutScore, {
+    provider,
+    model: mv,
+    evaluatedAt: new Date().toISOString(),
+  });
+  if (!parseEvalResults(file)) {
+    console.error('Refusing to write results that failed validation.');
+    process.exit(1);
+  }
+  writeFileSync(out, `${JSON.stringify(file, null, 2)}\n`);
+  console.log(`\nWrote ${out}`);
 }

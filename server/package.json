@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "postbuild": "node --input-type=module -e \"import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');\"",
+    "postbuild": "node --input-type=module -e \"import{cpSync,mkdirSync}from'fs';mkdirSync('dist/db',{recursive:true});cpSync('src/db/schema.sql','dist/db/schema.sql');mkdirSync('dist/ai/eval',{recursive:true});cpSync('src/ai/eval/results.json','dist/ai/eval/results.json');\"",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
     "eval": "tsx src/ai/eval/run.ts",
+    "eval:results": "tsx src/ai/eval/run.ts --set holdout --out src/ai/eval/results.json",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"

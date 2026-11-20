@@ -1,0 +1,121 @@
+{
+  "provider": "mock",
+  "model": "mock:prompt-v2",
+  "evaluatedAt": "2026-11-20T18:20:48.994Z",
+  "date": "2026-11-20",
+  "set": "holdout",
+  "holdoutSize": 10,
+  "workType": {
+    "correct": 5,
+    "total": 10,
+    "accuracy": 50
+  },
+  "substance": {
+    "correct": 5,
+    "total": 10,
+    "accuracy": 50
+  },
+  "confusion": {
+    "workType": [
+      {
+        "expected": "docs",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "fix",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "formatting",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "generated",
+        "got": "feature",
+        "count": 1
+      },
+      {
+        "expected": "refactor",
+        "got": "feature",
+        "count": 1
+      }
+    ],
+    "substance": [
+      {
+        "expected": "high",
+        "got": "low",
+        "count": 3
+      },
+      {
+        "expected": "medium",
+        "got": "low",
+        "count": 2
+      }
+    ]
+  },
+  "misses": [
+    {
+      "field": "substance",
+      "title": "Add dark mode toggle to settings page",
+      "expected": "medium",
+      "got": "low"
+    },
+    {
+      "field": "workType",
+      "title": "Bump dependency versions in package.json",
+      "expected": "fix",
+      "got": "feature"
+    },
+    {
+      "field": "substance",
+      "title": "Add Playwright end-to-end test suite for dashboard",
+      "expected": "high",
+      "got": "low"
+    },
+    {
+      "field": "workType",
+      "title": "Regenerate prisma client after schema change",
+      "expected": "generated",
+      "got": "feature"
+    },
+    {
+      "field": "workType",
+      "title": "Inline helper function that was only called once",
+      "expected": "refactor",
+      "got": "feature"
+    },
+    {
+      "field": "substance",
+      "title": "Implement WebSocket push for real-time card updates",
+      "expected": "high",
+      "got": "low"
+    },
+    {
+      "field": "workType",
+      "title": "Add contributing guide and code of conduct",
+      "expected": "docs",
+      "got": "feature"
+    },
+    {
+      "field": "substance",
+      "title": "Add contributing guide and code of conduct",
+      "expected": "medium",
+      "got": "low"
+    },
+    {
+      "field": "workType",
+      "title": "Normalise button padding across all pages",
+      "expected": "formatting",
+      "got": "feature"
+    },
+    {
+      "field": "substance",
+      "title": "Implement export-to-Anki feature for decks",
+      "expected": "high",
+      "got": "low"
+    }
+  ]
+}

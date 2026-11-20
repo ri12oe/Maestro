@@ -23,6 +23,14 @@ export interface AccuracyCount {
   accuracy: number;
 }
 
+/** One holdout row the classifier labeled wrong. `field` selects work type or substance. */
+export interface RecordedMiss {
+  field: 'workType' | 'substance';
+  title: string;
+  expected: string;
+  got: string;
+}
+
 export interface EvalResults {
   provider: string;
   model: string;
@@ -38,6 +46,7 @@ export interface EvalResults {
     workType: ConfusionPair[];
     substance: ConfusionPair[];
   };
+  misses: RecordedMiss[];
 }
 
 /** Percent string the eval script prints, e.g. "80.0". */
@@ -76,6 +85,19 @@ function isPairList(value: unknown): value is ConfusionPair[] {
   return Array.isArray(value) && value.every(isPair);
 }
 
+function isMiss(value: unknown): value is RecordedMiss {
+  if (!value || typeof value !== 'object') return false;
+  const miss = value as Record<string, unknown>;
+  return (miss.field === 'workType' || miss.field === 'substance')
+    && typeof miss.title === 'string' && miss.title.length > 0
+    && typeof miss.expected === 'string' && miss.expected.length > 0
+    && typeof miss.got === 'string' && miss.got.length > 0;
+}
+
+function isMissList(value: unknown): value is RecordedMiss[] {
+  return Array.isArray(value) && value.every(isMiss);
+}
+
 /** Accept only a holdout file whose percentages match its counts. */
 export function parseEvalResults(value: unknown): EvalResults | null {
   if (!value || typeof value !== 'object') return null;
@@ -92,6 +114,7 @@ export function parseEvalResults(value: unknown): EvalResults | null {
   if (!row.confusion || typeof row.confusion !== 'object') return null;
   const confusion = row.confusion as Record<string, unknown>;
   if (!isPairList(confusion.workType) || !isPairList(confusion.substance)) return null;
+  if (!isMissList(row.misses)) return null;
   return row as unknown as EvalResults;
 }
 

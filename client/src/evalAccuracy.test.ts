@@ -5,6 +5,7 @@ import {
   accuracyCredit,
   accuracyPercentLabel,
   holdoutLine,
+  providerBadge,
   recordedLine,
 } from './evalAccuracy.ts';
 
@@ -23,11 +24,33 @@ describe('accuracy card copy', () => {
   it('puts the provider and the holdout size on the line under the percentage', () => {
     expect(accuracyCredit({ accuracy: 50, provider: 'mock', holdoutSize: 10 }))
       .toBe('50.0% · offline mock, 10 holdout commits');
+    expect(accuracyCredit({
+      accuracy: 90,
+      provider: 'grok',
+      model: 'grok:grok-4.20-0309-non-reasoning:prompt-v2',
+      holdoutSize: 10,
+    })).toBe('90.0% · Grok (grok-4.20-0309-non-reasoning), 10 holdout commits');
+    expect(accuracyCredit({
+      accuracy: 100,
+      provider: 'grok',
+      model: 'grok:grok-4.20-0309-non-reasoning:prompt-v2',
+      holdoutSize: 1,
+    })).toBe('100.0% · Grok (grok-4.20-0309-non-reasoning), 1 holdout commit');
     expect(accuracyCredit({ accuracy: 80, provider: 'grok', holdoutSize: 10 }))
-      .toBe('80.0% · grok, 10 holdout commits');
-    expect(accuracyCredit({ accuracy: 100, provider: 'grok', holdoutSize: 1 }))
-      .toBe('100.0% · grok, 1 holdout commit');
+      .toBe('80.0% · Grok, 10 holdout commits');
+    expect(accuracyCredit({
+      accuracy: 90,
+      provider: 'grok',
+      model: 'grok:grok-4.20-0309-non-reasoning:prompt-v2',
+      holdoutSize: 10,
+    })).not.toMatch(/offline mock/i);
     expect(accuracyCredit({ accuracy: 50, provider: 'mock', holdoutSize: 10 })).not.toMatch(/30/);
+  });
+
+  it('badges only an offline run as Offline mock', () => {
+    expect(providerBadge('mock')).toBe('Offline mock');
+    expect(providerBadge('grok')).toBe('Grok');
+    expect(providerBadge('grok')).not.toMatch(/offline mock/i);
   });
 
   it('credits the offline mock classifier when that provider produced the file', () => {

@@ -5,21 +5,27 @@
  * that file is missing. A file that is not usable is 500 with a fixed error.
  * The site password gates this path. /api/health stays open.
  *
- * The committed file's counts must match a fresh mock run. The card shows
- * those counts, so a hand-edited number fails this test.
+ * A mock results file is re-scored against holdout.csv. That check uses a
+ * fixture, so it still runs when the committed file is a Grok run. The
+ * committed file is re-scored only when its provider is mock. A Grok file
+ * must parse, its counts must agree with correct/total and the holdout row
+ * count, and each listed miss must name a real holdout row.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { tmpdir } from 'os';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import request from 'supertest';
 import { sitePassword } from '../middleware/sitePassword.js';
 import { createEvalRouter } from '../routes/eval.js';
-import { buildResultsFile, loadLabeledSet, scoreLabeledRows } from '../ai/eval/measure.js';
-import { committedResultsPath, parseEvalResults } from '../ai/eval/results.js';
-import { modelVersion } from '../ai/classifier.js';
+import { buildResultsFile, loadLabeledSet, scoreLabeledRows, type LabeledCommit } from '../ai/eval/measure.js';
+import { accuracyCount, accuracyPercent, committedResultsPath, parseEvalResults, type AccuracyCount, type EvalResults, type RecordedMiss } from '../ai/eval/results.js';
+import { SUBSTANCES, WORK_TYPES, modelVersion } from '../ai/classifier.js';
+
+const mockFixturePath = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'mock-holdout-results.json');
 
 process.env.AI_PROVIDER = 'mock';
 
@@ -50,6 +56,9 @@ const usable = {
     workType: [{ expected: 'fix', got: 'feature', count: 1 }],
     substance: [],
   },
+  misses: [
+    { field: 'workType', title: 'Fix incorrect HTTP status code on validation error', expected: 'fix', got: 'feature' },
+  ],
 };
 
 afterAll(() => {
@@ -108,19 +117,105 @@ describe('GET /api/eval', () => {
     expect(res.body).toEqual({ available: true, ...parsed });
   });
 
-  it('matches a fresh mock run of the holdout set', async () => {
-    const committed = parseEvalResults(JSON.parse(readFileSync(committedResultsPath(), 'utf8')));
-    if (!committed) throw new Error('committed results.json failed to parse');
-    expect(committed.provider).toBe('mock');
-    expect(committed.model).toBe(modelVersion());
+  it('matches a fresh mock run of the holdout fixture', async () => {
+    const fixture = readResults(mockFixturePath);
+    expect(fixture.provider).toBe('mock');
+    await expectFreshMock(fixture);
+  });
 
+  it('re-scores the committed file only when its provider is mock', async () => {
+    const committed = readResults(committedResultsPath());
     const rows = loadLabeledSet('holdout.csv');
-    const fresh = buildResultsFile(await scoreLabeledRows(rows), {
-      provider: 'mock',
-      model: modelVersion(),
-      evaluatedAt: committed.evaluatedAt,
-    });
-    expect(committed).toEqual(fresh);
-    expect(committed.holdoutSize).toBe(rows.length);
+    if (committed.provider === 'mock') {
+      await expectFreshMock(committed);
+      return;
+    }
+    expect(committed.provider).toBe('grok');
+    expectGrokCounts(committed, rows);
+  });
+
+  it('rejects a miss whose got label is not a classifier label', () => {
+    const rows = loadLabeledSet('holdout.csv');
+    const row = rows.find(item => item.expected_work_type === 'fix');
+    if (!row) throw new Error('holdout has no fix row');
+    const total = rows.length;
+    const problem = grokMissProblem({
+      workType: accuracyCount(total - 1, total),
+      substance: accuracyCount(total, total),
+      misses: [{ field: 'workType', title: row.title, expected: row.expected_work_type, got: 'not-a-label' }],
+    }, rows);
+    expect(problem).toMatch(/not-a-label/);
   });
 });
+
+function readResults(path: string): EvalResults {
+  const parsed = parseEvalResults(JSON.parse(readFileSync(path, 'utf8')));
+  if (!parsed) throw new Error(`${path} failed to parse`);
+  return parsed;
+}
+
+async function expectFreshMock(recorded: EvalResults): Promise<void> {
+  expect(recorded.provider).toBe('mock');
+  expect(recorded.model).toBe(modelVersion());
+  const rows = loadLabeledSet('holdout.csv');
+  const fresh = buildResultsFile(await scoreLabeledRows(rows), {
+    provider: 'mock',
+    model: modelVersion(),
+    evaluatedAt: recorded.evaluatedAt,
+  });
+  expect(recorded).toEqual(fresh);
+  expect(recorded.holdoutSize).toBe(rows.length);
+}
+
+function expectGrokCounts(recorded: EvalResults, rows: LabeledCommit[]): void {
+  expect(recorded.holdoutSize).toBe(rows.length);
+  expectCountAgrees(recorded.workType, rows.length);
+  expectCountAgrees(recorded.substance, rows.length);
+  expect(grokMissProblem(recorded, rows)).toBeNull();
+}
+
+function expectCountAgrees(count: AccuracyCount, holdoutSize: number): void {
+  expect(count.total).toBe(holdoutSize);
+  expect(count.correct).toBeGreaterThanOrEqual(0);
+  expect(count.correct).toBeLessThanOrEqual(count.total);
+  expect(count.accuracy).toBe(Number(accuracyPercent(count.correct, count.total)));
+  expect(count.accuracy).toBe(Number(((count.correct / count.total) * 100).toFixed(1)));
+}
+
+const WORK_TYPE_LABELS = new Set<string>(WORK_TYPES);
+const SUBSTANCE_LABELS = new Set<string>(SUBSTANCES);
+
+/**
+ * Each listed miss names a holdout row, that row's expected label for the
+ * field is `expected`, and `got` is a different classifier label for the field.
+ * The misses in each field add up to total - correct.
+ */
+function grokMissProblem(
+  recorded: { misses: RecordedMiss[]; workType: AccuracyCount; substance: AccuracyCount },
+  rows: LabeledCommit[],
+): string | null {
+  const byTitle = new Map(rows.map(row => [row.title, row]));
+  for (const field of ['workType', 'substance'] as const) {
+    const listed = recorded.misses.filter(miss => miss.field === field).length;
+    const count = recorded[field];
+    if (listed !== count.total - count.correct) {
+      return `${field} listed ${listed} misses, expected ${count.total - count.correct}`;
+    }
+  }
+  const seen = new Set<string>();
+  for (const miss of recorded.misses) {
+    const row = byTitle.get(miss.title);
+    if (!row) return `"${miss.title}" is not a holdout row`;
+    const key = `${miss.field}\0${miss.title}`;
+    if (seen.has(key)) return `"${miss.title}" is listed twice for ${miss.field}`;
+    seen.add(key);
+    const expected = miss.field === 'workType' ? row.expected_work_type : row.expected_substance;
+    if (miss.expected !== expected) {
+      return `"${miss.title}" expected ${expected} for ${miss.field}, file says ${miss.expected}`;
+    }
+    const allowed = miss.field === 'workType' ? WORK_TYPE_LABELS : SUBSTANCE_LABELS;
+    if (!allowed.has(miss.got)) return `"${miss.got}" is not a classifier label for ${miss.field}`;
+    if (miss.got === miss.expected) return `"${miss.title}" got the expected ${miss.field} label`;
+  }
+  return null;
+}

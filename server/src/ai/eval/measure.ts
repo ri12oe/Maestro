@@ -7,7 +7,7 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { classifyOne } from '../classifier.js';
-import { accuracyCount, type ConfusionPair, type EvalResults } from './results.js';
+import { accuracyCount, type ConfusionPair, type EvalResults, type RecordedMiss } from './results.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -109,6 +109,15 @@ function confusionPairs(misses: Miss[], field: Miss['field']): ConfusionPair[] {
     b.count - a.count || a.expected.localeCompare(b.expected) || a.got.localeCompare(b.got));
 }
 
+function recordedMisses(misses: Miss[]): RecordedMiss[] {
+  return misses.map(miss => ({
+    field: miss.field === 'work_type' ? 'workType' : 'substance',
+    title: miss.title,
+    expected: miss.expected,
+    got: miss.got,
+  }));
+}
+
 /** Holdout results file. `evaluatedAt` is the run time; counts come from `score`. */
 export function buildResultsFile(
   score: Score,
@@ -127,5 +136,6 @@ export function buildResultsFile(
       workType: confusionPairs(score.misses, 'work_type'),
       substance: confusionPairs(score.misses, 'substance'),
     },
+    misses: recordedMisses(score.misses),
   };
 }

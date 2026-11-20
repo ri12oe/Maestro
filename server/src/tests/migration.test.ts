@@ -38,7 +38,8 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
   ],
   classifications: [
     'id', 'contribution_id', 'work_type', 'substance', 'summary',
-    'disputed', 'dispute_note', 'classified_at', 'model_version',
+    'disputed', 'dispute_note', 'original_work_type', 'original_substance',
+    'corrected_at', 'classified_at', 'model_version',
   ],
   task_matches: ['id', 'contribution_id', 'task_id', 'similarity_score', 'matched_at'],
   risks: ['id', 'team_id', 'task_id', 'level', 'description', 'evidence', 'generated_at', 'dismissed'],
@@ -276,5 +277,49 @@ describe('migration', () => {
     }).not.toThrow();
 
     db.close();
+  });
+
+  it('adds correction columns to an existing classifications table and keeps the AI label', () => {
+    const legacyPath = join(tmpDir, 'corrections-legacy.db');
+    const legacy = new Database(legacyPath);
+    legacy.exec(`
+      CREATE TABLE classifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contribution_id INTEGER NOT NULL UNIQUE,
+        work_type TEXT NOT NULL CHECK (work_type IN ('feature','fix','test','refactor','docs','formatting','generated','design','other')),
+        substance TEXT NOT NULL CHECK (substance IN ('low','medium','high')),
+        summary TEXT NOT NULL,
+        disputed INTEGER NOT NULL DEFAULT 0,
+        dispute_note TEXT,
+        classified_at TEXT NOT NULL,
+        model_version TEXT
+      );
+      INSERT INTO classifications (contribution_id, work_type, substance, summary, disputed, dispute_note, classified_at, model_version)
+      VALUES (7, 'feature', 'high', 'kept label', 0, NULL, '2026-01-01T00:00:00Z', 'mock');
+    `);
+    legacy.close();
+
+    expect(() => runMigration(legacyPath)).not.toThrow();
+
+    const migrated = new Database(legacyPath);
+    expect(tableInfo(migrated, 'classifications').map(col => col.name)).toEqual(
+      expect.arrayContaining(['original_work_type', 'original_substance', 'corrected_at']),
+    );
+    expect(migrated.prepare(
+      'SELECT contribution_id, work_type, substance, summary, original_work_type, original_substance, corrected_at FROM classifications',
+    ).get()).toEqual({
+      contribution_id: 7,
+      work_type: 'feature',
+      substance: 'high',
+      summary: 'kept label',
+      original_work_type: null,
+      original_substance: null,
+      corrected_at: null,
+    });
+    const view = migrated.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'effective_classifications'",
+    ).get();
+    expect(view).toEqual({ name: 'effective_classifications' });
+    migrated.close();
   });
 });

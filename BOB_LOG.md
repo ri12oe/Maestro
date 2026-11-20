@@ -1389,3 +1389,34 @@ The single-point-of-failure line is about the code area. For StudyBuddy it is: "
 | `docs/PLAN.md`, `README.md` | The stretch item is built. Today and the Maestro AI list describe the digest. |
 
 Rebased onto `d0b358b` (session 52, the holdout accuracy card). This entry is session 53. `npm run lint` passed. `npm test`: server 25 files, 240 passed (240); client 3 files, 21 passed (21). That main had 228 server tests and 21 client tests. Not deployed.
+
+## 2026-11-20 — Session 54: A dispute can correct the label (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+`POST /api/teams/:teamId/contributions/:contributionId/dispute` used to set `disputed` and `dispute_note` and leave the label as the model wrote it. The map, People, Report, and digest kept showing that label.
+
+A dispute can now send an optional `work_type` and/or `substance`, checked with zod against the same enums the classifier uses. Those values become the effective label. The AI label is copied into `original_work_type` and `original_substance`, and `corrected_at` records when the correction is active. A later correction keeps the original AI label. `{ undo: true }` copies it back and clears the correction, the dispute flag, and the note. A note with no new label still only flags the row. A bad enum is 400 and writes nothing. An unknown team, contribution, or classification is 404. Undo with nothing to restore is 409.
+
+`work_type` and `substance` on the row are the effective label. `effective_classifications` is the one read path for the contribution map, People and Report (via the contributions and summary routes), the task detail, the digest and Ask context, and the reasoner's work-type counts. Queries do not each write their own COALESCE.
+
+After a correction or an undo, the route awaits `runReasoner` for that team, the same call a sync finishes with, before it responds. The digest cache key now includes `corrected_at` and each contribution's effective work type and substance, so the week entry misses. A summary-only edit still hits, which is what the existing digest cache test checks.
+
+`classifyTeam` still caches by contribution. The query skips any row that exists, and it also excludes `disputed = 1` or `corrected_at` set. The insert is `ON CONFLICT DO NOTHING`, so a re-sync does not replace a human correction.
+
+On People, "Wrong label?" has optional work-type and substance pickers. Saving a correction bumps the team version, so the map bar, the row, and the risks reload. The row says "Corrected by team", shows the original AI label, and has Undo. A note alone still shows "Disputed". The pickers describe the change. They do not score the person. Every member uses the same form, including the digest's Dispute link.
+
+Seeded StudyBuddy, mock classifier, Rio Chen's "Scaffold React app with Vite and TypeScript" (the model had called it `generated` / `medium`). After correcting it to `feature` / `high`, Rio's map went from feature 6, generated 1, refactor 1 (weight 18; shares 0.78 / 0.11 / 0.11) to feature 7, refactor 1 (weight 19; shares 0.89 / 0.11). The contribution count stayed 8. The four open risks were rewritten (ids 1–4 replaced by 5–8). The stored AI label remained `generated` / `medium`.
+
+| File | Change |
+|---|---|
+| `server/src/db/schema.sql`, `server/src/db/migrate.ts` | `original_work_type`, `original_substance`, `corrected_at`. `migration_008` adds them on an older file. `effective_classifications` is created after that. |
+| `server/src/routes/contributions.ts` | Dispute accepts a correction or undo, then re-runs the reasoner. List and detail read the view. |
+| `server/src/routes/summary.ts`, `tasks.ts`, `server/src/ai/assistant.ts`, `server/src/ai/reasoner.ts` | Label reads use the view. |
+| `server/src/routes/assistant.ts` | Digest cache key includes the effective label. |
+| `server/src/ai/classifier.ts` | Shared enums. Skip disputed and corrected rows. Do not update an existing label. |
+| `server/src/tests/dispute-correction.test.ts`, `migration.test.ts` | Correction, map totals, reasoner, digest miss, undo, sync skip, 400, 404, and the column upgrade. |
+| `client/src/pages/People.tsx`, `MaestroPage.tsx`, `client/src/api/client.ts`, `types.ts` | Pickers, "Corrected by team", the AI label, Undo, and the disputes table. |
+| `docs/PLAN.md`, `README.md` | The dispute route, the view, and the People form. |
+
+`npm run lint` passed. `npm test`: server 26 files, 247 passed (247); client 3 files, 21 passed (21). That main had 240 server tests and 21 client tests. Not deployed.

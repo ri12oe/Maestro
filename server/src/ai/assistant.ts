@@ -75,7 +75,7 @@ export function loadTeamFacts(teamId: number, today = new Date(), db: BetterSqli
     SELECT c.id, c.member_id, c.source, c.authored_at, c.title, c.kind, c.url,
            cl.summary, cl.work_type, cl.substance, tm.task_id
     FROM contributions c
-    LEFT JOIN classifications cl ON cl.contribution_id = c.id
+    LEFT JOIN effective_classifications cl ON cl.contribution_id = c.id
     LEFT JOIN task_matches tm ON tm.contribution_id = c.id
     WHERE c.team_id = ?
     ORDER BY c.authored_at DESC

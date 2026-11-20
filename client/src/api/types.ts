@@ -76,11 +76,17 @@ export interface Contribution {
   additions: number | null;
   deletions: number | null;
   authored_at: string;
+  /** Effective label: the team's correction when one is active, otherwise the AI label. */
   work_type: WorkType | null;
   substance: Substance | null;
   summary: string | null;
   disputed: 0 | 1 | null;
   dispute_note: string | null;
+  /** AI label, present only while a correction is active. */
+  original_work_type: WorkType | null;
+  original_substance: Substance | null;
+  /** Set while the effective label is a human correction. */
+  corrected_at: string | null;
   task_id: number | null;
   task_number: number | null;
   task_title: string | null;
@@ -140,6 +146,16 @@ export interface ManualEntry {
   authored_at: string;
   github_login: string | null;
   display_name: string | null;
+}
+
+export interface DisputeResult {
+  ok: true;
+  disputed: 0 | 1;
+  work_type: WorkType;
+  substance: Substance;
+  original_work_type: WorkType | null;
+  original_substance: Substance | null;
+  corrected_at: string | null;
 }
 
 export interface SyncResult {

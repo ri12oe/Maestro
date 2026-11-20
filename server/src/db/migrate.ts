@@ -61,6 +61,15 @@ function addColumnIfMissing(
 export function runMigration(dbPath: string): void {
   const schemaPath = join(__dirname, 'schema.sql');
   const sql = readFileSync(schemaPath, 'utf-8');
+  // The view references correction columns. On an older database those columns
+  // are added below, so the view is applied after the incremental migrations.
+  // `-- @view` is a SQL comment, so executing the whole file is still valid
+  // once the columns exist (a fresh schema.sql, or this function's last step).
+  const viewMark = '\n-- @view\n';
+  const viewAt = sql.indexOf(viewMark);
+  if (viewAt === -1) throw new Error('schema.sql is missing the effective_classifications view');
+  const tableSql = sql.slice(0, viewAt);
+  const viewSql = sql.slice(viewAt + viewMark.length);
   const dbDir = dirname(dbPath);
   if (!existsSync(dbDir)) {
     mkdirSync(dbDir, { recursive: true });
@@ -71,8 +80,8 @@ export function runMigration(dbPath: string): void {
   }
   const db = new Database(dbPath);
 
-  // Apply base schema
-  db.exec(sql);
+  // Apply base schema (tables). The effective-label view runs after migrations.
+  db.exec(tableSql);
 
   // ── Incremental migrations ────────────────────────────────────────────────
   // Track which migrations have been applied
@@ -233,6 +242,41 @@ export function runMigration(dbPath: string): void {
       );
     }
   }
+
+  /**
+   * migration_008: keep a human label correction reversible.
+   *
+   * original_work_type and original_substance store the AI label while a
+   * correction is active. corrected_at is the timestamp of that correction.
+   * work_type and substance stay the effective label (the correction, or the
+   * AI label when corrected_at is NULL). ALTER TABLE … ADD COLUMN leaves
+   * existing rows in place; the new columns are NULL, which means "still the
+   * AI label". schema.sql already declares them, so a fresh database skips
+   * the ALTER.
+   */
+  if (!appliedSet.has('migration_008_classification_corrections')) {
+    db.transaction(() => {
+      addColumnIfMissing(
+        db,
+        'classifications',
+        'original_work_type',
+        `TEXT CHECK (original_work_type IS NULL OR original_work_type IN ('feature','fix','test','refactor','docs','formatting','generated','design','other'))`,
+      );
+      addColumnIfMissing(
+        db,
+        'classifications',
+        'original_substance',
+        `TEXT CHECK (original_substance IS NULL OR original_substance IN ('low','medium','high'))`,
+      );
+      addColumnIfMissing(db, 'classifications', 'corrected_at', 'TEXT');
+      db.prepare("INSERT INTO schema_migrations (name) VALUES (?)").run(
+        'migration_008_classification_corrections',
+      );
+    })();
+  }
+
+  // Recreate the view after the columns exist. DROP is safe when it is missing.
+  db.exec(viewSql);
 
   db.close();
 

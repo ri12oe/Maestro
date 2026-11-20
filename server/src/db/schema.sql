@@ -87,6 +87,16 @@ CREATE TABLE IF NOT EXISTS classifications (
   summary          TEXT    NOT NULL,
   disputed         INTEGER NOT NULL DEFAULT 0 CHECK (disputed IN (0, 1)),
   dispute_note     TEXT,
+  -- While corrected_at is set, work_type and substance are the team's label
+  -- and these two columns keep the AI label so the correction can be undone.
+  -- Both are NULL when the row still shows the AI label.
+  original_work_type TEXT CHECK (
+    original_work_type IS NULL OR original_work_type IN ('feature','fix','test','refactor','docs','formatting','generated','design','other')
+  ),
+  original_substance TEXT CHECK (
+    original_substance IS NULL OR original_substance IN ('low','medium','high')
+  ),
+  corrected_at     TEXT,               -- ISO-8601 while a human correction is active; NULL otherwise
   classified_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   model_version    TEXT
 );
@@ -124,3 +134,26 @@ CREATE TABLE IF NOT EXISTS suggestions (
   status           TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','dismissed','discuss')),
   generated_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+-- @view
+-- Effective label for every read (map, People, Report, digest, reasoner).
+-- work_type and substance are that label: the team's correction while
+-- corrected_at is set, otherwise the AI label. original_work_type and
+-- original_substance are the AI label during a correction. Queries use this
+-- view instead of repeating a COALESCE.
+DROP VIEW IF EXISTS effective_classifications;
+CREATE VIEW effective_classifications AS
+SELECT
+  id,
+  contribution_id,
+  work_type,
+  substance,
+  summary,
+  disputed,
+  dispute_note,
+  classified_at,
+  model_version,
+  original_work_type,
+  original_substance,
+  corrected_at
+FROM classifications;

@@ -24,7 +24,7 @@ function dataVersion(teamId: number): string {
   return `${new Date().toISOString().slice(0, 10)}|${Object.values(row).join('|')}`;
 }
 
-/** Per team per week, until contributions, tasks, risks, suggestions, labels, or the deadline change. */
+/** Per team per week, until contributions, tasks, risks, suggestions, labels (including a human correction), or the deadline change. */
 function digestCacheVersion(teamId: number, weekOf: string): string {
   const row = db.prepare(`
     SELECT
@@ -33,7 +33,7 @@ function digestCacheVersion(teamId: number, weekOf: string): string {
       (SELECT COUNT(*) || ':' || IFNULL(SUM(status = 'closed'), 0) FROM tasks WHERE team_id = @t) AS tasks,
       (SELECT IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(generated_at), '') || ':' || IFNULL(SUM(length(description)), 0) || ':' || COUNT(*) FROM risks WHERE team_id = @t AND dismissed = 0) AS risks,
       (SELECT IFNULL(MAX(id), 0) || ':' || IFNULL(MAX(generated_at), '') || ':' || IFNULL(SUM(length(IFNULL(rationale, '') || IFNULL(checkin_message, ''))), 0) || ':' || IFNULL(SUM(status = 'pending'), 0) FROM suggestions WHERE team_id = @t) AS suggestions,
-      (SELECT COUNT(*) || ':' || IFNULL(MAX(classified_at), '') FROM classifications cl JOIN contributions c ON c.id = cl.contribution_id WHERE c.team_id = @t) AS labels
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(classified_at), '') || ':' || IFNULL(MAX(corrected_at), '') || ':' || IFNULL(group_concat(work_type || '/' || substance, ',' ORDER BY contribution_id), '') FROM classifications cl JOIN contributions c ON c.id = cl.contribution_id WHERE c.team_id = @t) AS labels
   `).get({ t: teamId }) as Record<string, unknown>;
   return `${weekOf}|${Object.values(row).join('|')}`;
 }

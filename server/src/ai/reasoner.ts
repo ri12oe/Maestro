@@ -340,7 +340,7 @@ function buildMemberProfiles(
     // Work-type counts from classifications
     const wtRows = db.prepare(`
       SELECT cl.work_type, COUNT(*) AS n
-      FROM classifications cl
+      FROM effective_classifications cl
       JOIN contributions c ON c.id = cl.contribution_id
       WHERE c.member_id = ?
       GROUP BY cl.work_type

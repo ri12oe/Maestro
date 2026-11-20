@@ -9,7 +9,7 @@
  *     pendingSuggestions — count of pending suggestions
  *   members: (alphabetical order, never sorted by work amount)
  *     memberId, login, displayName
- *     workCounts    — { [work_type]: count } from classifications
+ *     workCounts    — { [work_type]: count } from effective_classifications
  *     substanceShares — weighted share per work_type (low=1, medium=2, high=3)
  *     focusSummary  — one-line description of dominant work area
  */
@@ -84,7 +84,7 @@ router.get('/', (req: Request<TeamParams>, res: Response) => {
     // Work-type × substance counts
     const classRows = db.prepare(`
       SELECT cl.work_type, cl.substance, COUNT(*) AS n
-      FROM classifications cl
+      FROM effective_classifications cl
       JOIN contributions c ON c.id = cl.contribution_id
       WHERE c.member_id = ?
       GROUP BY cl.work_type, cl.substance

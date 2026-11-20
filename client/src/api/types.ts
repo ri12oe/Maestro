@@ -190,3 +190,34 @@ export interface Digest {
   points: Array<{ kind: 'moved' | 'shipped' | 'stuck' | 'next'; text: string; sources: SourceRef[] }>;
   generatedAt: string;
 }
+
+/** One measured count from the holdout eval. `accuracy` is a one-decimal percent. */
+export interface EvalAccuracyCount {
+  correct: number;
+  total: number;
+  accuracy: number;
+}
+
+export interface EvalConfusionPair {
+  expected: string;
+  got: string;
+  count: number;
+}
+
+/** Classifier accuracy on the hand-labeled holdout. About the AI, not a person. */
+export interface EvalResults {
+  provider: string;
+  model: string;
+  evaluatedAt: string;
+  date: string;
+  set: 'holdout';
+  holdoutSize: number;
+  workType: EvalAccuracyCount;
+  substance: EvalAccuracyCount;
+  confusion: {
+    workType: EvalConfusionPair[];
+    substance: EvalConfusionPair[];
+  };
+}
+
+export type EvalResponse = { available: false } | (EvalResults & { available: true });

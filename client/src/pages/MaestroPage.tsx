@@ -7,6 +7,7 @@ import { shortCommitSha } from '../sha.ts';
 import { LogoMark } from '../components/Bulb.tsx';
 import { firstName, useTeam } from '../app/team.tsx';
 import { useToast } from '../ui/overlays.tsx';
+import { AccuracyCard } from '../app/AccuracyCard.tsx';
 import { Button, Card, EmptyState, ErrorState, Page, Skeleton, WorkTypeTag } from '../ui/primitives.tsx';
 
 const STEPS = [
@@ -56,6 +57,8 @@ export default function MaestroPage() {
         <Stat label="Disputed" value={contribs.data ? disputes.length : null} sub="visible to everyone" />
         <Stat label="Not labeled yet" value={contribs.data ? unlabeled.length : null} sub={unlabeled.length ? 'waiting for the AI' : 'all caught up'} />
       </div>
+
+      <AccuracyCard />
 
       <Card title="Disputes" action={<span className="hidden text-caption font-normal text-fg-muted sm:inline">Anyone can dispute a label from a person’s page</span>} bodyClassName="pb-2">
         {contribs.loading && !contribs.data && <div className="px-5 pb-4"><Skeleton w="100%" h={40} /></div>}

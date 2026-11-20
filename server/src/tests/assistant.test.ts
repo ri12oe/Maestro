@@ -2,8 +2,9 @@
  * assistant.test.ts — Ask Maestro, the plan check and the weekly digest.
  *
  * Covers the guardrails (ranking questions refused before any model call, cited ids
- * checked against real data), the deterministic plan verdict, digest stats, the
- * routes' validation and caching, and the Grok path with a stubbed fetch.
+ * checked against real data), the deterministic plan verdict, the weekly digest
+ * (evidence, neutral check-in, ranking fallback), the routes' validation and
+ * caching, and the Grok path with a stubbed fetch.
  */
 
 import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
@@ -232,12 +233,43 @@ describe('plan check', () => {
   });
 });
 
+function claimText(items: Array<{ text: string }> | undefined): string {
+  return (items ?? []).map(s => s.text).join(' ');
+}
+
 describe('digest', () => {
-  it('counts the last week and lists what moved, shipped, is stuck and is next', async () => {
+  it('summarises the last week with evidence and a neutral check-in', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
     const d = await A.digest(teamId, 7, TODAY);
-    expect(d?.stats).toMatchObject({ contributions: 2, tasksClosed: 1, people: 1 });
-    expect(d?.points.map(p => p.kind)).toEqual(['shipped', 'stuck', 'next']);
-    expect(d?.points.find(p => p.kind === 'stuck')?.sources).toEqual([{ type: 'task', id: login }]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(d?.days).toBe(7);
+    expect(d?.windowStart).toBe('2026-11-09');
+    expect(d?.windowEnd).toBe('2026-11-16');
+    const summary = claimText(d?.summary);
+    expect(summary).toMatch(/Alpha had 2 commits in the last 7 days/);
+    expect(summary).toMatch(/latest matched work on #5 Database schema/);
+    expect(summary).toMatch(/#12 Login flow/);
+    expect(d?.summary).toHaveLength(4);
+    expect(d?.summary.every(s => s.evidence.length > 0)).toBe(true);
+    expect(d?.checkInClaims.every(s => s.evidence.length > 0)).toBe(true);
+    expect(d?.highlights.some(h => h.evidence.some(e => e.type === 'task' && e.id === schema))).toBe(true);
+    expect(d?.highlights.some(h => /latest matched work in the last 7 days/.test(h.text))).toBe(true);
+    expect(d?.highlights.every(h => h.evidence.length > 0)).toBe(true);
+    expect(d?.risks.some(r => r.evidence.some(e => e.type === 'task' && e.id === login))).toBe(true);
+    expect(d?.checkIn).toMatch(/#12 Login flow/);
+    expect(d?.checkIn).toMatch(/due/);
+    expect(d?.checkIn).not.toMatch(/top contributor|laziest|\brank|blame|did more|did less|closed this week/i);
+  });
+
+  it('names the requested day count instead of always saying 7', async () => {
+    const d = await A.digest(teamId, 3, TODAY);
+    const summary = claimText(d?.summary);
+    expect(d?.days).toBe(3);
+    expect(d?.windowStart).toBe('2026-11-13');
+    expect(summary).toMatch(/last 3 days/);
+    expect(summary).not.toMatch(/last 7 days/);
+    expect(d?.checkIn).toMatch(/last 3 days|due/);
   });
 });
 
@@ -264,7 +296,155 @@ describe('routes', () => {
   it('serves the digest', async () => {
     const r = await request(app).get(`/api/teams/${teamId}/digest?days=7`);
     expect(r.status).toBe(200);
-    expect(r.body.days).toBe(7);
+    expect(r.body.windowStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(r.body.windowEnd).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(r.body.summary.length).toBeGreaterThan(0);
+    expect(r.body.summary.every((s: { evidence: unknown[] }) => s.evidence.length > 0)).toBe(true);
+    expect(r.body.checkIn.length).toBeGreaterThan(0);
+    expect(r.body.checkInClaims.every((s: { evidence: unknown[] }) => s.evidence.length > 0)).toBe(true);
+    expect(Array.isArray(r.body.highlights)).toBe(true);
+    expect(Array.isArray(r.body.risks)).toBe(true);
+  });
+
+  it('keeps a fair digest and drops ids the model invented', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    const summary = [
+      { text: 'Two commits landed in the last 7 days and the schema had matched work.', source_ids: [`T${schema}`, `C${c3}`] },
+      { text: '#12 Login flow is still open and due soon.', source_ids: [`T${login}`] },
+      { text: 'The deadline is Dec 4.', source_ids: [`T${login}`] },
+    ];
+    const checkIn = [
+      { text: 'Checking in: #12 Login flow is still open and due Nov 20.', source_ids: [`T${login}`] },
+      { text: 'Does the plan still look right?', source_ids: [`T${schema}`] },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({
+        summary,
+        highlights: [{ text: 'Database schema had matched work after the migration fix.', source_ids: [`T${schema}`, `C${c3}`, 'C99999'] }],
+        risks: [{ text: '#12 Login flow is open and due Nov 20.', source_ids: [`T${login}`, 'T99999'] }],
+        check_in: checkIn,
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(d?.summary.map(s => s.text)).toEqual(summary.map(s => s.text));
+    expect(d?.summary.every(s => s.evidence.length > 0)).toBe(true);
+    expect(d?.checkIn).toBe(checkIn.map(s => s.text).join(' '));
+    expect(d?.checkInClaims.every(s => s.evidence.length > 0)).toBe(true);
+    expect(d?.highlights[0]?.evidence.map(e => e.id)).toEqual([schema, c3]);
+    expect(d?.risks[0]?.evidence).toEqual([{ type: 'task', id: login, url: null }]);
+  });
+
+  it('replaces a ranking digest with the neutral fallback', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({
+        summary: [
+          { text: 'Ana is the top contributor.', source_ids: [`C${c3}`] },
+          { text: 'Ben did less of the work.', source_ids: [`C${c2}`] },
+        ],
+        highlights: [{ text: 'Ben did more than Ana.', source_ids: [`C${c3}`] }],
+        risks: [{ text: 'Ana is the laziest on Login flow.', source_ids: [`T${login}`] }],
+        check_in: [
+          { text: 'Sam contributed the least.', source_ids: [`C${c3}`] },
+          { text: 'Does the plan still look right?', source_ids: [`T${login}`] },
+        ],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(d?.checkIn).toMatch(/Checking in on Alpha/);
+    expect(d?.checkIn).toMatch(/#12 Login flow/);
+    expect(`${claimText(d?.summary)} ${d?.checkIn}`).not.toMatch(/top contributor|laziest|contributed the least/i);
+  });
+
+  it('falls back when the model calls someone the least productive person', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    const fetchSpy = vi.fn(async () => {
+      const content = JSON.stringify({
+        summary: [
+          { text: 'Jordan is the least productive person.', source_ids: [`C${c3}`] },
+          { text: '#12 Login flow is still open.', source_ids: [`T${login}`] },
+        ],
+        highlights: [{ text: 'The schema had matched work.', source_ids: [`T${schema}`] }],
+        risks: [{ text: '#12 Login flow is open and due Nov 20.', source_ids: [`T${login}`] }],
+        check_in: [
+          { text: 'Checking in on the open tasks.', source_ids: [`T${login}`] },
+          { text: 'Does the plan still look right?', source_ids: [`T${login}`] },
+        ],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(claimText(d?.summary)).toMatch(/Alpha had 2 commits/);
+    expect(JSON.stringify(d)).not.toMatch(/least productive/);
+  });
+
+  it('falls back when the model says only one person changed an area', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    const fetchSpy = vi.fn(async () => {
+      const content = JSON.stringify({
+        summary: [
+          { text: 'Two commits landed in the last 7 days.', source_ids: [`C${c3}`, `T${schema}`] },
+          { text: '#12 Login flow is still open.', source_ids: [`T${login}`] },
+        ],
+        highlights: [{ text: 'The schema had matched work.', source_ids: [`T${schema}`] }],
+        risks: [{ text: 'Only one person has changed server/ recently (100% of the last 11 changes).', source_ids: [`C${c3}`] }],
+        check_in: [
+          { text: 'Checking in on the open tasks.', source_ids: [`T${login}`] },
+          { text: 'Does the plan still look right?', source_ids: [`T${login}`] },
+        ],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(JSON.stringify(d)).not.toMatch(/Only one person/);
+    expect(claimText(d?.summary)).toMatch(/Alpha had 2 commits/);
+  });
+
+  it('keeps a sentence about who fits a task', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const content = JSON.stringify({
+        summary: [
+          { text: 'Priya is the best person for this task.', source_ids: [`T${login}`] },
+          { text: '#12 Login flow is still open.', source_ids: [`T${login}`] },
+        ],
+        highlights: [{ text: 'The schema had matched work.', source_ids: [`T${schema}`] }],
+        risks: [{ text: '#12 Login flow is open and due Nov 20.', source_ids: [`T${login}`] }],
+        check_in: [
+          { text: 'Checking in: #12 Login flow is still open.', source_ids: [`T${login}`] },
+          { text: 'Does the plan still look right?', source_ids: [`T${login}`] },
+        ],
+      });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }));
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(claimText(d?.summary)).toMatch(/best person for this task/);
+  });
+
+  it('falls back when the digest model is down', async () => {
+    process.env.AI_PROVIDER = 'grok';
+    process.env.XAI_API_KEY = 'test-key';
+    process.env.GROK_MODEL = 'grok-test';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 400 })));
+    const d = await A.digest(teamId, 7, TODAY);
+    expect(d?.checkIn).toMatch(/#12 Login flow is still open/);
+    expect(claimText(d?.summary)).toMatch(/2 commits/);
   });
 
   it('falls back to template text when the model is down', async () => {

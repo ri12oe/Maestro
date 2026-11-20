@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CircleCheck, CircleDashed, CircleDot, ExternalLink, GitCommitHorizontal, NotebookPen, Search } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { RiskLevel, Task } from '../api/types.ts';
@@ -22,6 +22,7 @@ const STALE_DAYS = 5;
 export default function Plan() {
   const { teamId, base, team, tasks, risks, summary, loading, error, reload, me } = useTeam();
   const { issue } = useParams();
+  const [search] = useSearchParams();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [owner, setOwner] = useState('');
@@ -49,7 +50,10 @@ export default function Plan() {
     return true;
   });
   const ordered = [...visible].sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'));
-  const selected = (tasks ?? []).find(t => String(t.github_issue_number) === issue) ?? null;
+  const taskParam = search.get('task');
+  const selected = (issue != null ? (tasks ?? []).find(t => String(t.github_issue_number) === issue) : undefined)
+    ?? (taskParam != null ? (tasks ?? []).find(t => String(t.id) === taskParam) : undefined)
+    ?? null;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -232,10 +236,10 @@ function TaskPanel({ task, level, onClose, teamId }: { task: Task | null; level?
     : 'Not started yet. Maestro will flag it if the due date gets close without any work.';
 
   return (
-    <Sheet open={!!task} onClose={onClose} label={task ? `Task #${task.github_issue_number}: ${task.title}` : 'Task'}
+    <Sheet open={!!task} onClose={onClose} label={task ? `${task.github_issue_number != null ? `#${task.github_issue_number}: ` : ''}${task.title}` : 'Task'}
       header={task && (
         <div>
-          <div className="font-mono text-code text-fg-muted">#{task.github_issue_number}</div>
+          {task.github_issue_number != null && <div className="font-mono text-code text-fg-muted">#{task.github_issue_number}</div>}
           <h2 className="mt-0.5 text-title-2">{task.title}</h2>
         </div>
       )}>
@@ -246,7 +250,7 @@ function TaskPanel({ task, level, onClose, teamId }: { task: Task | null; level?
             <dt className="text-fg-muted">Due</dt><dd>{task.due_date ? longDate(task.due_date) : 'No due date'}</dd>
             <dt className="text-fg-muted">Status</dt><dd className="first-letter:uppercase">{statusLabel}</dd>
             <dt className="text-fg-muted">Work</dt><dd>{task.contribution_count} contribution{task.contribution_count === 1 ? '' : 's'}</dd>
-            {team && !team.is_demo && (<><dt className="text-fg-muted">GitHub</dt><dd><a className="inline-flex items-center gap-1 underline underline-offset-[3px]" target="_blank" rel="noreferrer" href={`https://github.com/${team.repo_owner}/${team.repo_name}/issues/${task.github_issue_number}`}>Open issue <ExternalLink size={12} aria-hidden="true" /></a></dd></>)}
+            {team && !team.is_demo && task.github_issue_number != null && (<><dt className="text-fg-muted">GitHub</dt><dd><a className="inline-flex items-center gap-1 underline underline-offset-[3px]" target="_blank" rel="noreferrer" href={`https://github.com/${team.repo_owner}/${team.repo_name}/issues/${task.github_issue_number}`}>Open issue <ExternalLink size={12} aria-hidden="true" /></a></dd></>)}
           </dl>
 
           <MaestroNote compact at={risk?.generated_at}>{note}</MaestroNote>

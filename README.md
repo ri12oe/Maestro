@@ -11,7 +11,7 @@ The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PA
 ## Screens
 
 - **Start** (`/`). Your teams, or connect a repository on one screen: paste `owner/repo` or a GitHub URL, Maestro syncs it and fills in the team from commit authors and the deadline from milestones, then you confirm and open it.
-- **Today** (`/t/:teamId`). Maestro's short brief on where the project stands, then "Needs the team": each risk and the swap that would fix it on one card, with Accept swap, Copy check-in and Not a problem. Side cards show the team's work mix, this week's activity and what's due soon.
+- **Today** (`/t/:teamId`). Maestro's short brief on where the project stands, then "Needs the team": each risk and the swap that would fix it on one card, with Accept swap, Copy check-in and Not a problem. A weekly digest card summarizes the last 7 days (highlights, risks, and a neutral check-in to copy). Side cards show the team's work mix, this week's activity and what's due soon.
 - **Plan** (`/t/:teamId/plan` and `/t/:teamId/plan/:issue`). Every task with a deadline strip, grouped by at risk, in progress, not started and done. A task opens in a panel with Maestro's note, any suggested swap and the work matched to it.
 - **People** (`/t/:teamId/people` and `/t/:teamId/people/:memberId`). The team's work on one scale, alphabetical, and a panel per person with their work mix, contributions, tasks and logged work. "Wrong label?" disputes a label in place.
 - **Report** (`/t/:teamId/report`). The record for peer evaluations: team activity by week and each person's completed tasks, notable work and off-repo work. Off until anyone on the team turns it on in Settings. Export PDF prints it.
@@ -25,9 +25,9 @@ The site is behind a site password (HTTP basic auth via `SITE_USER` and `SITE_PA
 
 - **Ask Maestro.** Ask in plain words from the sidebar, the Today page or ⌘K ("What's blocking #12?", "What has Priya worked on?"). Answers use only the team's commits, Issues and logged work, and every answer links to its sources.
 - **Deadline check.** On Today. The verdict (on track, tight, behind) is arithmetic: open tasks against days left and the recent pace of closing tasks. Maestro then writes up to three next steps about specific tasks.
-- **Week in review.** On Today. What moved, what shipped, what's stuck and what's next, with a button to copy it for the group chat.
+- **Weekly digest.** On Today. A summary of the last 7 days, highlights and open risks, and a neutral check-in the team can copy. Every sentence links to the task or contribution it is about, and each one can be disputed. The check-in names tasks and risks. It does not score or rank anyone.
 
-The same guardrails apply to all three. Maestro never ranks, grades or compares people, and it never guesses why someone was quiet. Questions like "who's the laziest?" are refused before any model call. Sources the model cites are checked against real data, and commit messages are passed to the model as data, not instructions. The deadline check and week in review are cached until the team's data changes. With `AI_PROVIDER=mock` they return template text built from the same facts.
+The same guardrails apply to all three. Maestro never ranks, grades or compares people, and it never guesses why someone was quiet. Questions like "who's the laziest?" are refused before any model call. Sources the model cites are checked against real data, and commit messages are passed to the model as data, not instructions. The deadline check is cached until the team's data changes. The weekly digest is cached per team per week until that data changes. With `AI_PROVIDER=mock` they return template text built from the same facts.
 
 ### Keyboard
 

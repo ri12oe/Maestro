@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Check, CircleCheck, Copy, Gauge, RefreshCw, TriangleAlert } from 'lucide-react';
+import { CircleCheck, Copy, Gauge, RefreshCw, TriangleAlert } from 'lucide-react';
 import { api } from '../api/client.ts';
-import type { Digest, PlanCheck, PlanVerdict } from '../api/types.ts';
+import type { Contribution, Digest, DigestClaim, DigestEvidence, PlanCheck, PlanVerdict } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
-import { timeAgo } from '../dates.ts';
+import { shortDate, timeAgo } from '../dates.ts';
 import Bulb from '../components/Bulb.tsx';
-import { Badge, Button, IconButton, Skeleton } from '../ui/primitives.tsx';
+import { Badge, Button, ErrorState, IconButton, Skeleton } from '../ui/primitives.tsx';
+import { useToast } from '../ui/overlays.tsx';
 import { SourceChips } from './Sources.tsx';
 import { useTeam } from './team.tsx';
 
@@ -89,47 +90,72 @@ export function PlanCheckCard() {
   );
 }
 
-const KIND_LABEL: Record<Digest['points'][number]['kind'], string> = { moved: 'Moved', shipped: 'Shipped', stuck: 'Stuck', next: 'Next' };
-
-function digestText(d: Digest, team: string): string {
-  return [`${team}: week in review`, d.headline, ...d.points.map(p => `• ${KIND_LABEL[p.kind]}: ${p.text}`)].join('\n');
+function CopyCheckIn({ text }: { text: string }) {
+  const toast = useToast();
+  return (
+    <Button size="sm" onClick={() => void navigator.clipboard.writeText(text).then(() => toast.show('Check-in message copied.'))}>
+      <Copy size={14} aria-hidden="true" />Copy check-in
+    </Button>
+  );
 }
 
-/** The week in review, ready to paste into the group chat. */
+/** Contribution dispute when the sentence cites one; otherwise the task it is about. */
+function DisputeLink({ evidence, contributions }: { evidence: DigestEvidence[]; contributions: Contribution[] | null }) {
+  const { base, tasks } = useTeam();
+  const contrib = evidence.find(e => e.type === 'contribution');
+  const taskEv = evidence.find(e => e.type === 'task');
+  let to: string | null = null;
+  if (contrib) {
+    const row = contributions?.find(c => c.id === contrib.id);
+    if (row) to = `${base}/people/${row.member_id}?dispute=${row.id}`;
+  } else if (taskEv) {
+    const t = tasks?.find(x => x.id === taskEv.id);
+    if (t) to = t.github_issue_number != null ? `${base}/plan/${t.github_issue_number}` : `${base}/plan?task=${t.id}`;
+  }
+  if (!to) return null;
+  return <Link to={to} className="self-start text-label text-fg-muted underline underline-offset-[3px] hover:text-fg">Dispute</Link>;
+}
+
+function ClaimList({ label, items, contributions }: { label: string; items: DigestClaim[]; contributions: Contribution[] | null }) {
+  if (!items.length) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-caption tracking-[0.04em] text-fg-muted uppercase">{label}</h3>
+      <ul className="flex list-none flex-col gap-3">
+        {items.map((item, i) => (
+          <li key={i} className="flex min-w-0 flex-col gap-1.5">
+            <span>{item.text}</span>
+            <SourceChips sources={item.evidence.slice(0, 3)} />
+            <DisputeLink evidence={item.evidence} contributions={contributions} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Last 7 days, plus a neutral check-in the team can copy. */
 export function DigestCard() {
-  const { teamId, version, team } = useTeam();
+  const { teamId, version } = useTeam();
   const [refresh, setRefresh] = useState(0);
-  const [copied, setCopied] = useState(false);
   const digest = useApi<Digest>(() => api.digest(teamId, 7, refresh > 0), [teamId, version, refresh]);
   const d = digest.data;
-  if (digest.error) return null;
-
+  const needsContribs = !!d && [...d.summary, ...d.highlights, ...d.risks, ...d.checkInClaims].some(c => c.evidence.some(e => e.type === 'contribution'));
+  const contribs = useApi(() => (needsContribs ? api.contributions(teamId) : Promise.resolve([])), [teamId, version, needsContribs]);
   return (
     <section aria-labelledby="digest-h" className="flex flex-col gap-3 rounded-[10px] border border-line bg-surface-1 p-5">
-      <div id="digest-h" className="contents"><AiHeader title="Week in review" at={d?.generatedAt} onRefresh={() => setRefresh(r => r + 1)} refreshing={digest.loading} /></div>
-      {!d ? <div className="flex flex-col gap-2"><Skeleton w="80%" h={16} /><Skeleton w="95%" h={14} /><Skeleton w="70%" h={14} /></div> : (
+      <div id="digest-h" className="contents"><AiHeader title="Weekly digest" at={d?.generatedAt} onRefresh={() => setRefresh(r => r + 1)} refreshing={digest.loading && !!d} /></div>
+      {digest.error ? <ErrorState message={digest.error} onRetry={() => setRefresh(r => r + 1)} /> : null}
+      {!digest.error && !d ? <div className="flex flex-col gap-2"><Skeleton w="40%" h={14} /><Skeleton w="95%" h={16} /><Skeleton w="80%" h={14} /><Skeleton w="70%" h={14} /></div> : null}
+      {d && !digest.error && (
         <>
-          <p className="text-brief text-pretty">{d.headline}</p>
-          {d.points.length > 0 && (
-            <ul className="flex list-none flex-col gap-3">
-              {d.points.map((p, i) => (
-                <li key={i} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3">
-                  <span className="pt-0.5 text-caption tracking-[0.04em] text-fg-muted uppercase">{KIND_LABEL[p.kind]}</span>
-                  <div className="flex min-w-0 flex-col gap-1.5">
-                    <span>{p.text}</span>
-                    <SourceChips sources={p.sources.slice(0, 3)} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
-            <span className="text-caption font-normal text-fg-muted">
-              {d.stats.contributions} contribution{d.stats.contributions === 1 ? '' : 's'} · {d.stats.tasksTouched} task{d.stats.tasksTouched === 1 ? '' : 's'} touched · {d.stats.tasksClosed} closed
-            </span>
-            <Button size="sm" onClick={() => void navigator.clipboard.writeText(digestText(d, team?.name ?? 'Team')).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })}>
-              {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}{copied ? 'Copied' : 'Copy for group chat'}
-            </Button>
+          <p className="text-caption font-normal text-fg-muted">Last {d.days} day{d.days === 1 ? '' : 's'} ({shortDate(d.windowStart)} to {shortDate(d.windowEnd)})</p>
+          <ClaimList label="Summary" items={d.summary} contributions={contribs.data} />
+          <ClaimList label="Highlights" items={d.highlights} contributions={contribs.data} />
+          <ClaimList label="Risks" items={d.risks} contributions={contribs.data} />
+          <div className="flex flex-col gap-3 border-t border-line pt-3">
+            <ClaimList label="Check-in" items={d.checkInClaims} contributions={contribs.data} />
+            {d.checkIn && <div className="flex justify-end"><CopyCheckIn text={d.checkIn} /></div>}
           </div>
         </>
       )}

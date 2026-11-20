@@ -183,11 +183,29 @@ export interface PlanCheck {
   generatedAt: string;
 }
 
+export interface DigestEvidence extends SourceRef {
+  /** Set when the contribution has a stored URL. Tasks leave this null. */
+  url: string | null;
+}
+
+/** One digest sentence and the tasks or contributions it is about. */
+export interface DigestClaim {
+  text: string;
+  evidence: DigestEvidence[];
+}
+
 export interface Digest {
+  /** Rolling window length. Defaults to 7. */
   days: number;
-  stats: { contributions: number; logged: number; tasksTouched: number; tasksClosed: number; people: number };
-  headline: string;
-  points: Array<{ kind: 'moved' | 'shipped' | 'stuck' | 'next'; text: string; sources: SourceRef[] }>;
+  /** YYYY-MM-DD of the window's start and end. */
+  windowStart: string;
+  windowEnd: string;
+  summary: DigestClaim[];
+  highlights: DigestClaim[];
+  risks: DigestClaim[];
+  /** Joined check-in the team can paste. */
+  checkIn: string;
+  checkInClaims: DigestClaim[];
   generatedAt: string;
 }
 

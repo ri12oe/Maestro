@@ -224,11 +224,17 @@ describe('single point of failure detection', () => {
     const spofRisks = risks.filter(r => r.level === 'medium');
     expect(spofRisks.length).toBeGreaterThanOrEqual(1);
 
-    // The evidence should include contribution IDs from Sam's server/ commits
-    const spof = spofRisks[0];
-    const evidence = JSON.parse(spof.evidence) as Array<{ type: string; id: number }>;
+    // The evidence should include contribution IDs from Sam's server/ commits.
+    // Overload is also a medium risk with no task, so pick the contribution-backed one.
+    const spof = spofRisks.find(r => {
+      const evidence = JSON.parse(r.evidence) as Array<{ type: string }>;
+      return evidence.length > 0 && evidence.every(e => e.type === 'contribution');
+    });
+    expect(spof).toBeDefined();
+    const evidence = JSON.parse(spof!.evidence) as Array<{ type: string; id: number }>;
     expect(evidence.length).toBeGreaterThan(0);
-    expect(evidence.every((e: { type: string }) => e.type === 'contribution')).toBe(true);
+    expect(spof!.description).toMatch(/Recent changes to server\/ all came through a single contributor \(the last \d+\)/);
+    expect(spof!.description).not.toMatch(/Only one person/);
   });
 
   it('the SPOF description is non-empty', () => {

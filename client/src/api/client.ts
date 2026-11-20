@@ -69,7 +69,7 @@ export const api = {
   planCheck: (teamId: number, refresh = false) =>
     request<PlanCheck>(`/teams/${teamId}/plan-check${refresh ? '?refresh=1' : ''}`),
 
-  /** The week in review. */
+  /** Weekly digest: summary, evidence-linked highlights and risks, and a neutral check-in. */
   digest: (teamId: number, days = 7, refresh = false) =>
     request<Digest>(`/teams/${teamId}/digest?days=${days}${refresh ? '&refresh=1' : ''}`),
 

@@ -1360,3 +1360,32 @@ Holdout, 10 commits, mock (`mock:prompt-v2`): work type 50.0% (5/10), substance 
 | `docs/PLAN.md`, `README.md` | The endpoint, the script, and the Maestro card. |
 
 `npm run lint` passed. `npm test`: server 24 files, 228 passed (228); client 3 files, 21 passed (21). Main had 222 server tests and 15 client tests. Main's latest entry before this one is session 51. Not deployed.
+
+## 2026-11-20 — Session 53: Weekly digest with a neutral check-in (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The brief's weekly digest stretch item is built. `GET /api/teams/:teamId/digest` returns a rolling window (default the last 7 days, `?days=` from 1 to 30): `days`, `windowStart`, `windowEnd`, `summary`, `highlights`, `risks`, and `checkInClaims`. Every sentence, including the summary and the check-in, has evidence (`{ type, id, url }`). `checkIn` is those check-in sentences joined, for the copy button. Unknown teams are 404. The route uses the same site-password gate as the other team routes. The cache key includes each open risk's id, `generated_at`, and description length, and the same for suggestions, so a reasoner rewrite is not served from the old entry. `?refresh=1` skips the cache.
+
+The text is written through `completeJSON` and `DigestSchema` when `AI_PROVIDER=grok`. Mock mode does not use the schema-only mock (`mock-string` and empty arrays). It builds the summary, highlights, risks, and check-in from contributions and their classifications, the manual log, task status, open risks, pending suggestions, and the stored deadline. A failed model call uses that same fallback. A model answer that ranks, grades, or blames people is discarded and the fallback is returned. The check-in names tasks and risks. It does not name who did more.
+
+Today shows this as the Weekly digest card. The label is the real window, for example "Last 7 days (Nov 13 to Nov 20)". Each sentence has evidence chips and a Dispute link: a contribution opens that person's "Wrong label?" form (`?dispute=`), and a task-only sentence opens the task. Copy check-in uses the toast. Loading uses the skeleton. A failed load uses `ErrorState`.
+
+A follow-up on the same branch also rejects statement rankings that do not start with "who" ("least productive", "does the most", "carrying the team", "slacking"). A Grok-shaped response that says "Jordan is the least productive person" falls back to the deterministic digest. "Only one person" is treated the same way. "The best person for this task" is kept, because that is task fit. The fallback names the real `?days=` count. A closed task is described by its latest matched work in the window, not as "closed this week".
+
+The single-point-of-failure line is about the code area. For StudyBuddy it is: "Recent changes to server/ all came through a single contributor (the last 11), so knowledge of this area isn't shared yet. Pairing on it before the deadline lowers the risk." The risk and its contribution evidence stay. A task with no issue number opens from `?task=` on Plan.
+
+`npm run seed` with `AI_PROVIDER=mock` on 2026-11-20 printed a StudyBuddy digest whose check-in is: "Checking in on StudyBuddy. #12 Auth flow is still open and due Nov 27. If it helps the plan, there is a suggested move for #14 Backend API endpoints. Does the plan still look right?"
+
+| File | Change |
+|---|---|
+| `server/src/ai/assistant.ts` | Digest shape, zod schema, grok prompt, and the deterministic fallback. |
+| `server/src/routes/assistant.ts` | Per-team per-week cache. 404 when the team is missing. |
+| `server/src/tests/digest.test.ts` | Seeded StudyBuddy: 404, shape, evidence, fairness, week cache. |
+| `server/src/tests/assistant.test.ts` | Small-team digest, invented ids dropped, ranking answer replaced, model-down fallback. |
+| `client/src/api/types.ts`, `client/src/api/client.ts` | Digest type and client call. |
+| `client/src/app/AiCards.tsx` | Weekly digest card, window label, dispute link, copy check-in, loading and error. |
+| `client/src/pages/People.tsx` | `?dispute=` opens the existing Wrong label form for that contribution. |
+| `docs/PLAN.md`, `README.md` | The stretch item is built. Today and the Maestro AI list describe the digest. |
+
+Rebased onto `d0b358b` (session 52, the holdout accuracy card). This entry is session 53. `npm run lint` passed. `npm test`: server 25 files, 240 passed (240); client 3 files, 21 passed (21). That main had 228 server tests and 21 client tests. Not deployed.

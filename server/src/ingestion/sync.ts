@@ -12,9 +12,15 @@
  */
 
 import db from '../db/client.js';
-import { fetchCommits, fetchIssues, authorKey, isBotAuthor } from './github.js';
+import {
+  fetchCommits, fetchIssues, fetchPulls, authorKey, isBotAuthor,
+  COMMIT_WINDOW, ISSUE_WINDOW, PR_WINDOW,
+} from './github.js';
 import { classifyTeam, rematchNewTasks } from '../ai/classifier.js';
 import { runReasoner } from '../ai/reasoner.js';
+
+/** Which part of the pipeline a sync request runs. `all` is ingest, then classify, match, and reason. */
+export type SyncStage = 'ingest' | 'classify' | 'match' | 'reason' | 'all';
 
 export interface SyncResult {
   newContributions: number;
@@ -24,9 +30,52 @@ export interface SyncResult {
   classifyFailed: number;
   risksDetected: number;
   relinked: number;
+  /** Plain-language gap, such as a repository with no issues. Null when there is nothing to add. */
+  notice: string | null;
+  /** True when older commits or issues were left outside the window. */
+  capped: boolean;
+  window: { commits: number; issues: number; pulls: number };
 }
 
-export async function syncTeam(teamId: number): Promise<SyncResult> {
+/** A sync that stopped on purpose, with a message the student can act on. */
+export class IngestError extends Error {
+  readonly status: number;
+  constructor(message: string, status = 422) {
+    super(message);
+    this.name = 'IngestError';
+    this.status = status;
+  }
+}
+
+function emptyResult(): SyncResult {
+  return {
+    newContributions: 0,
+    updatedTasks: 0,
+    newMembers: 0,
+    classified: 0,
+    classifyFailed: 0,
+    risksDetected: 0,
+    relinked: 0,
+    notice: null,
+    capped: false,
+    window: { commits: COMMIT_WINDOW, issues: ISSUE_WINDOW, pulls: PR_WINDOW },
+  };
+}
+
+const NO_COMMITS = `This repository has no commits in the latest ${COMMIT_WINDOW}, so there is nothing to analyze yet. Push a commit, then press Try again.`;
+const NO_ISSUES = `This repository has no GitHub Issues in the latest ${ISSUE_WINDOW}, so there is no task plan to match. The contribution map still works. Add Issues, then sync again, if you want risks tied to tasks.`;
+
+function markSynced(teamId: number): void {
+  db.prepare("UPDATE teams SET last_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(teamId);
+}
+
+function countRisks(teamId: number): number {
+  return (db.prepare(
+    'SELECT COUNT(*) AS n FROM risks WHERE team_id = ? AND dismissed = 0',
+  ).get(teamId) as { n: number }).n;
+}
+
+export async function syncTeam(teamId: number, stage: SyncStage = 'all'): Promise<SyncResult> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new Error('GITHUB_TOKEN env var is required for sync');
 
@@ -36,6 +85,24 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
 
   if (!team) throw new Error(`Team ${teamId} not found`);
 
+  if (stage === 'classify') {
+    const { classified, failed } = await classifyTeam(teamId);
+    markSynced(teamId);
+    return { ...emptyResult(), classified, classifyFailed: failed };
+  }
+
+  if (stage === 'match') {
+    const { linked } = await rematchNewTasks(teamId);
+    markSynced(teamId);
+    return { ...emptyResult(), relinked: linked };
+  }
+
+  if (stage === 'reason') {
+    await runReasoner(teamId);
+    markSynced(teamId);
+    return { ...emptyResult(), risksDetected: countRisks(teamId) };
+  }
+
   const { repo_owner: owner, repo_name: repo } = team;
 
   // ── Load SHAs already stored for this team ───────────────────────────────
@@ -44,11 +111,26 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
   ).all(teamId) as Array<{ github_sha: string }>;
   const knownShas = new Set(storedRows.map(r => r.github_sha));
 
-  // ── 1. Fetch from GitHub ─────────────────────────────────────────────────
-  const [commits, issues] = await Promise.all([
+  // ── 1. Fetch the recent window from GitHub ──────────────────────────────
+  const [commits, issues, pulls] = await Promise.all([
     fetchCommits(owner, repo, token, undefined, knownShas),
     fetchIssues(owner, repo, token),
+    fetchPulls(owner, repo, token),
   ]);
+
+  if (commits.length === 0 && knownShas.size === 0) {
+    throw new IngestError(NO_COMMITS);
+  }
+
+  const prBySha = new Map<string, number>();
+  for (const pull of pulls) {
+    if (pull.headSha) prBySha.set(pull.headSha, pull.number);
+    if (pull.mergeSha) prBySha.set(pull.mergeSha, pull.number);
+  }
+  for (const commit of commits) {
+    const prNumber = prBySha.get(commit.sha);
+    if (prNumber != null) commit.prNumber = prNumber;
+  }
 
   let newContributions = 0;
   let newMembers = 0;
@@ -83,7 +165,7 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
     VALUES
       (@team_id, @member_id, 'commit', @github_sha, @github_pr_number, @title,
        @diff_summary, @files_changed, @additions, @deletions, @url, @paths, @authored_at)
-    ON CONFLICT (github_sha) DO NOTHING
+    ON CONFLICT (team_id, github_sha) DO NOTHING
   `);
 
   const syncTx = db.transaction(() => {
@@ -143,7 +225,7 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
         team_id: teamId,
         member_id: member.id,
         github_sha: commit.sha,
-        github_pr_number: null,
+        github_pr_number: commit.prNumber,
         title: commit.title,
         diff_summary: commit.diffSummary || null,
         files_changed: commit.filesChanged ?? null,
@@ -192,6 +274,26 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
 
   taskTx();
 
+  const taskCount = (db.prepare(
+    'SELECT COUNT(*) AS n FROM tasks WHERE team_id = ?',
+  ).get(teamId) as { n: number }).n;
+  const notice = taskCount === 0 && !issues.capped ? NO_ISSUES : null;
+  const ingested: SyncResult = {
+    ...emptyResult(),
+    newContributions,
+    updatedTasks: issues.length,
+    newMembers,
+    notice,
+    capped: commits.capped || issues.capped || pulls.capped,
+  };
+
+  // Ingest alone is the first real step on the connect screen. `all` continues
+  // through classify, match, and reason, which is what Sync now still does.
+  if (stage === 'ingest') {
+    markSynced(teamId);
+    return ingested;
+  }
+
   // ── 4. Classify any unclassified contributions ───────────────────────────
   const { classified, failed: classifyFailed } = await classifyTeam(teamId);
 
@@ -200,11 +302,13 @@ export async function syncTeam(teamId: number): Promise<SyncResult> {
 
   // ── 5. Run risk reasoner ─────────────────────────────────────────────────
   await runReasoner(teamId);
-  const risksDetected = (db.prepare(
-    'SELECT COUNT(*) AS n FROM risks WHERE team_id = ? AND dismissed = 0',
-  ).get(teamId) as { n: number }).n;
+  markSynced(teamId);
 
-  db.prepare("UPDATE teams SET last_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(teamId);
-
-  return { newContributions, updatedTasks: issues.length, newMembers, classified, classifyFailed, relinked, risksDetected };
+  return {
+    ...ingested,
+    classified,
+    classifyFailed,
+    relinked,
+    risksDetected: countRisks(teamId),
+  };
 }

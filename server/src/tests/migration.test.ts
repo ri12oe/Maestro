@@ -219,6 +219,60 @@ describe('migration', () => {
     again.close();
   });
 
+  it('lets two teams store the same sha after dropping the global unique', () => {
+    const legacyPath = join(tmpDir, 'sha-unique.db');
+    const legacy = new Database(legacyPath);
+    legacy.exec(`
+      CREATE TABLE teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        repo_owner TEXT NOT NULL,
+        repo_name TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO teams (name, repo_owner, repo_name, created_at) VALUES
+        ('Maestro', 'ri12oe', 'Maestro', '2026-01-01T00:00:00Z'),
+        ('Mira', 'ri12oe', 'mira', '2026-01-02T00:00:00Z');
+      CREATE TABLE contributions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id INTEGER NOT NULL,
+        member_id INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        github_sha TEXT UNIQUE,
+        title TEXT NOT NULL,
+        authored_at TEXT NOT NULL,
+        synced_at TEXT NOT NULL
+      );
+      INSERT INTO contributions (team_id, member_id, source, github_sha, title, authored_at, synced_at)
+      VALUES (1, 1, 'commit', 'abc123', 'kept', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO contributions (team_id, member_id, source, github_sha, title, authored_at, synced_at)
+      VALUES (1, 1, 'commit', 'demo:studybuddy:rio0008hhhh', 'demo sha', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+    `);
+    legacy.close();
+
+    expect(() => runMigration(legacyPath)).not.toThrow();
+    expect(() => runMigration(legacyPath)).not.toThrow();
+
+    const migrated = new Database(legacyPath);
+    migrated.pragma('foreign_keys = OFF');
+    const insert = migrated.prepare(
+      `INSERT INTO contributions (team_id, member_id, source, github_sha, title, authored_at)
+       VALUES (?, 1, 'commit', ?, 'shared', '2026-01-03T00:00:00Z')`,
+    );
+    expect(() => insert.run(2, 'abc123')).not.toThrow();
+    expect(() => insert.run(2, 'demo:studybuddy:rio0008hhhh')).not.toThrow();
+    const rows = migrated.prepare(
+      'SELECT team_id, github_sha FROM contributions ORDER BY team_id, github_sha',
+    ).all();
+    expect(rows).toEqual([
+      { team_id: 1, github_sha: 'abc123' },
+      { team_id: 1, github_sha: 'demo:studybuddy:rio0008hhhh' },
+      { team_id: 2, github_sha: 'abc123' },
+      { team_id: 2, github_sha: 'demo:studybuddy:rio0008hhhh' },
+    ]);
+    migrated.close();
+  });
+
   it('enforces tasks.status CHECK constraint', () => {
     const db = new Database(dbPath);
     // Insert a valid team first

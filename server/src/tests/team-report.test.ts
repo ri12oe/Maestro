@@ -5,7 +5,7 @@
  * New teams start with it off. migration_006 adds the column to an older database.
  */
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -16,6 +16,7 @@ import request from 'supertest';
 const tmpDir = mkdtempSync(join(tmpdir(), 'team-report-'));
 process.env.DB_PATH = join(tmpDir, 'test.db');
 process.env.AI_PROVIDER = 'mock';
+process.env.GITHUB_TOKEN = 'test-token';
 
 const { default: db } = await import('../db/client.js');
 const { default: teamsRouter } = await import('../routes/teams.js');
@@ -25,13 +26,26 @@ const app = express();
 app.use(express.json());
 app.use('/api/teams', teamsRouter);
 
+beforeAll(() => {
+  vi.stubGlobal('fetch', async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => ({ private: false, visibility: 'public' }),
+    text: async () => '',
+  }) as unknown as Response);
+});
+
 afterAll(() => {
+  vi.unstubAllGlobals();
   db.close();
   try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows may hold the file briefly */ }
 });
 
+let teamSeq = 0;
 async function newTeam(): Promise<number> {
-  const created = await request(app).post('/api/teams').send({ name: 'Alpha', repo_owner: 'acme', repo_name: 'app' });
+  teamSeq += 1;
+  const created = await request(app).post('/api/teams').send({ name: 'Alpha', repo_owner: 'acme', repo_name: `app-${teamSeq}` });
   expect(created.status).toBe(201);
   return created.body.id as number;
 }

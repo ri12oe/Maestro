@@ -1,9 +1,9 @@
 import type {
-  AskResult, ClassifyResult, Contribution, Digest, DisputeResult, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Substance, Suggestion, SyncResult, Task, Team, TeamListItem, TeamSummary, WorkType,
+  AskResult, ClassifyResult, Contribution, Digest, DisputeResult, EvalResponse, PlanCheck, ManualEntry, ManualKind, Member, Risk, Substance, Suggestion, SyncResult, SyncStage, Task, Team, TeamListItem, TeamSummary, WorkType,
 } from './types.ts';
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public resetAt: string | null = null) {
     super(message);
   }
 }
@@ -16,7 +16,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const message = (body && typeof body.error === 'string') ? body.error : `Request failed (${res.status})`;
-    throw new ApiError(message, res.status);
+    const resetAt = body && typeof body.resetAt === 'string' ? body.resetAt : null;
+    throw new ApiError(message, res.status, resetAt);
   }
   return body as T;
 }
@@ -82,13 +83,14 @@ export const api = {
     request<ClassifyResult>(`/teams/${teamId}/classify`, { method: 'POST' }),
 
   createTeam: (input: { name: string; repo_owner: string; repo_name: string }) =>
-    request<{ id: number }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
+    request<{ id: number; reused?: boolean }>('/teams', { method: 'POST', body: JSON.stringify(input) }),
 
   deleteTeam: (teamId: number) =>
     request<{ ok: true }>(`/teams/${teamId}`, { method: 'DELETE' }),
 
-  sync: (teamId: number) =>
-    request<SyncResult>(`/teams/${teamId}/sync`, { method: 'POST' }),
+  /** `all` reads GitHub, then classifies, matches, and reasons. The connect screen runs the stages one at a time. */
+  sync: (teamId: number, stage: SyncStage = 'all') =>
+    request<SyncResult>(`/teams/${teamId}/sync`, { method: 'POST', body: JSON.stringify({ stage }) }),
 
   dismissRisk: (teamId: number, riskId: number) =>
     request<{ ok: true }>(`/teams/${teamId}/risks/${riskId}/dismiss`, { method: 'POST' }),

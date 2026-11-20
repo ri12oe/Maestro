@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { authorKey, fetchCommits, fetchIssues, isBotAuthor, PATCH_LINE_LIMIT } from '../ingestion/github.js';
+import { authorKey, fetchCommits, fetchIssues, fetchPulls, isBotAuthor, isGitHubRepo, PATCH_LINE_LIMIT, COMMIT_WINDOW, ISSUE_WINDOW, PR_WINDOW, GitHubApiError, RepoPathError } from '../ingestion/github.js';
 
 // ── authorKey ────────────────────────────────────────────────────────────────
 
@@ -172,8 +172,46 @@ describe('fetchCommits', () => {
       makeCommit({ sha: `${i.toString().padStart(12, '0')}` }),
     );
     const page2 = [makeCommit({ sha: 'lastlastlast' })];
-    const commits = await fetchCommits('o', 'r', 'token', makeCombinedFetch([page1, page2]));
+    const commits = await fetchCommits('o', 'r', 'token', makeCombinedFetch([page1, page2]), new Set(), 500);
     expect(commits).toHaveLength(101);
+    expect(commits.capped).toBe(false);
+  });
+
+  it('stops at the commit window and does not fetch older pages or extra details', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) =>
+      makeCommit({ sha: `${i.toString().padStart(12, 'a')}` }),
+    );
+    const seen: string[] = [];
+    const fetchFn = makeCombinedFetch([page1, [makeCommit({ sha: 'page2shouldnot' })]]);
+    const wrapped = async (url: string) => {
+      seen.push(url);
+      return fetchFn(url);
+    };
+    const commits = await fetchCommits('o', 'r', 'token', wrapped);
+    expect(commits).toHaveLength(COMMIT_WINDOW);
+    expect(commits.capped).toBe(true);
+    const details = seen.filter(url => url.includes('/commits/') && !url.includes('per_page='));
+    expect(details).toHaveLength(COMMIT_WINDOW);
+    expect(seen.some(url => url.includes('page=2'))).toBe(false);
+  });
+
+  it('throws a rate-limit error that keeps the reset time', async () => {
+    const reset = Math.floor(Date.parse('2026-11-20T16:00:00.000Z') / 1000);
+    const fetchFn = async () => ({
+      ok: false,
+      status: 403,
+      headers: { get: (name: string) => name.toLowerCase() === 'x-ratelimit-reset' ? String(reset) : null },
+      text: async () => '{"message":"API rate limit exceeded"}',
+      json: async () => ({}),
+    }) as unknown as Response;
+    await expect(fetchCommits('o', 'r', 'token', fetchFn)).rejects.toBeInstanceOf(GitHubApiError);
+    try {
+      await fetchCommits('o', 'r', 'token', fetchFn);
+    } catch (err) {
+      expect(err).toBeInstanceOf(GitHubApiError);
+      expect((err as GitHubApiError).status).toBe(403);
+      expect((err as GitHubApiError).resetAt).toBe('2026-11-20T16:00:00.000Z');
+    }
   });
 
   it('truncates diff to PATCH_LINE_LIMIT lines', async () => {
@@ -222,6 +260,55 @@ describe('fetchIssues', () => {
       [makeIssue({ number: 1, state: 'closed' })],
     ]));
     expect(issues[0].state).toBe('closed');
+  });
+
+  it('stops at the issue window', async () => {
+    const page = Array.from({ length: 40 }, (_, i) => makeIssue({ number: i + 1 }));
+    const issues = await fetchIssues('o', 'r', 'token', makeIssueFetch([page]));
+    expect(issues).toHaveLength(ISSUE_WINDOW);
+    expect(issues.capped).toBe(true);
+    expect(issues[0].number).toBe(1);
+  });
+
+  it('keeps paging when a page is only pull requests', async () => {
+    const prs = Array.from({ length: 100 }, (_, i) => makeIssue({ number: i + 1, pull_request: true }));
+    const issues = await fetchIssues('o', 'r', 'token', makeIssueFetch([
+      prs,
+      [makeIssue({ number: 501, title: 'Real issue' })],
+    ]));
+    expect(issues.map(issue => issue.number)).toEqual([501]);
+    expect(issues.capped).toBe(false);
+  });
+});
+
+describe('fetchPulls', () => {
+  it('pages up to the cap and marks older pull requests capped', async () => {
+    const page = Array.from({ length: 100 }, (_, i) => ({
+      number: i + 1,
+      head: { sha: `sha${i}` },
+      merge_commit_sha: null,
+    }));
+    const pulls = await fetchPulls('o', 'r', 'token', async () => mockResponse(page));
+    expect(pulls).toHaveLength(PR_WINDOW);
+    expect(pulls.capped).toBe(true);
+    expect(pulls[0].number).toBe(1);
+  });
+});
+
+describe('repository path', () => {
+  it.each([
+    ['acme', '..'],
+    ['acme', '../../user'],
+    ['acme', 'ok?name'],
+    ['../evil', 'app'],
+  ])('rejects %s/%s before any request', async (owner, repo) => {
+    expect(isGitHubRepo(owner, repo)).toBe(false);
+    let called = false;
+    await expect(fetchCommits(owner, repo, 'token', async () => {
+      called = true;
+      return mockResponse([]);
+    })).rejects.toBeInstanceOf(RepoPathError);
+    expect(called).toBe(false);
   });
 });
 

@@ -1,23 +1,45 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { ArrowRight, Check, FolderGit2, Plus, X } from 'lucide-react';
-import { api } from '../api/client.ts';
-import type { Member, SyncResult, Task } from '../api/types.ts';
+import { Check, FolderGit2, Plus } from 'lucide-react';
+import { ApiError, api } from '../api/client.ts';
 import { useApi } from '../hooks/useApi.ts';
-import { timeAgo } from '../dates.ts';
+import { formatResetAt, timeAgo } from '../dates.ts';
 import Bulb, { LogoMark } from '../components/Bulb.tsx';
 import { effectiveDeadline } from '../deadline.ts';
 import { useTheme } from '../lib/prefs.ts';
-import { Avatar, Button, Skeleton, inputClass } from '../ui/primitives.tsx';
+import { Button, Skeleton, inputClass } from '../ui/primitives.tsx';
+
+/** Same window the server reads. Stated here so the form can say it before the first request. */
+const WINDOW = { commits: 30, pulls: 20, issues: 30 };
+
+const STEP_TEXT = [
+  `Reading the latest ${WINDOW.commits} commits and ${WINDOW.issues} issues`,
+  'Labeling each change',
+  'Matching work to issues',
+  'Checking the plan against the deadline',
+];
+
+function calendarDay(value: string | null): string | null {
+  if (!value) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+  return match ? match[1] : null;
+}
+
+const OWNER_RE = /^[A-Za-z0-9-]{1,39}$/;
+const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 
 /** Accepts "owner/repo", "github.com/owner/repo" or a full URL (with or without .git). */
 export function parseRepo(input: string): { owner: string; repo: string } | null {
   const cleaned = input.trim().replace(/^https?:\/\//i, '').replace(/^(www\.)?github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
-  const m = /^([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)$/.exec(cleaned);
-  return m ? { owner: m[1], repo: m[2] } : null;
+  const m = /^([^/]+)\/([^/]+)$/.exec(cleaned);
+  if (!m) return null;
+  const owner = m[1];
+  const repo = m[2];
+  if (!OWNER_RE.test(owner) || !REPO_RE.test(repo) || repo === '.' || repo === '..') return null;
+  return { owner, repo };
 }
 
-type Phase = 'form' | 'connecting' | 'connected' | 'failed';
+type Phase = 'form' | 'connecting' | 'failed';
 
 export default function Start() {
   useTheme();
@@ -59,60 +81,68 @@ function TeamList({ teams }: { teams: Array<{ id: number; name: string; repo_own
 
 function Connect({ hasTeams }: { hasTeams: boolean }) {
   const navigate = useNavigate();
-  const ids = { repo: useId(), add: useId(), deadline: useId() };
+  const repoId = useId();
   const [repo, setRepo] = useState('');
   const [phase, setPhase] = useState<Phase>('form');
   const [error, setError] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<number | null>(null);
-  const [result, setResult] = useState<SyncResult | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [deadline, setDeadline] = useState('');
-  const [login, setLogin] = useState('');
-  const [memberError, setMemberError] = useState<string | null>(null);
-  const [opening, setOpening] = useState(false);
+  const [step, setStep] = useState(0);
+  const [lines, setLines] = useState(STEP_TEXT);
   const parsed = parseRepo(repo);
 
-  async function refreshTeam(id: number) {
-    const [m, t] = await Promise.all([api.members(id), api.tasks(id)]);
-    setMembers(m); setTasks(t);
-    const d = effectiveDeadline(null, t.map(x => x.due_date)).date;
-    if (d) setDeadline(cur => cur || d);
+  function finishStep(index: number, line: string) {
+    setLines(current => current.map((item, i) => (i === index ? line : item)));
+    setStep(index + 1);
   }
 
   async function connect(e: FormEvent) {
     e.preventDefault();
     if (!parsed) { setError('Enter the repository as owner/repo, or paste its GitHub URL.'); return; }
-    setPhase('connecting'); setError(null);
+    setPhase('connecting');
+    setError(null);
+    setLines(STEP_TEXT);
+    setStep(0);
     try {
       let id = teamId;
-      if (!id) { id = (await api.createTeam({ name: parsed.repo, repo_owner: parsed.owner, repo_name: parsed.repo })).id; setTeamId(id); }
-      setResult(await api.sync(id));
-      await refreshTeam(id);
-      setPhase('connected');
+      if (!id) {
+        const created = await api.createTeam({ name: parsed.repo, repo_owner: parsed.owner, repo_name: parsed.repo });
+        id = created.id;
+        setTeamId(id);
+        // An existing team is opened as it is. Sync and the deadline stay on Settings and Sync now.
+        if (created.reused) {
+          navigate(`/t/${id}`);
+          return;
+        }
+      }
+
+      const ingested = await api.sync(id, 'ingest');
+      const commits = ingested.newContributions;
+      finishStep(0, `Read ${commits} commit${commits === 1 ? '' : 's'} in the latest ${ingested.window.commits}`);
+
+      const labeled = await api.sync(id, 'classify');
+      finishStep(1, `Labeled ${labeled.classified} change${labeled.classified === 1 ? '' : 's'}`);
+
+      await api.sync(id, 'match');
+      finishStep(2, ingested.notice ? 'No issues to match' : 'Matched work to issues');
+
+      const [team, tasks] = await Promise.all([api.team(id), api.tasks(id)]);
+      const day = calendarDay(effectiveDeadline(team.deadline, tasks.map(task => task.due_date)).date);
+      if (!team.deadline && day) await api.setDeadline(id, day);
+
+      const reasoned = await api.sync(id, 'reason');
+      const risks = reasoned.risksDetected;
+      finishStep(3, `Checked the plan · ${risks} risk${risks === 1 ? '' : 's'}`);
+
+      navigate(`/t/${id}`, ingested.notice ? { state: { connectNotice: ingested.notice } } : undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const localReset = err instanceof ApiError && err.resetAt ? formatResetAt(err.resetAt) : null;
+      setError(localReset
+        ? `GitHub is rate-limiting requests right now. Try again after ${localReset}.`
+        : (err instanceof Error ? err.message : String(err)));
       setPhase('failed');
     }
   }
 
-  async function addMember(e: FormEvent) {
-    e.preventDefault();
-    const v = login.trim().replace(/^@/, '');
-    if (!teamId || !v) return;
-    setMemberError(null);
-    try { await api.addMember(teamId, v); setLogin(''); await refreshTeam(teamId); }
-    catch (err) { setMemberError(err instanceof Error ? err.message : String(err)); }
-  }
-
-  async function open() {
-    if (!teamId) return;
-    setOpening(true);
-    try { if (deadline) await api.setDeadline(teamId, deadline); await api.classify(teamId).catch(() => null); }
-    finally { navigate(`/t/${teamId}`); }
-  }
-
-  const people = members.filter(m => m.github_login);
   const busy = phase === 'connecting';
 
   return (
@@ -120,56 +150,26 @@ function Connect({ hasTeams }: { hasTeams: boolean }) {
       <main className="flex min-w-0 flex-[1_1_520px] justify-center px-6 py-14 md:px-8 lg:py-20">
         <div className="flex w-full max-w-[460px] flex-col gap-7">
           <div className="flex flex-col gap-4">
-            <Bulb state={busy ? 'thinking' : phase === 'connected' ? 'happy' : 'default'} height={72} />
+            <Bulb state={busy ? 'thinking' : 'default'} height={72} />
             <h1 className="text-[32px] leading-9 font-semibold tracking-[-0.03em] md:text-display">Meet Maestro</h1>
             <p className="text-brief text-pretty text-fg-muted">Maestro reads your team&rsquo;s GitHub repo and shows everyone the same picture of who is working on what.</p>
           </div>
 
           <form onSubmit={connect} className="flex flex-col gap-2" noValidate>
-            <label htmlFor={ids.repo} className="text-label">Repository</label>
+            <label htmlFor={repoId} className="text-label">Repository</label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <FolderGit2 size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-fg-muted" aria-hidden="true" />
-                <input id={ids.repo} value={repo} onChange={e => { setRepo(e.target.value); setError(null); }} disabled={phase === 'connected' || busy}
-                  placeholder="owner/repo or a GitHub URL" autoComplete="off" spellCheck={false} aria-invalid={!!error} aria-describedby={error ? `${ids.repo}-err` : undefined}
+                <input id={repoId} value={repo} onChange={e => { setRepo(e.target.value); setError(null); }} disabled={busy}
+                  placeholder="owner/repo or a GitHub URL" autoComplete="off" spellCheck={false} aria-invalid={!!error} aria-describedby={error ? `${repoId}-err` : undefined}
                   className={`${inputClass} h-11 pl-9 text-[14px]`} />
               </div>
-              {phase !== 'connected' && <Button type="submit" size="lg" busy={busy} disabled={!repo.trim()}>{phase === 'failed' ? 'Try again' : 'Connect'}</Button>}
+              <Button type="submit" size="lg" busy={busy} disabled={!repo.trim()}>{phase === 'failed' ? 'Try again' : 'Connect'}</Button>
             </div>
-            {error && <p id={`${ids.repo}-err`} className="text-caption font-normal text-risk-high" role="alert">{error}</p>}
-            {phase === 'failed' && teamId && <button type="button" className="self-start text-label text-fg-muted underline underline-offset-[3px]" onClick={() => navigate(`/t/${teamId}`)}>Open without syncing</button>}
+            <p className="text-caption font-normal text-fg-muted">Reads the latest {WINDOW.commits} commits, {WINDOW.pulls} pull requests, and {WINDOW.issues} issues, so this finishes in about a minute. People who committed are added as members. You can change the team and the deadline in Settings.</p>
+            {error && <p id={`${repoId}-err`} className="text-caption font-normal text-risk-high" role="alert">{error}</p>}
+            {phase === 'failed' && teamId && <button type="button" className="self-start text-label text-fg-muted underline underline-offset-[3px]" onClick={() => navigate(`/t/${teamId}`)}>Open the team anyway</button>}
           </form>
-
-          {phase === 'connected' && (
-            <>
-              <fieldset className="flex animate-pop-in flex-col gap-2">
-                <legend className="mb-2 text-label">Team <span className="font-normal text-fg-muted">· from the people who committed</span></legend>
-                {people.length === 0 && <p className="text-label font-normal text-fg-muted">No commit authors with GitHub accounts yet. Add your teammates below.</p>}
-                <ul className="flex list-none flex-wrap gap-2">
-                  {people.map(m => (
-                    <li key={m.id} className="inline-flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface-2 pr-1 pl-1.5">
-                      <Avatar name={m.display_name ?? m.github_login!} login={m.github_login} size={20} />
-                      <span className="font-mono text-[12.5px]">@{m.github_login}</span>
-                      <button type="button" aria-label={`Remove ${m.github_login}`} className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-surface-3 hover:text-fg"
-                        onClick={async () => { setMemberError(null); try { await api.removeMember(teamId!, m.id); await refreshTeam(teamId!); } catch (err) { setMemberError(err instanceof Error ? err.message : String(err)); } }}><X size={13} /></button>
-                    </li>
-                  ))}
-                </ul>
-                <form onSubmit={addMember} className="mt-1 flex gap-2" noValidate>
-                  <label htmlFor={ids.add} className="sr-only">Add by GitHub username</label>
-                  <input id={ids.add} value={login} onChange={e => setLogin(e.target.value)} placeholder="Add by GitHub username" className={inputClass} />
-                  <Button type="submit" disabled={!login.trim()}>Add</Button>
-                </form>
-                {memberError && <p className="text-caption font-normal text-risk-high" role="alert">{memberError}</p>}
-              </fieldset>
-
-              <div className="flex animate-pop-in flex-col gap-1.5">
-                <label htmlFor={ids.deadline} className="text-label">Deadline <span className="font-normal text-fg-muted">· optional</span></label>
-                <input id={ids.deadline} type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className={`${inputClass} h-11`} />
-                <p className="text-caption font-normal text-fg-muted">{tasks.some(t => t.due_date) ? 'From your GitHub milestones · you can change this later' : 'You can change this later in Settings.'}</p>
-              </div>
-            </>
-          )}
 
           <ul className="flex list-none flex-col gap-1.5 text-label font-normal text-fg-muted">
             {['Everyone sees the same view.', 'Only work artifacts, never activity tracking.', 'Every AI label can be disputed.'].map(x => (
@@ -178,14 +178,13 @@ function Connect({ hasTeams }: { hasTeams: boolean }) {
           </ul>
 
           <div className="flex flex-col items-center gap-3">
-            {phase === 'connected' && <Button variant="primary" size="lg" className="w-full" onClick={() => void open()} busy={opening}>Open Maestro <ArrowRight size={16} aria-hidden="true" /></Button>}
             {hasTeams && <Link to="/" className="text-label text-fg-muted hover:text-fg">Back to your teams</Link>}
           </div>
         </div>
       </main>
 
       <aside aria-label="Preview" className="hidden min-w-0 flex-[1_1_520px] items-center justify-center border-l border-line bg-surface-1 p-12 lg:flex">
-        {busy || phase === 'connected' ? <SyncSteps done={phase === 'connected'} result={result} people={people.length} /> : <Preview name={parsed?.repo} />}
+        {busy ? <SyncSteps step={step} lines={lines} /> : <Preview name={parsed?.repo} />}
       </aside>
     </div>
   );
@@ -209,26 +208,20 @@ function Preview({ name }: { name?: string }) {
   );
 }
 
-function SyncSteps({ done, result, people }: { done: boolean; result: SyncResult | null; people: number }) {
-  const [tick, setTick] = useState(0);
-  useEffect(() => { if (done) return; const t = window.setInterval(() => setTick(x => Math.min(x + 1, 2)), 1400); return () => window.clearInterval(t); }, [done]);
-  const steps = [
-    done && result ? `Read ${result.newContributions} commits` : 'Reading commits and Issues',
-    done && result ? `Labeled ${result.classified} change${result.classified === 1 ? '' : 's'}` : 'Labeling each change',
-    done ? `Found ${people} ${people === 1 ? 'person' : 'people'}` : 'Checking the plan against the deadline',
-  ];
+function SyncSteps({ step, lines }: { step: number; lines: string[] }) {
   return (
     <div role="status" aria-live="polite" className="flex w-full max-w-[380px] flex-col items-center gap-6 text-center">
-      <Bulb state={done ? 'done' : 'thinking'} height={120} />
+      <Bulb state="thinking" height={120} />
       <div>
-        <div className="text-title-2">{done ? 'Maestro is ready' : 'Setting up your team'}</div>
-        <div className="text-fg-muted">{done ? 'Confirm the team and deadline, then open it.' : 'This takes about a minute.'}</div>
+        <div className="text-title-2">Setting up your team</div>
+        <div className="text-fg-muted">This takes about a minute. Then the team page opens.</div>
       </div>
       <ul className="flex w-full list-none flex-col gap-2 text-left">
-        {steps.map((s, i) => {
-          const complete = done; const active = !done && i <= tick;
+        {lines.map((s, i) => {
+          const complete = i < step;
+          const active = i === step;
           return (
-            <li key={i} className="flex h-11 items-center gap-3 rounded-lg border border-line bg-canvas px-3.5">
+            <li key={STEP_TEXT[i]} className="flex h-11 items-center gap-3 rounded-lg border border-line bg-canvas px-3.5">
               <span className={`size-2 shrink-0 rounded-full ${complete ? 'bg-ok' : active ? 'animate-pulse bg-maestro' : 'bg-line-strong'}`} aria-hidden="true" />
               <span className={`text-label font-normal ${complete || active ? 'text-fg' : 'text-fg-muted'}`}>{s}</span>
               <span className="ml-auto text-caption font-normal text-fg-muted">{complete ? 'Done' : active ? 'Working…' : ''}</span>

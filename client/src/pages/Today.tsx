@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { ArrowRight, CalendarClock, Check, ChevronRight, CircleDot, Copy, GitCommitHorizontal, NotebookPen } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Contribution, Risk, Suggestion, Task } from '../api/types.ts';
@@ -44,6 +44,11 @@ function loadResolved(teamId: number): Resolved[] {
 
 export default function Today() {
   const { teamId, base, team, summary, tasks, risks, suggestions, loading, error, reload, me, openAsk } = useTeam();
+  const location = useLocation();
+  const connectNotice = location.state && typeof location.state === 'object' && 'connectNotice' in location.state
+    && typeof location.state.connectNotice === 'string'
+    ? location.state.connectNotice
+    : null;
   const toast = useToast();
   const [filter, setFilter] = useState<Filter>('all');
   const [resolvedOpen, setResolvedOpen] = useState(false);
@@ -117,6 +122,10 @@ export default function Today() {
           <Button size="sm" onClick={() => openAsk()}><LogoMark size={16} />Ask Maestro</Button>
         </>}
       />
+
+      {connectNotice && (
+        <p className="rounded-[10px] border border-line bg-surface-1 px-4 py-3 text-label font-normal text-fg-muted" role="status">{connectNotice}</p>
+      )}
 
       <div className="flex flex-wrap items-start gap-8">
         <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-8">

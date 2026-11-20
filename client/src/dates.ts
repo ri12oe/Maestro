@@ -31,6 +31,20 @@ export function dayLabel(iso: string, now = new Date()): string {
   return shortDate(iso);
 }
 
+/**
+ * When a GitHub rate limit lifts, in the viewer's local time.
+ * Pass `timeZone` only from a test. The Start screen omits it.
+ */
+export function formatResetAt(iso: string, timeZone?: string, locale?: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'the limit resets';
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    ...(timeZone ? { timeZone } : {}),
+  }).format(date);
+}
+
 /** "due in 3 days", "due today", "2 days overdue". */
 export function dueLabel(dueIso: string, now = new Date()): { text: string; urgent: boolean } {
   const due = new Date(dueIso.length === 10 ? `${dueIso}T23:59:59Z` : dueIso);

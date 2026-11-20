@@ -11,6 +11,68 @@
 
 export const PATCH_LINE_LIMIT = 200;
 
+/**
+ * How much of a repository one sync reads.
+ * The newest commits, pull requests, and issues — not the whole history —
+ * so a judge's first connect stays around a minute and inside GitHub's rate limit.
+ */
+export const COMMIT_WINDOW = 30;
+export const ISSUE_WINDOW = 30;
+export const PR_WINDOW = 20;
+
+/** List pages walked while filling the commit window. A safety stop, not a second cap. */
+const MAX_LIST_PAGES = 3;
+/**
+ * Issue list pages walked while skipping pull requests that share that endpoint.
+ * Stops at the issue cap or a short page, so a few pages of pull requests
+ * do not get reported as a repository with no issues.
+ */
+const ISSUE_PAGE_GUARD = 10;
+
+/** GitHub login, 1–39 characters. The Start form uses the same rule. */
+export const GITHUB_OWNER_RE = /^[A-Za-z0-9-]{1,39}$/;
+/** GitHub repository name, 1–100 characters. `.` and `..` are not names. */
+export const GITHUB_REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+
+export function isGitHubRepo(owner: string, repo: string): boolean {
+  if (repo === '.' || repo === '..') return false;
+  return GITHUB_OWNER_RE.test(owner) && GITHUB_REPO_RE.test(repo);
+}
+
+/** A repository string that must not be placed in a GitHub URL. */
+export class RepoPathError extends Error {
+  readonly status = 400;
+  constructor() {
+    super('Enter the repository as owner/repo.');
+    this.name = 'RepoPathError';
+  }
+}
+
+/** Encoded `owner/repo` for a GitHub API path. Throws before any request when the name is not a repository. */
+export function githubRepoPath(owner: string, repo: string): string {
+  if (!isGitHubRepo(owner, repo)) throw new RepoPathError();
+  return `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+}
+
+function repoApi(owner: string, repo: string, suffix = ''): string {
+  return `https://api.github.com/repos/${githubRepoPath(owner, repo)}${suffix}`;
+}
+const DETAIL_CONCURRENCY = 4;
+
+/** A GitHub response the sync can explain (missing repo, bad token, rate limit). */
+export class GitHubApiError extends Error {
+  readonly status: number;
+  /** ISO-8601 time the caller can retry, from Retry-After or X-RateLimit-Reset. */
+  readonly resetAt: string | null;
+
+  constructor(resource: string, status: number, body: string, resetAt: string | null) {
+    super(`GitHub ${resource} fetch failed: ${status} ${body}`);
+    this.name = 'GitHubApiError';
+    this.status = status;
+    this.resetAt = resetAt;
+  }
+}
+
 export interface GitHubCommitSummary {
   sha: string;
   author: {
@@ -52,6 +114,49 @@ function buildHeaders(token: string): Record<string, string> {
   };
 }
 
+function readHeader(res: Response, name: string): string | null {
+  const headers = res.headers;
+  if (!headers || typeof headers.get !== 'function') return null;
+  return headers.get(name);
+}
+
+/** When GitHub says to wait: Retry-After seconds, else X-RateLimit-Reset epoch seconds. */
+function resetAtFrom(res: Response): string | null {
+  const retry = readHeader(res, 'retry-after')?.trim();
+  if (retry && /^\d+$/.test(retry)) {
+    return new Date(Date.now() + Number(retry) * 1000).toISOString();
+  }
+  const reset = readHeader(res, 'x-ratelimit-reset')?.trim();
+  if (reset && /^\d+$/.test(reset)) {
+    return new Date(Number(reset) * 1000).toISOString();
+  }
+  return null;
+}
+
+async function githubError(resource: string, res: Response): Promise<GitHubApiError> {
+  const body = await res.text();
+  return new GitHubApiError(resource, res.status, body, resetAtFrom(res));
+}
+
+function withCapped<T>(items: T[], capped: boolean): T[] & { capped: boolean } {
+  return Object.assign(items, { capped });
+}
+
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const index = next++;
+      out[index] = await fn(items[index]);
+    }
+  }
+  const workers = Math.min(limit, items.length);
+  if (workers === 0) return out;
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return out;
+}
+
 function truncatePatch(patch: string | undefined): string {
   if (!patch) return '';
   const lines = patch.split('\n');
@@ -74,9 +179,16 @@ async function fetchCommitDetail(
   token: string,
   fetchFn: FetchFn,
 ): Promise<{ files: GitHubCommitSummary['files']; paths: string[]; diffSummary: string; filesChanged: number; additions: number; deletions: number } | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`;
+  const url = repoApi(owner, repo, `/commits/${encodeURIComponent(sha)}`);
   const res = await fetchFn(url, { headers: buildHeaders(token) });
-  if (!res.ok) return null;
+  // A missing commit (force-push, deleted branch) is skipped. Auth and rate
+  // limits are the same failure as the list call, so they are not swallowed.
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403 || res.status === 429) {
+      throw await githubError('commits', res);
+    }
+    return null;
+  }
 
   const data = await res.json() as {
     files?: Array<{
@@ -109,10 +221,23 @@ async function fetchCommitDetail(
   return { files, paths, diffSummary: truncatePatch(diffSummary), filesChanged, additions, deletions };
 }
 
+interface ListedCommit {
+  sha: string;
+  author: GitHubCommitSummary['author'];
+  message: string;
+  title: string;
+  url: string;
+  /** Already stored. Counts toward the window, but does not need another detail call. */
+  known: boolean;
+}
+
 /**
- * Fetch all commits for a repo, paginated.
- * Skips merge commits and any SHAs already present in knownShas.
- * Never throws on commits with no GitHub login.
+ * Fetch the newest commits for a repo.
+ * Merge commits and bot authors are skipped. SHAs in `knownShas` are not
+ * fetched again. Stops at `limit` non-merge, non-bot commits (the window),
+ * and at {@link MAX_LIST_PAGES} so a long history cannot walk the API.
+ * Never throws on a commit with no GitHub login.
+ * `capped` is true when older commits were left outside the window.
  */
 export async function fetchCommits(
   owner: string,
@@ -120,17 +245,16 @@ export async function fetchCommits(
   token: string,
   fetchFn: FetchFn = globalThis.fetch,
   knownShas: ReadonlySet<string> = new Set(),
-): Promise<GitHubCommitSummary[]> {
-  const results: GitHubCommitSummary[] = [];
-  let page = 1;
+  limit: number = COMMIT_WINDOW,
+): Promise<GitHubCommitSummary[] & { capped: boolean }> {
+  const listed: ListedCommit[] = [];
+  let capped = false;
 
-  while (true) {
-    const url = `https://api.github.com/repos/${owner}/${repo}/commits?per_page=100&page=${page}`;
+  for (let page = 1; page <= MAX_LIST_PAGES && listed.length < limit; page++) {
+    const url = repoApi(owner, repo, `/commits?per_page=100&page=${page}`);
     const res = await fetchFn(url, { headers: buildHeaders(token) });
 
-    if (!res.ok) {
-      throw new Error(`GitHub commits fetch failed: ${res.status} ${await res.text()}`);
-    }
+    if (!res.ok) throw await githubError('commits', res);
 
     const commits = await res.json() as Array<{
       sha: string;
@@ -144,67 +268,88 @@ export async function fetchCommits(
     }>;
 
     console.log(`[github] page ${page}: got ${commits.length} commits`);
-    if (commits.length === 0) break;
+    if (!Array.isArray(commits) || commits.length === 0) break;
 
     for (const c of commits) {
-      const message = c.commit.message ?? '';
+      const message = c.commit?.message ?? '';
       const parentCount = c.parents?.length ?? 1;
-
       if (isMergeCommit(message, parentCount)) continue;
-      if (knownShas.has(c.sha)) continue;  // already stored — skip detail fetch
 
-      const detail = await fetchCommitDetail(owner, repo, c.sha, token, fetchFn);
+      const author: GitHubCommitSummary['author'] = {
+        login: c.author?.login ?? null,  // gracefully null — never crashes
+        email: c.commit?.author?.email ?? '',
+        name: c.commit?.author?.name ?? '',
+        date: c.commit?.author?.date ?? new Date().toISOString(),
+      };
+      if (isBotAuthor(author)) continue;
 
-      results.push({
+      if (listed.length >= limit) {
+        capped = true;
+        break;
+      }
+
+      listed.push({
         sha: c.sha,
-        author: {
-          login: c.author?.login ?? null,  // gracefully null — never crashes
-          email: c.commit.author?.email ?? '',
-          name: c.commit.author?.name ?? '',
-          date: c.commit.author?.date ?? new Date().toISOString(),
-        },
+        author,
         message,
         title: message.split('\n')[0].trim(),
         url: c.html_url,
-        isMerge: false,
-        prNumber: null,
-        files: detail?.files ?? [],
-        paths: detail?.paths ?? [],
-        diffSummary: detail?.diffSummary ?? '',
-        filesChanged: detail?.filesChanged ?? 0,
-        additions: detail?.additions ?? 0,
-        deletions: detail?.deletions ?? 0,
+        known: knownShas.has(c.sha),
       });
     }
 
-    // GitHub returns fewer items on the last page
+    if (listed.length >= limit && commits.length === 100) capped = true;
     if (commits.length < 100) break;
-    page++;
+    if (page === MAX_LIST_PAGES && commits.length === 100 && listed.length < limit) capped = true;
   }
 
-  return results;
+  const fresh = listed.filter(c => !c.known);
+  const details = await mapPool(fresh, DETAIL_CONCURRENCY, commit =>
+    fetchCommitDetail(owner, repo, commit.sha, token, fetchFn),
+  );
+
+  const results = fresh.map((commit, index) => {
+    const detail = details[index];
+    return {
+      sha: commit.sha,
+      author: commit.author,
+      message: commit.message,
+      title: commit.title,
+      url: commit.url,
+      isMerge: false,
+      prNumber: null,
+      files: detail?.files ?? [],
+      paths: detail?.paths ?? [],
+      diffSummary: detail?.diffSummary ?? '',
+      filesChanged: detail?.filesChanged ?? 0,
+      additions: detail?.additions ?? 0,
+      deletions: detail?.deletions ?? 0,
+    };
+  });
+  return withCapped(results, capped);
 }
 
 /**
- * Fetch all Issues (open + closed) for a repo, paginated.
+ * Fetch the newest Issues (open + closed), most recently updated first.
  * Pull requests appear in the issues endpoint but have a `pull_request` key — skip them.
+ * Stops at `limit` issues. `capped` is true when older issues were left out.
  */
 export async function fetchIssues(
   owner: string,
   repo: string,
   token: string,
   fetchFn: FetchFn = globalThis.fetch,
-): Promise<GitHubIssue[]> {
+  limit: number = ISSUE_WINDOW,
+): Promise<GitHubIssue[] & { capped: boolean }> {
   const results: GitHubIssue[] = [];
-  let page = 1;
+  let capped = false;
+  const perPage = 100;
 
-  while (true) {
-    const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100&page=${page}`;
+  for (let page = 1; page <= ISSUE_PAGE_GUARD && results.length < limit; page++) {
+    const url = repoApi(owner, repo, `/issues?state=all&sort=updated&direction=desc&per_page=${perPage}&page=${page}`);
     const res = await fetchFn(url, { headers: buildHeaders(token) });
 
-    if (!res.ok) {
-      throw new Error(`GitHub issues fetch failed: ${res.status} ${await res.text()}`);
-    }
+    if (!res.ok) throw await githubError('issues', res);
 
     const issues = await res.json() as Array<{
       number: number;
@@ -217,10 +362,14 @@ export async function fetchIssues(
       pull_request?: unknown;  // present on PRs — skip
     }>;
 
-    if (issues.length === 0) break;
+    if (!Array.isArray(issues) || issues.length === 0) break;
 
     for (const i of issues) {
       if (i.pull_request !== undefined) continue;  // skip PRs
+      if (results.length >= limit) {
+        capped = true;
+        break;
+      }
 
       results.push({
         number: i.number,
@@ -233,11 +382,100 @@ export async function fetchIssues(
       });
     }
 
-    if (issues.length < 100) break;
-    page++;
+    if (issues.length === perPage && results.length >= limit) capped = true;
+    if (issues.length < perPage) break;
+    if (page === ISSUE_PAGE_GUARD && issues.length === perPage && results.length < limit) capped = true;
   }
 
-  return results;
+  return withCapped(results, capped);
+}
+
+export interface GitHubPullRef {
+  number: number;
+  /** Head commit SHA, when GitHub sent one. */
+  headSha: string | null;
+  /** Merge commit SHA, when the pull request has one. */
+  mergeSha: string | null;
+}
+
+/**
+ * The newest pull requests. One list call. Used to record `github_pr_number`
+ * on a commit that is the pull request's head or merge commit. Pull requests
+ * are not their own contribution rows.
+ */
+export async function fetchPulls(
+  owner: string,
+  repo: string,
+  token: string,
+  fetchFn: FetchFn = globalThis.fetch,
+  limit: number = PR_WINDOW,
+): Promise<GitHubPullRef[] & { capped: boolean }> {
+  const results: GitHubPullRef[] = [];
+  let capped = false;
+  const perPage = 100;
+
+  for (let page = 1; page <= MAX_LIST_PAGES && results.length < limit; page++) {
+    const url = repoApi(owner, repo, `/pulls?state=all&sort=updated&direction=desc&per_page=${perPage}&page=${page}`);
+    const res = await fetchFn(url, { headers: buildHeaders(token) });
+    if (!res.ok) throw await githubError('pulls', res);
+
+    const pulls = await res.json() as Array<{
+      number: number;
+      head?: { sha?: string } | null;
+      merge_commit_sha?: string | null;
+    }>;
+    const list = Array.isArray(pulls) ? pulls : [];
+    if (list.length === 0) break;
+
+    for (const pull of list) {
+      if (results.length >= limit) {
+        capped = true;
+        break;
+      }
+      results.push({
+        number: pull.number,
+        headSha: pull.head?.sha ?? null,
+        mergeSha: pull.merge_commit_sha ?? null,
+      });
+    }
+
+    if (list.length === perPage && results.length >= limit) capped = true;
+    if (list.length < perPage) break;
+    if (page === MAX_LIST_PAGES && list.length === perPage && results.length < limit) capped = true;
+  }
+
+  return withCapped(results, capped);
+}
+
+export interface GitHubRepoInfo {
+  private: boolean;
+  visibility: string | null;
+}
+
+/**
+ * True only for a public repository. Missing `private: false`, or a visibility
+ * other than `public` (private, internal), is not public.
+ */
+export function repoIsPublic(info: { private?: boolean; visibility?: string | null }): boolean {
+  if (info.private !== false) return false;
+  if (info.visibility != null && info.visibility !== 'public') return false;
+  return true;
+}
+
+/** GET /repos/:owner/:repo. Used before a new team is stored. */
+export async function fetchRepo(
+  owner: string,
+  repo: string,
+  token: string,
+  fetchFn: FetchFn = globalThis.fetch,
+): Promise<GitHubRepoInfo> {
+  const res = await fetchFn(repoApi(owner, repo), { headers: buildHeaders(token) });
+  if (!res.ok) throw await githubError('repo', res);
+  const data = await res.json() as { private?: boolean; visibility?: string | null };
+  return {
+    private: data.private === true,
+    visibility: typeof data.visibility === 'string' ? data.visibility : null,
+  };
 }
 
 /**

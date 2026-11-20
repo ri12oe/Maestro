@@ -1441,3 +1441,28 @@ A second correction still keeps the first AI label. Undo restores that original 
 | `docs/PLAN.md` | The 200 warning, and undo after two corrections. |
 
 `npm run lint` passed. `npm test`: server 27 files, 249 passed (249); client 3 files, 21 passed (21). The branch before this follow-up had 247 server tests and 21 client tests. Not deployed.
+
+## 2026-11-20 — Session 56: A public repo finishes on the team page (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+This is session 56. Sessions 54 and 55 are the dispute-label work on main.
+
+A judge can paste a public GitHub repository on Start and get the contribution map, risks, suggestions, and digest without another required click. Connect creates the team, or opens the one that already has that owner and repo, then runs ingest, classify, match, and the risk reasoner. The progress list advances when each call returns.
+
+The ingest window is the latest 30 commits, 20 pull requests, and 30 issues. Commit authors are still created as members during ingest. The team removes anyone who is not on it from Settings. A missing or private repository, a rate limit (with the reset time when GitHub sent one), an empty window, a repository with no issues, and a missing `GITHUB_TOKEN` each say what to do next. No issues still opens the team. The seeded StudyBuddy row is not rewritten by a different repository.
+
+| File | Change |
+|---|---|
+| `server/src/ingestion/github.ts` | Window, rate-limit error with reset time, recent pull requests. |
+| `server/src/ingestion/sync.ts` | Stages: ingest, classify, match, reason, or all. Empty-window error. No-issues notice. |
+| `server/src/routes/teams.ts` | Reuse an existing owner/repo. Explain 404, 429/403, empty, and a missing token. |
+| `server/src/tests/connect-repo.test.ts`, `github.test.ts` | Mocked GitHub. Happy path, reuse, 404, rate limit, empty, no issues. |
+| `client/src/pages/Start.tsx`, `Today.tsx` | Real steps, then the team page. The no-issues notice is shown there. |
+| `docs/PLAN.md`, `README.md` | The window, the errors, and how to try your own repository. |
+
+A follow-up on this session: a new team is stored only when `GET /repos/:owner/:repo` says the repository is public. The 404 copy no longer says a private repository can be read with the server token. Re-sync of a team already stored is not gated, so Maestro (`ri12oe/Maestro`, id 1) and mira (id 2) keep syncing. Reuse opens that team and does not sync or write a deadline. Owner and repo are checked before any GitHub URL is built, and the path segments are encoded. One sync runs per team at a time (`409`). Create and sync share a fixed per-minute window (`429`). A GitHub 403 or 429 returns `resetAt`, and Start shows that time in the viewer's local zone. `github_sha` is unique per team (`migration_009`, before the `effective_classifications` view). An unmapped GitHub error is logged and the response stays short. The server trusts one proxy hop, so the per-IP limit uses `X-Forwarded-For` behind Railway. Creating a team with no `GITHUB_TOKEN` is the same 503 as sync and stores no row.
+
+`npm run lint` passed. `npm test` on main after the rebase: server 29 files, 276 passed (276); client 3 files, 22 passed (22). Main after sessions 54 and 55 had 249 server tests and 21 client tests. Not deployed. This entry is session 56.
+
+The server trusts one proxy hop, so the per-IP limit uses `X-Forwarded-For` behind Railway. Creating a team with no `GITHUB_TOKEN` is the same 503 as sync and stores no row. Opening a team that is already stored does not need the token.

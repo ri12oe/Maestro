@@ -74,7 +74,7 @@ describe('sync errors', () => {
     ['GitHub commits fetch failed: 404 {"message":"Not Found"}', 404, /couldn't find acme\/alpha/],
     ['GitHub issues fetch failed: 401 {"message":"Bad credentials"}', 502, /rejected the token/],
     ['GitHub commits fetch failed: 403 {"message":"API rate limit exceeded"}', 503, /rate-limiting/],
-    ['something else broke', 500, /Sync failed: something else broke/],
+    ['something else broke', 500, /^Sync failed\. Press Try again\.$/],
   ])('maps "%s"', (message, status, pattern) => {
     const out = explainSyncError(new Error(message), teamId);
     expect(out.status).toBe(status);

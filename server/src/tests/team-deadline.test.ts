@@ -7,7 +7,7 @@
  * migration_005 adds teams.deadline to a database that does not have the column.
  */
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -18,6 +18,7 @@ import request from 'supertest';
 const tmpDir = mkdtempSync(join(tmpdir(), 'team-deadline-'));
 process.env.DB_PATH = join(tmpDir, 'test.db');
 process.env.AI_PROVIDER = 'mock';
+process.env.GITHUB_TOKEN = 'test-token';
 
 const { default: db } = await import('../db/client.js');
 const { default: teamsRouter } = await import('../routes/teams.js');
@@ -27,6 +28,16 @@ const { runMigration } = await import('../db/migrate.js');
 const app = express();
 app.use(express.json());
 app.use('/api/teams', teamsRouter);
+
+beforeAll(() => {
+  vi.stubGlobal('fetch', async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => ({ private: false, visibility: 'public' }),
+    text: async () => '',
+  }) as unknown as Response);
+});
 
 const TODAY = new Date('2026-11-13T12:00:00Z');
 const SOON = '2026-11-16';   // 2.5 days from TODAY → high
@@ -38,6 +49,7 @@ function patchDeadline(teamId: number | string, deadline: unknown) {
 }
 
 afterAll(() => {
+  vi.unstubAllGlobals();
   db.close();
   try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows may hold the file briefly */ }
 });
@@ -50,7 +62,7 @@ describe('PATCH /api/teams/:teamId deadline', () => {
   it('sets a deadline, reads it back, and clears it', async () => {
     const created = await request(app)
       .post('/api/teams')
-      .send({ name: 'Alpha', repo_owner: 'acme', repo_name: 'app' });
+      .send({ name: 'Alpha', repo_owner: 'acme', repo_name: 'deadline-app' });
     expect(created.status).toBe(201);
     expect(created.body.deadline).toBeNull();
     const teamId = created.body.id as number;

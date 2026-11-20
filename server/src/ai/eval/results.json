@@ -1,7 +1,7 @@
 {
   "provider": "grok",
   "model": "grok:grok-4.20-0309-non-reasoning:prompt-v2",
-  "evaluatedAt": "2026-11-20T17:56:47.197Z",
+  "evaluatedAt": "2026-11-20T18:22:15.225Z",
   "date": "2026-11-20",
   "set": "holdout",
   "holdoutSize": 10,
@@ -19,7 +19,7 @@
     "workType": [
       {
         "expected": "fix",
-        "got": "generated",
+        "got": "other",
         "count": 1
       }
     ],
@@ -30,5 +30,19 @@
         "count": 1
       }
     ]
-  }
+  },
+  "misses": [
+    {
+      "field": "workType",
+      "title": "Bump dependency versions in package.json",
+      "expected": "fix",
+      "got": "other"
+    },
+    {
+      "field": "substance",
+      "title": "Regenerate prisma client after schema change",
+      "expected": "low",
+      "got": "medium"
+    }
+  ]
 }

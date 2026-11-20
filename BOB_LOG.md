@@ -1529,11 +1529,11 @@ Root `package.json` adds `check:railway`. It runs `tsc --noEmit --strict --modul
 
 This is session 59. Sessions 57 and 58 are the Railway config work on main.
 
-The committed holdout file was the offline mock run (work type 50.0%, substance 50.0%). It is now the Grok measurement from 2026-11-20, copied byte for byte. Provider `grok`, model `grok:grok-4.20-0309-non-reasoning:prompt-v2`. Work type 90.0% (9/10). Substance 90.0% (9/10). The two misses are "Bump dependency versions in package.json" (expected fix, got generated) and "Regenerate prisma client after schema change" (expected low, got medium).
+The committed holdout file was the offline mock run (work type 50.0%, substance 50.0%). It is now the Grok measurement copied byte for byte from the 2026-11-20T18:22:15.225Z rerun. Provider `grok`, model `grok:grok-4.20-0309-non-reasoning:prompt-v2`. Work type 90.0% (9/10). Substance 90.0% (9/10). The misses are workType "Bump dependency versions in package.json" (expected fix, got other) and substance "Regenerate prisma client after schema change" (expected low, got medium). The labels on individual misses can vary between runs.
 
 The card line under each percentage is `90.0% · Grok (grok-4.20-0309-non-reasoning), 10 holdout commits`. The corner badge says Grok. An offline mock file still reads `50.0% · offline mock, 10 holdout commits` and its badge says Offline mock.
 
-`server/src/tests/eval.test.ts` re-scores `holdout.csv` only when the recorded provider is mock. A Grok file has to parse (`parseEvalResults`), which requires a `misses` array of `{ field: "workType" | "substance", title, expected, got }`. `correct` is at most `total`, accuracy is `correct/total` to one decimal, and `holdoutSize` is the number of rows in `holdout.csv`. Each miss title has to be a holdout row whose expected label for that field is `expected`. `got` has to be a different classifier label for that field. The misses in each field add up to total minus correct. The mock re-score still runs, against `server/src/tests/fixtures/mock-holdout-results.json`, regenerated with that `misses` array. The committed Grok file does not have `misses` yet, so that check fails until the rerun is copied in.
+`server/src/tests/eval.test.ts` re-scores `holdout.csv` only when the recorded provider is mock. A Grok file has to parse (`parseEvalResults`), which requires a `misses` array of `{ field: "workType" | "substance", title, expected, got }`. `correct` is at most `total`, accuracy is `correct/total` to one decimal, and `holdoutSize` is the number of rows in `holdout.csv`. Each miss title has to be a holdout row whose expected label for that field is `expected`. `got` has to be a different classifier label for that field. The misses in each field add up to total minus correct. The mock re-score still runs, against `server/src/tests/fixtures/mock-holdout-results.json`, regenerated with that `misses` array. The committed Grok file is the 18:22:15.225Z rerun, and its `misses` array is the two rows above.
 
 | File | Change |
 |---|---|
@@ -1543,4 +1543,4 @@ The card line under each percentage is `90.0% · Grok (grok-4.20-0309-non-reason
 | `client/src/evalAccuracy.ts`, `client/src/app/AccuracyCard.tsx`, `client/src/evalAccuracy.test.ts` | A Grok credit names the model. The badge says Grok. |
 | `docs/PLAN.md`, `README.md` | The card's figure is the Grok 90.0% run. |
 
-`npm run lint` passed. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Main had 276 server tests and 22 client tests. Not deployed.
+`npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Main had 276 server tests and 22 client tests. Not deployed.

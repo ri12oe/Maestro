@@ -1466,3 +1466,43 @@ A follow-up on this session: a new team is stored only when `GET /repos/:owner/:
 `npm run lint` passed. `npm test` on main after the rebase: server 29 files, 276 passed (276); client 3 files, 22 passed (22). Main after sessions 54 and 55 had 249 server tests and 21 client tests. Not deployed. This entry is session 56.
 
 The server trusts one proxy hop, so the per-IP limit uses `X-Forwarded-For` behind Railway. Creating a team with no `GITHUB_TOKEN` is the same 503 as sync and stores no row. Opening a team that is already stored does not need the token.
+
+## 2026-11-20 — Session 57: Railway config is only .railway/railway.ts (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+This is session 57. Session 56 is the public-repo connect flow on main.
+
+Railway warns that Config as Code (`railway.json` / `railway.toml`) is deprecated and that existing files keep working until 2026-12-01. `.railway/railway.ts` was already the Infrastructure as Code file (session 37, PR #25). `railway.json` was still in the repo, and a deploy still read it. That file is deleted. `.railway/railway.ts` is the only Railway config.
+
+Every field that was in `railway.json` is on the Maestro service. The `railway` package writes `start` as `deploy.startCommand` and `healthcheck` as `deploy.healthcheckPath`.
+
+| `railway.json` | Value there | `.railway/railway.ts` |
+|---|---|---|
+| `$schema` | `https://railway.com/railway.schema.json` | None. Editor metadata. |
+| `build.builder` | `RAILPACK` | `build.builder` |
+| `build.buildCommand` | `npm run build` | `build.buildCommand` |
+| `deploy.startCommand` | `npm start` | `start` |
+| `deploy.healthcheckPath` | `/api/health` | `healthcheck` |
+| `deploy.restartPolicyType` | `ON_FAILURE` | `deploy.restartPolicyType` |
+| `deploy.healthcheckTimeout` | Absent | Absent. No number was copied. |
+| `deploy.restartPolicyMaxRetries` | Absent | Absent |
+| `deploy.preDeployCommand` | Absent | Absent |
+| `deploy.requiredMountPath` | Absent | Absent |
+| `environments` | Absent | Absent |
+| Volume at `/data` | Absent | Absent. The dashboard mount stays. |
+
+Fields already in `.railway/railway.ts` and not in `railway.json` stay: GitHub source `ri12oe/Maestro`, `build.buildEnvironment` `V3`, one replica in `sfo`, private network endpoint `maestro`, `partial` `"Maestro"`, project `lucid-courtesy`, and `variables.managed: false`. `railway@3.17.0` does not type `variables` on `ProjectDefinition`. The CLI still reads it. A module augmentation in the file keeps `managed: false` and lets `tsc` accept it.
+
+The migration guide, checked 2026-11-20, says one service cannot be managed by both systems. Deleting `railway.json` does not clear a stored Config File path. `railway config migrate cutover` (or an empty config-file path in the service settings) clears that path in the linked environment only. Cutover does not change build settings, the start command, variables, or volumes, and it does not start a deployment. Deploying this commit while the path is still set fails the build, because the builder looks for `railway.json` and the file is gone. If no path is stored, the builder stops auto-detecting `railway.json` once this commit is what gets deployed. Railway does not read `.railway/` on deploy, so `railway config plan` then `railway config apply` is what stores these settings on the service. Skip a plan that deletes the `/data` volume. This file does not declare it. Apply can delete a volume the file omits. Cutover cannot. This session does not run cutover, plan, apply, or a deploy.
+
+`railway` CLI 5.75.0 `config plan` reads the linked environment. `railway whoami` here is unauthorized, so plan was not run and login was not started. Offline checks: `tsc --noEmit --strict` on `.railway/railway.ts` passed, and evaluating the file with `railway/iac` produced `startCommand` `npm start`, `healthcheckPath` `/api/health`, `restartPolicyType` `ON_FAILURE`, builder `RAILPACK`, build command `npm run build`, no healthcheck timeout, no volume, and `variables.managed` `false`. `npx eslint .railway/railway.ts` passed.
+
+| File | Change |
+|---|---|
+| `railway.json` | Deleted. |
+| `.railway/railway.ts` | Comment with the field mapping. Types `variables.managed`. |
+| `docs/RAILWAY.md` | The mapping, and the cutover step before the next deploy. |
+| `docs/PLAN.md` | Milestone 4 todo 3 names this file as the only Railway config. |
+
+`npm run lint` passed. `npm test`: server 29 files, 276 passed (276); client 3 files, 22 passed (22). Same counts as session 56. Not deployed.

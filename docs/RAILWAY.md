@@ -8,21 +8,44 @@ The server listens on `PORT`, opens the SQLite file at `DB_PATH`, and runs migra
 
 Create a project and add a service from the GitHub repo `ri12oe/Maestro`.
 
-`.railway/railway.ts` is the output of `railway config migrate --show --variables=unmanaged` on the linked production project, plus `deploy.restartPolicyType` and `healthcheck`. The service is `Maestro`. The project is `lucid-courtesy`. The file exports `partial = "Maestro"`. Migrate also wrote the GitHub source, `buildEnvironment: "V3"`, one replica in `sfo`, and the private network endpoint `maestro`. `variables.managed` is `false`, so the file does not write service variables. It does not declare the volume. The Maestro service sets `healthcheck` to `/api/health`.
+`.railway/railway.ts` is the only Railway config in this repo. `railway.json` is deleted. Config as Code (`railway.json` / `railway.toml`) is deprecated. Infrastructure as Code is the replacement, and one service cannot be managed by both. Railway does not read `.railway/` during a deploy. `railway config plan` and `railway config apply` are what send this file. This change does not run either command, and it does not deploy.
 
-| Setting | Value | Field in `.railway/railway.ts` |
+The file started as `railway config migrate --show --variables=unmanaged` on the linked production project. The service is `Maestro`. The project is `lucid-courtesy`. The file exports `partial = "Maestro"`. Migrate also wrote the GitHub source, `buildEnvironment: "V3"`, one replica in `sfo`, and the private network endpoint `maestro`. `variables.managed` is `false`, so the file does not write service variables. It does not declare the volume. `deploy.restartPolicyType` and `healthcheck` were added after that migrate output, because migrate does not copy the restart policy. The healthcheck was added the same way, from `railway.json`.
+
+Every field that was in `railway.json` is in `.railway/railway.ts`. Compared on 2026-11-20 against that file, the [Config as Code schema](https://railway.com/railway.schema.json), and the [Infrastructure as Code reference](https://docs.railway.com/infrastructure-as-code/reference). The `railway` package (`ServiceConfigInput`) accepts `start` and `healthcheck` and writes them as `deploy.startCommand` and `deploy.healthcheckPath`.
+
+| `railway.json` | Value there | Field in `.railway/railway.ts` |
 |---|---|---|
-| Builder | Railpack (`RAILPACK`) | `build.builder` |
-| Build command | `npm run build` | `build.buildCommand` |
-| Start command | `npm start` | `start` |
-| Restart policy | On failure (`ON_FAILURE`) | `deploy.restartPolicyType` |
-| Healthcheck path | `/api/health` | `healthcheck` |
+| `$schema` | `https://railway.com/railway.schema.json` | None. Editor metadata. The `railway` package types check the file. |
+| `build.builder` | `RAILPACK` | `build.builder` |
+| `build.buildCommand` | `npm run build` | `build.buildCommand` |
+| `deploy.startCommand` | `npm start` | `start` |
+| `deploy.restartPolicyType` | `ON_FAILURE` | `deploy.restartPolicyType` |
+| `deploy.healthcheckPath` | `/api/health` | `healthcheck` |
+| `deploy.healthcheckTimeout` | Absent | Absent. The schema leaves it optional. No number was copied. |
+| `deploy.restartPolicyMaxRetries` | Absent | Absent |
+| `deploy.preDeployCommand` | Absent | Absent |
+| `deploy.requiredMountPath` | Absent | Absent |
+| `environments` | Absent | Absent |
+| Volume mount at `/data` | Absent. Config as Code cannot create a volume. | Absent. The volume stays the dashboard mount. See section 2. |
 
-`railway.json` keeps those settings. `deploy.healthcheckPath` is `/api/health`, which is the path a deploy reads today. The Infrastructure as Code field is `healthcheck` on the Maestro service. `healthcheckTimeout` is optional in the schema and in the [Infrastructure as Code reference](https://docs.railway.com/infrastructure-as-code/reference), so it is left unset. Migrate does not copy `restartPolicyType`, so that field was added to the service after the CLI output. `healthcheck` was added the same way. `railway.json` stays in the repo. The migration guide, checked 2026-11-17, says to delete it only after cutover. Cutover is `railway config migrate cutover`. It clears the service's Config File path. It is a separate manual step, and this change does not run it. A deploy with that path still set fails if the file is missing from the commit. With no path stored, the builder still reads a root `railway.json` until the file is gone from the deployed commit, or until 2026-12-01. Railway does not read `.railway/` on deploy. `railway config plan` and `railway config apply` are what send the new file.
+These fields are in `.railway/railway.ts` and were not in `railway.json`. They stay: GitHub source `ri12oe/Maestro`, `build.buildEnvironment` `V3`, `replicas` `{ sfo: 1 }`, `networking.privateNetworkEndpoint` `maestro`, `partial` `"Maestro"`, project name `lucid-courtesy`, and `variables.managed: false`.
+
+### Cutover before the next deploy
+
+The [migration guide](https://docs.railway.com/infrastructure-as-code#migrating-from-config-as-code), checked 2026-11-20, says deleting `railway.json` does not clear the service's stored Config File path, and a service still on that path cannot be planned from `.railway/railway.ts`.
+
+Do this on the linked project before anyone deploys the commit that deletes `railway.json`. This change does not run these commands.
+
+1. If Maestro's service settings still show a Config File path, clear it. The command is `railway config migrate cutover`. The same edit is an empty config-file path in the service settings. Cutover only clears that path, in the linked environment. It does not change the build command, the start command, variables, or volumes. It does not start a deployment. The running deployment stays up. `railway config migrate undo` writes the saved path back from `.railway/.cac-migration.json` and deletes that snapshot. Do not commit the snapshot. A fork that already stored its own path keeps it. A new fork does not copy an empty path, so the builder still auto-detects a root `railway.json` in that fork until the file is gone from the deployed commit.
+2. Deploying this commit while that path is still set fails the build. The builder looks for `railway.json` at the stored path and reports that the config file was not found. `railway config plan` also refuses the service until the path is cleared. The error names the service and the path.
+3. If the service settings show no config file path, cutover lists nothing, because there is no stored path to clear. The builder was still reading a root `railway.json` and that file overrode the dashboard for the deploy. The file stops being read once it is absent from the deployed commit, or on 2026-12-01, whichever comes first.
+4. Railway does not read `.railway/railway.ts` on deploy. After the path is clear, run `railway config plan`, read it, then `railway config apply` so these settings are stored on the service before the next deploy. Applying is what replaces the values Config as Code was overriding. A plan that still names a config file path means the path was not cleared.
+5. Apply only a plan whose changes are the settings in the table above. Skip a plan that deletes the volume, the Maestro service, or a variable. This file does not declare the volume. Cutover cannot delete a volume. `railway config apply` can, when the file omits one. `variables.managed` is `false`, so the file does not write service variables. Variable values stay in the dashboard.
 
 `npm run build` builds the client, then the server. `npm start` runs `node dist/index.js` in the server workspace. The root `package.json` asks for Node `22.x`, which Railpack reads from `engines.node`. The `railway` package is a dev dependency so the CLI can evaluate `.railway/railway.ts`. The production build does not import it.
 
-Copy those settings, including the healthcheck path `/api/health`, into the service settings. Railway's docs, checked 2026-11-17, say config-as-code is deprecated: a new service does not read `railway.json`, and services that already use the file stop reading it on 2026-12-01. A file icon on the deployment details page means that deploy did read the file. The settings you type in stay after that date.
+On a new service, set the same values in the service settings, including the healthcheck path `/api/health`, or send them with `railway config apply` after the plan is clean. A new service cannot opt into Config as Code. A file icon on the deployment details page means that deploy read `railway.json`. With the file gone from the deployed commit, later deploys have no file to read. The settings stored on the service, from the dashboard or from apply, are what the next deploy uses.
 
 Set the start command even if the build command looks optional. The client is a Vite app. Railpack serves a Vite project as a static site unless a start command is set. `npm start` is the Express server, which is what serves the API and the built pages.
 
@@ -34,7 +57,7 @@ Generate a public domain from the service's Networking settings. The hostname lo
 
 The database is one SQLite file. Railway replaces the container disk on every deploy, so a file written on that disk is gone after the next deploy. A volume is the disk that stays.
 
-Add a volume and attach it to this service. The dashboard is where volumes are created: the command palette, or right-click the project canvas. `.railway/railway.ts` does not declare the volume, and `railway.json` cannot create one. `deploy.requiredMountPath` only checks that a mount is already there.
+Add a volume and attach it to this service. The dashboard is where volumes are created: the command palette, or right-click the project canvas. `railway.json` had no volume and no `deploy.requiredMountPath`. `.railway/railway.ts` does not declare a volume either. `requiredMountPath` only checks that a mount is already there, and it was not set. The mount for this service is `/data`, on the volume attachment in the dashboard.
 
 Mount the volume at `/data`.
 
@@ -123,12 +146,12 @@ This project deploys manually. Railway's GitHub app has no access to `ri12oe/Mae
 
 After a merge, pull `main` locally and run `railway up` from the repo root with the project linked. That uploads the checked-out code and deploys it. Then run the smoke test in section 4.
 
-The dashboard build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` came from `railway config migrate` and also records the Railpack builder, restart policy `ON_FAILURE`, and `healthcheck` `/api/health`. A deploy does not read that file. `railway.json` is still read until cutover or 2026-12-01, whichever comes first, and its `deploy.healthcheckPath` is `/api/health`. Cutover (`railway config migrate cutover`) is a separate manual step. This change does not run it.
+The build command is `npm run build` and the start command is `npm start`. `.railway/railway.ts` records those, the Railpack builder, restart policy `ON_FAILURE`, and `healthcheck` `/api/health`. A deploy does not read that file. `railway.json` is deleted. Before this commit is deployed, clear any stored Config File path (`railway config migrate cutover`, or an empty path in the service settings) and apply a plan that keeps the `/data` volume. Section 1 has the full order. This change does not run cutover, plan, or apply.
 
 ## What stayed out of the Railway config
 
-`.railway/railway.ts` does not declare the volume, and `railway.json` cannot create one. The volume is attached in the dashboard at `/data`.
+`.railway/railway.ts` does not declare the volume. The deleted `railway.json` had no volume and no `deploy.requiredMountPath`. The volume is attached in the dashboard at `/data`. `railway config apply` can delete a volume this file omits. Cutover cannot. Skip a plan that deletes it.
 
-Both files set the healthcheck to `/api/health`. Railway calls that URL after start and accepts only a 2xx response. `GET /api/health` runs `SELECT 1` and returns `200` `{"ok":true}`. A thrown query returns `503` `{"ok":false,"error":"Database check failed"}`. That path is the one the site-password middleware allows through with no credentials, so the probe succeeds while `SITE_PASSWORD` is set. `/` and `/api/teams` still return `401` without credentials.
+The healthcheck is `/api/health`. Railway calls that URL after start and accepts only a 2xx response. `GET /api/health` runs `SELECT 1` and returns `200` `{"ok":true}`. A thrown query returns `503` `{"ok":false,"error":"Database check failed"}`. That path is the one the site-password middleware allows through with no credentials, so the probe succeeds while `SITE_PASSWORD` is set. `/` and `/api/teams` still return `401` without credentials. `healthcheckTimeout` was not in `railway.json`, so it stays unset.
 
 A volume means the next deploy has a short gap: Railway will not run two deployments on the same volume. Railway marks that deploy healthy only after `GET /api/health` returns 2xx.

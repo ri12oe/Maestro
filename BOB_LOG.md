@@ -1360,3 +1360,27 @@ Holdout, 10 commits, mock (`mock:prompt-v2`): work type 50.0% (5/10), substance 
 | `docs/PLAN.md`, `README.md` | The endpoint, the script, and the Maestro card. |
 
 `npm run lint` passed. `npm test`: server 24 files, 228 passed (228); client 3 files, 21 passed (21). Main had 222 server tests and 15 client tests. Main's latest entry before this one is session 51. Not deployed.
+
+## 2026-11-20 — Session 52: Weekly digest with a neutral check-in (written with Grok bots, not IBM Bob)
+
+**AI source:** Grok bots
+
+The brief's weekly digest stretch item is built. `GET /api/teams/:teamId/digest` returns the last 7 days: `weekOf`, a 2–4 sentence `summary`, `highlights` and `risks` (each sentence has evidence), and `checkIn`. Evidence is `{ type, id, url }`, the same task and contribution ids the rest of the app links, plus the contribution URL when one is stored. Unknown teams are 404. The route uses the same site-password gate as the other team routes. It is cached per team per week until contributions, tasks, open risks, pending suggestions, labels, or the deadline change. `?refresh=1` skips that cache.
+
+The text is written through `completeJSON` and `DigestSchema` when `AI_PROVIDER=grok`. Mock mode does not use the schema-only mock (`mock-string` and empty arrays). It builds the summary, highlights, risks, and check-in from contributions and their classifications, the manual log, task status, open risks, pending suggestions, and the stored deadline. A failed model call uses that same fallback. A model answer that ranks, grades, or blames people is discarded and the fallback is returned. The check-in names tasks and risks. It does not name who did more.
+
+Today shows this as the Weekly digest card: week of, summary, highlights, risks, the check-in, and Copy check-in (toast: "Check-in message copied."). Loading uses the existing skeleton, a quiet week uses `EmptyState`, and a failed load uses `ErrorState`.
+
+`npm run seed` with `AI_PROVIDER=mock` on 2026-11-20 printed a StudyBuddy digest whose check-in is: "Checking in on StudyBuddy. #12 Auth flow is still open and due Nov 27. If it helps the plan, there is a suggested move for #14 Backend API endpoints. Does the plan still look right?"
+
+| File | Change |
+|---|---|
+| `server/src/ai/assistant.ts` | Digest shape, zod schema, grok prompt, and the deterministic fallback. |
+| `server/src/routes/assistant.ts` | Per-team per-week cache. 404 when the team is missing. |
+| `server/src/tests/digest.test.ts` | Seeded StudyBuddy: 404, shape, evidence, fairness, week cache. |
+| `server/src/tests/assistant.test.ts` | Small-team digest, invented ids dropped, ranking answer replaced, model-down fallback. |
+| `client/src/api/types.ts`, `client/src/api/client.ts` | Digest type and client call. |
+| `client/src/app/AiCards.tsx` | Weekly digest card, copy check-in, loading, empty, and error. |
+| `docs/PLAN.md`, `README.md` | The stretch item is built. Today and the Maestro AI list describe the digest. |
+
+`npm run lint` passed. `npm test`: server 24 files, 229 passed (229); client 2 files, 15 passed (15). Main had 222 server tests and 15 client tests. Not deployed.

@@ -9,7 +9,9 @@
 
 Build a monorepo web app that ingests a team's GitHub repo (commits and Issues), classifies each contribution with an LLM, matches work to tasks, surfaces risk, and proposes rebalance suggestions — all surfaced in a React dashboard. The backend is a Node/Express REST API backed by SQLite; the AI layer is behind a single provider interface using xAI's Grok API.
 
-**Non-goals (MVP):** user auth beyond team setup, webhooks, Google Docs/Slack, weekly digest, instructor report, multi-team classrooms.
+**Non-goals (MVP):** user auth beyond team setup, webhooks, Google Docs/Slack, instructor report, multi-team classrooms.
+
+The weekly digest stretch item from the brief is built. `GET /api/teams/:teamId/digest` returns a plain-language summary of the last 7 days, evidence-linked highlights and risks, and a neutral check-in. It does not score, grade, or rank people. See [Weekly digest](#weekly-digest).
 
 ---
 
@@ -272,6 +274,12 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 |---|---|---|
 | `GET` | `/api/teams/:teamId/summary` | Stat cards: tasks done, at-risk count, pending suggestions, contribution map data per member |
 
+### Weekly digest
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/teams/:teamId/digest` | Last 7 days for the team. Body: `weekOf` (`YYYY-MM-DD` the window opens on), `summary` (2–4 sentences), `highlights` and `risks` (each `{ text, evidence }`), and `checkIn` (a neutral message the team can send). `evidence` items are `{ type: "task" \| "contribution", id, url }`. `url` is the contribution link when one is stored, otherwise null. Every highlight and risk has at least one evidence item that exists for the team. `404` `{ error: "Team not found" }` when the team does not exist. Same site-password gate as the other `/api/teams` routes. `?days=` defaults to 7 and is clamped to 1–30. Cached per team per week until contributions, tasks, open risks, pending suggestions, classification labels, or the deadline change. `?refresh=1` skips the cache. `AI_PROVIDER=mock` builds the text from contributions (with classifications), the manual log, task status, open risks, pending suggestions, and the stored team deadline. It does not call the schema-only mock. The check-in names tasks and risks. It does not score, grade, or rank people. |
+
 ---
 
 ## Milestone Breakdown
@@ -432,6 +440,16 @@ All endpoints prefixed `/api`. All responses are JSON. Errors return `{ error: s
 **Status:** [ ] pending
 
 ---
+
+## Stretch items
+
+### Weekly digest — built
+
+Plain-language summary of the last 7 days, plus a neutral check-in the team can send. This is the weekly digest row in `docs/BRIEF.md`.
+
+- Server: `GET /api/teams/:teamId/digest` in `server/src/routes/assistant.ts`. The writing is in `server/src/ai/assistant.ts` (`DigestSchema` through `completeJSON` when `AI_PROVIDER=grok`). Mock mode and a failed model call use a deterministic fallback built from the team's rows.
+- Fairness: no scores, grades, or rankings. A model answer that compares people is discarded and the fallback is returned. The check-in talks about tasks and risks.
+- Client: the Weekly digest card on Today (`client/src/app/AiCards.tsx`), with loading, empty, and error states, evidence chips, and Copy check-in (toast: "Check-in message copied.").
 
 ## Open Decisions
 

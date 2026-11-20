@@ -183,11 +183,19 @@ export interface PlanCheck {
   generatedAt: string;
 }
 
+export interface DigestEvidence extends SourceRef {
+  /** Set when the contribution has a stored URL. Tasks leave this null. */
+  url: string | null;
+}
+
 export interface Digest {
-  days: number;
-  stats: { contributions: number; logged: number; tasksTouched: number; tasksClosed: number; people: number };
-  headline: string;
-  points: Array<{ kind: 'moved' | 'shipped' | 'stuck' | 'next'; text: string; sources: SourceRef[] }>;
+  /** YYYY-MM-DD the 7-day window opens on. */
+  weekOf: string;
+  summary: string;
+  highlights: Array<{ text: string; evidence: DigestEvidence[] }>;
+  risks: Array<{ text: string; evidence: DigestEvidence[] }>;
+  /** Neutral message the team can send. About the project, not a person. */
+  checkIn: string;
   generatedAt: string;
 }
 

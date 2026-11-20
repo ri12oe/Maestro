@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import db from '../db/client.js';
-import { ask, digest, planCheck, type Digest, type PlanCheck } from '../ai/assistant.js';
+import { ask, digest, digestWeekOf, planCheck, type Digest, type PlanCheck } from '../ai/assistant.js';
 
 type TeamParams = { teamId: string };
 const router = Router({ mergeParams: true });
@@ -9,8 +9,8 @@ export const MAX_QUESTION = 300;
 const ASKS_PER_MINUTE = 20;
 
 /**
- * Digest and plan check are cached until the team's data changes, so Today can
- * load them on every visit without a model call each time.
+ * Plan check is cached until the team's data changes, or the calendar day rolls.
+ * The digest uses digestCacheVersion instead: one entry per team per week.
  */
 function dataVersion(teamId: number): string {
   const row = db.prepare(`
@@ -24,11 +24,24 @@ function dataVersion(teamId: number): string {
   return `${new Date().toISOString().slice(0, 10)}|${Object.values(row).join('|')}`;
 }
 
+/** Per team per week, until contributions, tasks, risks, suggestions, labels, or the deadline change. */
+function digestCacheVersion(teamId: number, weekOf: string): string {
+  const row = db.prepare(`
+    SELECT
+      (SELECT deadline FROM teams WHERE id = @t) AS deadline,
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(id), 0) FROM contributions WHERE team_id = @t) AS contribs,
+      (SELECT COUNT(*) || ':' || IFNULL(SUM(status = 'closed'), 0) FROM tasks WHERE team_id = @t) AS tasks,
+      (SELECT COUNT(*) FROM risks WHERE team_id = @t AND dismissed = 0) AS risks,
+      (SELECT COUNT(*) || ':' || IFNULL(SUM(status = 'pending'), 0) FROM suggestions WHERE team_id = @t) AS suggestions,
+      (SELECT COUNT(*) || ':' || IFNULL(MAX(classified_at), '') FROM classifications cl JOIN contributions c ON c.id = cl.contribution_id WHERE c.team_id = @t) AS labels
+  `).get({ t: teamId }) as Record<string, unknown>;
+  return `${weekOf}|${Object.values(row).join('|')}`;
+}
+
 const cache = new Map<string, { version: string; value: Digest | PlanCheck }>();
 export function clearAssistantCache() { cache.clear(); }
 
-async function cached<T extends Digest | PlanCheck>(key: string, teamId: number, refresh: boolean, make: () => Promise<T | null>): Promise<T | null> {
-  const version = dataVersion(teamId);
+async function cached<T extends Digest | PlanCheck>(key: string, teamId: number, refresh: boolean, make: () => Promise<T | null>, version = dataVersion(teamId)): Promise<T | null> {
   const hit = cache.get(key);
   if (!refresh && hit && hit.version === version) return hit.value as T;
   const value = await make();
@@ -69,12 +82,23 @@ router.post('/ask', async (req: Request<TeamParams>, res: Response) => {
 });
 
 // GET /api/teams/:teamId/digest?days=7&refresh=1
+// Cached per team per week until contributions, tasks, risks, suggestions, labels, or the deadline change.
 router.get('/digest', async (req: Request<TeamParams>, res: Response) => {
   const teamId = Number(req.params.teamId);
   const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
   if (!teamExists(teamId)) { res.status(404).json({ error: 'Team not found' }); return; }
-  try { res.json(await cached(`digest:${teamId}:${days}`, teamId, req.query.refresh === '1', () => digest(teamId, days))); }
-  catch (err) { aiError(res, err); }
+  const weekOf = digestWeekOf(new Date(), days);
+  try {
+    const body = await cached(
+      `digest:${teamId}:${weekOf}`,
+      teamId,
+      req.query.refresh === '1',
+      () => digest(teamId, days),
+      digestCacheVersion(teamId, weekOf),
+    );
+    if (!body) { res.status(404).json({ error: 'Team not found' }); return; }
+    res.json(body);
+  } catch (err) { aiError(res, err); }
 });
 
 // GET /api/teams/:teamId/plan-check?refresh=1

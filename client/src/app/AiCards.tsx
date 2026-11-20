@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Check, CircleCheck, Copy, Gauge, RefreshCw, TriangleAlert } from 'lucide-react';
+import { CircleCheck, Copy, Gauge, RefreshCw, TriangleAlert } from 'lucide-react';
 import { api } from '../api/client.ts';
 import type { Digest, PlanCheck, PlanVerdict } from '../api/types.ts';
 import { useApi } from '../hooks/useApi.ts';
-import { timeAgo } from '../dates.ts';
+import { shortDate, timeAgo } from '../dates.ts';
 import Bulb from '../components/Bulb.tsx';
-import { Badge, Button, IconButton, Skeleton } from '../ui/primitives.tsx';
+import { Badge, Button, EmptyState, ErrorState, IconButton, Skeleton } from '../ui/primitives.tsx';
+import { useToast } from '../ui/overlays.tsx';
 import { SourceChips } from './Sources.tsx';
 import { useTeam } from './team.tsx';
 
@@ -89,47 +90,61 @@ export function PlanCheckCard() {
   );
 }
 
-const KIND_LABEL: Record<Digest['points'][number]['kind'], string> = { moved: 'Moved', shipped: 'Shipped', stuck: 'Stuck', next: 'Next' };
-
-function digestText(d: Digest, team: string): string {
-  return [`${team}: week in review`, d.headline, ...d.points.map(p => `• ${KIND_LABEL[p.kind]}: ${p.text}`)].join('\n');
+function CopyCheckIn({ text }: { text: string }) {
+  const toast = useToast();
+  return (
+    <Button size="sm" onClick={() => void navigator.clipboard.writeText(text).then(() => toast.show('Check-in message copied.'))}>
+      <Copy size={14} aria-hidden="true" />Copy check-in
+    </Button>
+  );
 }
 
-/** The week in review, ready to paste into the group chat. */
+function EvidenceList({ label, items }: { label: string; items: Array<{ text: string; evidence: Digest['highlights'][number]['evidence'] }> }) {
+  if (!items.length) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-caption tracking-[0.04em] text-fg-muted uppercase">{label}</h3>
+      <ul className="flex list-none flex-col gap-3">
+        {items.map((item, i) => (
+          <li key={i} className="flex min-w-0 flex-col gap-1.5">
+            <span>{item.text}</span>
+            <SourceChips sources={item.evidence.slice(0, 3)} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Last 7 days, plus a neutral check-in the team can copy. */
 export function DigestCard() {
-  const { teamId, version, team } = useTeam();
+  const { teamId, version } = useTeam();
   const [refresh, setRefresh] = useState(0);
-  const [copied, setCopied] = useState(false);
   const digest = useApi<Digest>(() => api.digest(teamId, 7, refresh > 0), [teamId, version, refresh]);
   const d = digest.data;
-  if (digest.error) return null;
+  const quiet = !!d && d.highlights.length === 0 && d.risks.length === 0;
 
   return (
     <section aria-labelledby="digest-h" className="flex flex-col gap-3 rounded-[10px] border border-line bg-surface-1 p-5">
-      <div id="digest-h" className="contents"><AiHeader title="Week in review" at={d?.generatedAt} onRefresh={() => setRefresh(r => r + 1)} refreshing={digest.loading} /></div>
-      {!d ? <div className="flex flex-col gap-2"><Skeleton w="80%" h={16} /><Skeleton w="95%" h={14} /><Skeleton w="70%" h={14} /></div> : (
+      <div id="digest-h" className="contents"><AiHeader title="Weekly digest" at={d?.generatedAt} onRefresh={() => setRefresh(r => r + 1)} refreshing={digest.loading && !!d} /></div>
+      {digest.error ? <ErrorState message={digest.error} onRetry={() => setRefresh(r => r + 1)} /> : null}
+      {!digest.error && !d ? <div className="flex flex-col gap-2"><Skeleton w="40%" h={14} /><Skeleton w="95%" h={16} /><Skeleton w="80%" h={14} /><Skeleton w="70%" h={14} /></div> : null}
+      {d && !digest.error && quiet && (
+        <EmptyState bulb="none" heading="A quiet week" line={d.summary}>
+          <p className="text-pretty">{d.checkIn}</p>
+          {d.checkIn && <CopyCheckIn text={d.checkIn} />}
+        </EmptyState>
+      )}
+      {d && !digest.error && !quiet && (
         <>
-          <p className="text-brief text-pretty">{d.headline}</p>
-          {d.points.length > 0 && (
-            <ul className="flex list-none flex-col gap-3">
-              {d.points.map((p, i) => (
-                <li key={i} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3">
-                  <span className="pt-0.5 text-caption tracking-[0.04em] text-fg-muted uppercase">{KIND_LABEL[p.kind]}</span>
-                  <div className="flex min-w-0 flex-col gap-1.5">
-                    <span>{p.text}</span>
-                    <SourceChips sources={p.sources.slice(0, 3)} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
-            <span className="text-caption font-normal text-fg-muted">
-              {d.stats.contributions} contribution{d.stats.contributions === 1 ? '' : 's'} · {d.stats.tasksTouched} task{d.stats.tasksTouched === 1 ? '' : 's'} touched · {d.stats.tasksClosed} closed
-            </span>
-            <Button size="sm" onClick={() => void navigator.clipboard.writeText(digestText(d, team?.name ?? 'Team')).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })}>
-              {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}{copied ? 'Copied' : 'Copy for group chat'}
-            </Button>
+          <p className="text-caption font-normal text-fg-muted">Week of {shortDate(d.weekOf)}</p>
+          <p className="text-brief text-pretty">{d.summary}</p>
+          <EvidenceList label="Highlights" items={d.highlights} />
+          <EvidenceList label="Risks" items={d.risks} />
+          <div className="flex flex-col gap-3 border-t border-line pt-3">
+            <h3 className="text-caption tracking-[0.04em] text-fg-muted uppercase">Check-in</h3>
+            <p className="text-pretty">{d.checkIn}</p>
+            {d.checkIn && <div className="flex justify-end"><CopyCheckIn text={d.checkIn} /></div>}
           </div>
         </>
       )}

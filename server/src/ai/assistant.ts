@@ -16,7 +16,9 @@
  * members. They are passed inside <data> tags with an instruction to treat them as data.
  *
  * Mock mode (AI_PROVIDER=mock) returns deterministic template text built from the same
- * facts, so the features work offline and in tests.
+ * facts, so the features work offline and in tests. The weekly digest does not call
+ * the schema-only mock (that would return "mock-string"); it writes the summary,
+ * highlights, risks, and check-in from these facts.
  */
 
 import * as z from 'zod';
@@ -36,6 +38,7 @@ interface TaskFact {
 interface ContributionFact {
   id: number; memberId: number; source: 'commit' | 'manual'; at: string; title: string;
   summary: string | null; workType: string | null; substance: string | null; taskId: number | null;
+  url: string | null;
 }
 export interface TeamFacts {
   teamId: number; teamName: string; deadline: string | null; today: Date;
@@ -69,7 +72,7 @@ export function loadTeamFacts(teamId: number, today = new Date(), db: BetterSqli
     }));
 
   const contributions = (db.prepare(`
-    SELECT c.id, c.member_id, c.source, c.authored_at, c.title, c.kind,
+    SELECT c.id, c.member_id, c.source, c.authored_at, c.title, c.kind, c.url,
            cl.summary, cl.work_type, cl.substance, tm.task_id
     FROM contributions c
     LEFT JOIN classifications cl ON cl.contribution_id = c.id
@@ -77,10 +80,11 @@ export function loadTeamFacts(teamId: number, today = new Date(), db: BetterSqli
     WHERE c.team_id = ?
     ORDER BY c.authored_at DESC
     LIMIT 200
-  `).all(teamId) as Array<{ id: number; member_id: number; source: 'commit' | 'manual'; authored_at: string; title: string; kind: string | null; summary: string | null; work_type: string | null; substance: string | null; task_id: number | null }>)
+  `).all(teamId) as Array<{ id: number; member_id: number; source: 'commit' | 'manual'; authored_at: string; title: string; kind: string | null; url: string | null; summary: string | null; work_type: string | null; substance: string | null; task_id: number | null }>)
     .map(c => ({
       id: c.id, memberId: c.member_id, source: c.source, at: c.authored_at, title: c.title,
       summary: c.summary, workType: c.work_type ?? (c.source === 'manual' ? c.kind : null), substance: c.substance, taskId: c.task_id,
+      url: c.url,
     }));
 
   const milestone = tasks.map(t => t.due).filter((d): d is string => !!d).sort().pop() ?? null;
@@ -344,70 +348,349 @@ ${renderContext(f)}
 
 // ── Weekly digest ─────────────────────────────────────────────────────────────
 
+/** A task or contribution behind a sentence. `url` is set when the contribution has one. */
+export interface DigestEvidence { type: 'task' | 'contribution'; id: number; url: string | null }
+
 export interface Digest {
-  days: number;
-  stats: { contributions: number; logged: number; tasksTouched: number; tasksClosed: number; people: number };
-  headline: string;
-  points: Array<{ kind: 'moved' | 'shipped' | 'stuck' | 'next'; text: string; sources: SourceRef[] }>;
+  /** ISO date the 7-day window opens on (today minus `days`). */
+  weekOf: string;
+  /** Two to four sentences about the project. */
+  summary: string;
+  highlights: Array<{ text: string; evidence: DigestEvidence[] }>;
+  risks: Array<{ text: string; evidence: DigestEvidence[] }>;
+  /** Neutral message the team can send. About tasks and risks, not people. */
+  checkIn: string;
   generatedAt: string;
 }
 
 const DigestSchema = z.object({
-  headline: z.string(),
-  points: z.array(z.object({ kind: z.enum(['moved', 'shipped', 'stuck', 'next']), text: z.string(), source_ids: z.array(z.string()) })),
+  summary: z.string(),
+  highlights: z.array(z.object({ text: z.string(), source_ids: z.array(z.string()) })),
+  risks: z.array(z.object({ text: z.string(), source_ids: z.array(z.string()) })),
+  check_in: z.string(),
 });
 
-function digestFacts(f: TeamFacts, days: number) {
+/** Start of the rolling window, as YYYY-MM-DD. The route caches on this. */
+export function digestWeekOf(today = new Date(), days = 7): string {
+  return day(new Date(today.getTime() - days * DAY).toISOString());
+}
+
+interface StoredRisk { id: number; task_id: number | null; level: 'high' | 'medium' | 'low'; description: string; evidence: string }
+interface PendingTask { taskId: number; number: number | null; title: string }
+
+interface DigestWindow {
+  recent: ContributionFact[];
+  closed: TaskFact[];
+  stuck: TaskFact[];
+  storedRisks: StoredRisk[];
+  pending: PendingTask[];
+  storedDeadline: string | null;
+}
+
+function digestWindow(f: TeamFacts, days: number, conn: BetterSqlite3.Database): DigestWindow {
   const since = f.today.getTime() - days * DAY;
   const recent = f.contributions.filter(c => new Date(c.at).getTime() >= since);
-  const touched = new Set(recent.map(c => c.taskId).filter((x): x is number => x != null));
   const closed = f.tasks.filter(t => t.status === 'closed' && t.lastActivity && new Date(t.lastActivity).getTime() >= since);
   const stuck = f.tasks.filter(t => t.status === 'open' && t.atRisk);
-  const next = f.tasks.filter(t => t.status === 'open' && t.due).sort((a, b) => a.due!.localeCompare(b.due!)).slice(0, 3);
-  return { recent, touched, closed, stuck, next, people: new Set(recent.map(c => c.memberId)).size };
+  const storedRisks = conn.prepare(`
+    SELECT id, task_id, level, description, evidence
+    FROM risks
+    WHERE team_id = ? AND dismissed = 0
+    ORDER BY CASE level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, id ASC
+  `).all(f.teamId) as StoredRisk[];
+  const pending = (conn.prepare(`
+    SELECT t.id AS task_id, t.github_issue_number, t.title
+    FROM suggestions s
+    JOIN tasks t ON t.id = s.task_id
+    WHERE s.team_id = ? AND s.status = 'pending'
+    ORDER BY s.id ASC
+  `).all(f.teamId) as Array<{ task_id: number; github_issue_number: number | null; title: string }>)
+    .map(s => ({ taskId: s.task_id, number: s.github_issue_number, title: s.title }));
+  const deadlineRow = conn.prepare('SELECT deadline FROM teams WHERE id = ?').get(f.teamId) as { deadline: string | null } | undefined;
+  return { recent, closed, stuck, storedRisks, pending, storedDeadline: deadlineRow?.deadline ?? null };
 }
 
-function mockDigest(f: TeamFacts, d: ReturnType<typeof digestFacts>): z.infer<typeof DigestSchema> {
-  const points: z.infer<typeof DigestSchema>['points'] = [];
-  const movedTasks = f.tasks.filter(t => d.touched.has(t.id) && t.status === 'open').slice(0, 3);
-  if (movedTasks.length) points.push({ kind: 'moved', text: `Work moved on ${movedTasks.map(taskLabel).join(', ')}.`, source_ids: movedTasks.map(t => `T${t.id}`) });
-  if (d.closed.length) points.push({ kind: 'shipped', text: `Closed: ${d.closed.map(taskLabel).join(', ')}.`, source_ids: d.closed.map(t => `T${t.id}`) });
-  if (d.stuck.length) points.push({ kind: 'stuck', text: `${d.stuck.slice(0, 2).map(taskLabel).join(' and ')} ${d.stuck.length === 1 ? 'needs' : 'need'} attention.`, source_ids: d.stuck.slice(0, 2).map(t => `T${t.id}`) });
-  if (d.next.length) points.push({ kind: 'next', text: `Due next: ${d.next.map(t => `${taskLabel(t)} (${nice(t.due!)})`).join(', ')}.`, source_ids: d.next.map(t => `T${t.id}`) });
-  const headline = d.recent.length
-    ? `${d.recent.length} contribution${d.recent.length === 1 ? '' : 's'} from ${d.people} ${d.people === 1 ? 'person' : 'people'} this week${d.closed.length ? `, and ${d.closed.length} task${d.closed.length === 1 ? '' : 's'} closed` : ''}.`
-    : 'A quiet week: no new commits or logged work.';
-  return { headline, points };
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
 
-export async function digest(teamId: number, days = 7, today = new Date(), db?: BetterSqlite3.Database): Promise<Digest | null> {
+function taskEvidence(t: { id: number }): DigestEvidence {
+  return { type: 'task', id: t.id, url: null };
+}
+
+function contribEvidence(c: ContributionFact): DigestEvidence {
+  return { type: 'contribution', id: c.id, url: c.url };
+}
+
+/** Mock classifications are "feature work: <title>". Prefer the title, or a real one-line summary. */
+function workLine(c: ContributionFact): string {
+  const summary = (c.summary ?? '').trim();
+  const boilerplate = /^\w+ work:\s*(.+)$/.exec(summary);
+  return clip(boilerplate?.[1] || summary || c.title, 90);
+}
+
+/** Ids the model invented are dropped. A contribution URL in the data is accepted too. */
+function evidenceFromIds(ids: string[], f: TeamFacts): DigestEvidence[] {
+  const out: DigestEvidence[] = [];
+  const seen = new Set<string>();
+  const push = (e: DigestEvidence) => {
+    const key = `${e.type}${e.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(e);
+  };
+  for (const ref of resolveSources(ids, f)) {
+    if (ref.type === 'contribution') {
+      const c = f.contributions.find(x => x.id === ref.id);
+      push({ type: 'contribution', id: ref.id, url: c?.url ?? null });
+    } else {
+      push({ type: 'task', id: ref.id, url: null });
+    }
+  }
+  for (const raw of ids) {
+    const url = raw.trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    const c = f.contributions.find(x => x.url === url);
+    if (c) push(contribEvidence(c));
+  }
+  return out.slice(0, 8);
+}
+
+function parseStoredEvidence(raw: string, f: TeamFacts, taskId: number | null): DigestEvidence[] {
+  let parsed: unknown = [];
+  try { parsed = JSON.parse(raw || '[]'); } catch { parsed = []; }
+  const ids: string[] = [];
+  if (Array.isArray(parsed)) {
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const type = (item as { type?: string }).type;
+      const id = (item as { id?: unknown }).id;
+      if ((type === 'task' || type === 'contribution') && typeof id === 'number') ids.push(`${type === 'task' ? 'T' : 'C'}${id}`);
+    }
+  }
+  if (taskId != null) ids.push(`T${taskId}`);
+  return evidenceFromIds(ids, f);
+}
+
+// Stored risk copy sometimes compares how much open work people hold.
+// Those lines are rewritten from the task, or dropped when there is no task.
+const PERSON_COMPARE = [
+  /\bothers have room\b/i,
+  /\bholds \d+ open tasks\b/i,
+  /\bunevenly spread\b/i,
+  /\bone teammate\b/i,
+  /\btop contributor\b/i,
+  /\b(leaderboards?)\b/i,
+  /\b(laziest|slack(?:er|ing)?|freeload\w*)\b/i,
+  /\bpull(?:ing)? (?:their|his|her) weight\b/i,
+  /\b(rank(?:ing|ed|s)?|grad(?:e|es|ed|ing)|scor(?:e|es|ed|ing)) (?:people|members|the team|everyone)\b/i,
+];
+
+function comparesPeople(text: string): boolean {
+  return isRankingQuestion(text) || PERSON_COMPARE.some(r => r.test(text));
+}
+
+function neutralTaskRisk(t: TaskFact): string {
+  const due = t.due ? ` and due ${nice(t.due)}` : '';
+  const idle = t.lastActivity ? `, with no matched work since ${nice(t.lastActivity)}` : ', with no matched work yet';
+  const level = t.atRisk ? ` at ${t.atRisk} risk` : '';
+  return `${taskLabel(t)} is open${level}${due}${idle}.`;
+}
+
+interface DigestBody {
+  summary: string;
+  highlights: Array<{ text: string; evidence: DigestEvidence[] }>;
+  risks: Array<{ text: string; evidence: DigestEvidence[] }>;
+  checkIn: string;
+}
+
+/** Deterministic digest. Used for mock mode and when the model output is unusable. */
+function fallbackDigest(f: TeamFacts, w: DigestWindow): DigestBody {
+  const commits = w.recent.filter(c => c.source === 'commit').length;
+  const logged = w.recent.filter(c => c.source === 'manual').length;
+  let activity: string;
+  if (w.recent.length === 0) {
+    activity = `${f.teamName} had a quiet week: no commits or logged work in the last 7 days.`;
+  } else if (commits && logged) {
+    activity = `${f.teamName} had ${plural(commits, 'commit')} and ${plural(logged, 'logged entry', 'logged entries')} in the last 7 days.`;
+  } else if (logged) {
+    activity = `${f.teamName} logged ${plural(logged, 'off-repo entry', 'off-repo entries')} in the last 7 days, and no commits landed.`;
+  } else {
+    activity = `${f.teamName} had ${plural(commits, 'commit')} in the last 7 days, and no off-repo work was logged.`;
+  }
+
+  const closedText = w.closed.length
+    ? `${w.closed.map(taskLabel).join(', ')} closed in that window.`
+    : 'No tasks closed in that window.';
+
+  const riskText = w.stuck.length
+    ? `${w.stuck.slice(0, 2).map(t => `${taskLabel(t)}${t.due ? ` (due ${nice(t.due)})` : ''}`).join(' and ')} ${w.stuck.length === 1 ? 'is' : 'are'} still open and flagged.`
+    : 'No open risks are flagged right now.';
+
+  const parts = [activity, closedText, riskText];
+  if (w.storedDeadline) parts.push(`The team deadline is ${nice(w.storedDeadline)}.`);
+  else if (w.pending[0]) {
+    const t = f.tasks.find(x => x.id === w.pending[0].taskId);
+    parts.push(`A move is suggested for ${t ? taskLabel(t) : w.pending[0].title}.`);
+  }
+
+  const byTask = new Map<number, ContributionFact[]>();
+  const loose: ContributionFact[] = [];
+  for (const c of w.recent) {
+    if (c.taskId != null && f.tasks.some(t => t.id === c.taskId)) {
+      const list = byTask.get(c.taskId) ?? [];
+      list.push(c);
+      byTask.set(c.taskId, list);
+    } else loose.push(c);
+  }
+  const highlights: DigestBody['highlights'] = [];
+  for (const [taskId, cs] of byTask) {
+    const t = f.tasks.find(x => x.id === taskId)!;
+    const bits = cs.slice(0, 3).map(workLine);
+    const lead = t.status === 'closed' ? `${taskLabel(t)} closed this week` : taskLabel(t);
+    highlights.push({
+      text: `${lead}: ${bits.join('; ')}.`,
+      evidence: [taskEvidence(t), ...cs.slice(0, 3).map(contribEvidence)],
+    });
+  }
+  if (loose.length) {
+    highlights.push({
+      text: `Other work this week: ${loose.slice(0, 3).map(workLine).join('; ')}.`,
+      evidence: loose.slice(0, 3).map(contribEvidence),
+    });
+  }
+
+  const risks: DigestBody['risks'] = [];
+  const seenTasks = new Set<number>();
+  for (const row of w.storedRisks) {
+    const evidence = parseStoredEvidence(row.evidence, f, row.task_id);
+    if (!evidence.length) continue;
+    const task = row.task_id != null ? f.tasks.find(t => t.id === row.task_id) : undefined;
+    if (task && seenTasks.has(task.id)) continue;
+    let text = row.description.trim();
+    if (!text || comparesPeople(text)) {
+      if (!task) continue;
+      text = neutralTaskRisk(task);
+    }
+    if (comparesPeople(text)) continue;
+    if (task) seenTasks.add(task.id);
+    risks.push({ text, evidence });
+  }
+  for (const t of w.stuck) {
+    if (seenTasks.has(t.id) || risks.length >= 4) continue;
+    seenTasks.add(t.id);
+    risks.push({ text: neutralTaskRisk(t), evidence: [taskEvidence(t)] });
+  }
+  for (const p of w.pending) {
+    if (risks.length >= 4) break;
+    const t = f.tasks.find(x => x.id === p.taskId);
+    if (!t || seenTasks.has(t.id)) continue;
+    seenTasks.add(t.id);
+    risks.push({
+      text: `A move is suggested for ${taskLabel(t)} so the remaining open work can be spread across the project.`,
+      evidence: [taskEvidence(t)],
+    });
+  }
+
+  const check: string[] = [`Checking in on ${f.teamName}.`];
+  if (w.stuck[0]) {
+    check.push(`${taskLabel(w.stuck[0])} is still open${w.stuck[0].due ? ` and due ${nice(w.stuck[0].due)}` : ''}.`);
+  } else if (w.closed.length) {
+    check.push(`${w.closed.map(taskLabel).join(' and ')} closed this week.`);
+  } else if (w.recent.length) {
+    check.push('Work landed this week, and nothing is flagged as a risk.');
+  } else {
+    check.push('No new commits or logged work this week, and nothing is flagged as a risk.');
+  }
+  if (w.pending[0]) {
+    const t = f.tasks.find(x => x.id === w.pending[0].taskId);
+    check.push(`If it helps the plan, there is a suggested move for ${t ? taskLabel(t) : w.pending[0].title}.`);
+  }
+  if (w.storedDeadline) check.push(`The team deadline is ${nice(w.storedDeadline)}.`);
+  check.push('Does the plan still look right?');
+
+  return {
+    summary: parts.slice(0, 4).join(' '),
+    highlights: highlights.slice(0, 4),
+    risks: risks.slice(0, 4),
+    checkIn: check.join(' '),
+  };
+}
+
+function sentenceCount(text: string): number {
+  return text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean).length;
+}
+
+function mentionsWork(text: string): boolean {
+  return /#\d+|\btasks?\b|\brisks?\b|\bdue\b|\bopen\b|\bdeadline\b/i.test(text);
+}
+
+/** Model text is kept only when it is fair, sourced, and the right length. */
+function fromModel(out: z.infer<typeof DigestSchema>, f: TeamFacts, w: DigestWindow): DigestBody | null {
+  const summary = out.summary.trim();
+  const checkIn = out.check_in.trim();
+  if (!summary || !checkIn || comparesPeople(summary) || comparesPeople(checkIn)) return null;
+  const n = sentenceCount(summary);
+  if (n < 2 || n > 4) return null;
+  if ((w.stuck.length || w.pending.length || w.closed.length) && !mentionsWork(checkIn)) return null;
+
+  const highlights = out.highlights.slice(0, 4).map(h => ({
+    text: h.text.trim(),
+    evidence: evidenceFromIds(h.source_ids, f),
+  })).filter(h => h.text && h.evidence.length && !comparesPeople(h.text));
+  const risks = out.risks.slice(0, 4).map(r => ({
+    text: r.text.trim(),
+    evidence: evidenceFromIds(r.source_ids, f),
+  })).filter(r => r.text && r.evidence.length && !comparesPeople(r.text));
+
+  if (w.recent.length > 0 && highlights.length === 0) return null;
+  if (w.stuck.length > 0 && risks.length === 0) return null;
+  return { summary, highlights, risks, checkIn };
+}
+
+export async function digest(teamId: number, days = 7, today = new Date(), db: BetterSqlite3.Database = defaultDb): Promise<Digest | null> {
   const f = loadTeamFacts(teamId, today, db);
   if (!f) return null;
-  const d = digestFacts(f, days);
+  const windowDays = Math.min(30, Math.max(1, days));
+  const w = digestWindow(f, windowDays, db);
+  const fallback = fallbackDigest(f, w);
 
-  let out: z.infer<typeof DigestSchema>;
-  if ((process.env.AI_PROVIDER ?? 'mock') !== 'grok' || d.recent.length === 0) {
-    out = mockDigest(f, d);
-  } else {
-    const prompt = `You are Maestro. Write the team's week in review for their group chat.
+  let body = fallback;
+  if ((process.env.AI_PROVIDER ?? 'mock') === 'grok') {
+    const prompt = `You are Maestro. Write the team's weekly digest.
 ${RULES}
-- headline: one sentence on the week as a whole.
-- points: 2 to 4 items, each one sentence, one per kind that has something to say: moved (work that progressed), shipped (tasks closed), stuck (at-risk or quiet tasks), next (what's due soon). Cite ids in source_ids.
-- Talk about tasks and work, not about who did more. Mention people only as "Priya finished the login form", never as comparisons.
-- The week is the last ${days} days before ${day(f.today.toISOString())}.
+- summary: 2 to 4 sentences on the last ${windowDays} days, ending ${day(f.today.toISOString())} (the window opens ${digestWeekOf(f.today, windowDays)}). State what landed, what closed, and what is flagged. No scores.
+- highlights: up to 4 items. Each text is one sentence about work that happened. source_ids lists the T<id> or C<id> lines it uses, or a contribution url copied from the data. Every item needs at least one real id. Skip the list when nothing landed.
+- risks: up to 4 items about open risks, quiet tasks, or a suggested task move. Same source_ids rule. Empty array when nothing is flagged and no move is suggested.
+- check_in: 2 to 4 sentences the team could paste in chat. Name tasks and risks. Do not accuse anyone, apologize for anyone, or say who did more or less. Do not write "top contributor".
+- Talk about the project. Do not rank, grade, or score people.
 
 <data>
-${renderContext({ ...f, contributions: d.recent.length ? d.recent : f.contributions.slice(0, 20) })}
+${renderContext({ ...f, contributions: w.recent.length ? w.recent : f.contributions.slice(0, 20) })}
+Stored team deadline: ${w.storedDeadline ?? 'none'}.
+Open risks already on the board:
+${w.storedRisks.map(r => {
+    const task = r.task_id != null ? f.tasks.find(t => t.id === r.task_id) : undefined;
+    const text = task && comparesPeople(r.description) ? neutralTaskRisk(task) : r.description.trim();
+    return `- ${r.level} ${task ? taskLabel(task) : 'project'}: ${text}`;
+  }).join('\n') || '- none'}
+Pending suggested moves (task only, no people):
+${w.pending.map(p => `- #${p.number ?? '?'} ${p.title}`).join('\n') || '- none'}
 </data>`;
-    try { out = await completeJSON(prompt, DigestSchema, 'WeeklyDigest'); }
-    catch { out = mockDigest(f, d); }
+    try {
+      const out = await completeJSON(prompt, DigestSchema, 'WeeklyDigest');
+      body = fromModel(out, f, w) ?? fallback;
+    } catch {
+      body = fallback;
+    }
   }
 
   return {
-    days,
-    stats: { contributions: d.recent.length, logged: d.recent.filter(c => c.source === 'manual').length, tasksTouched: d.touched.size, tasksClosed: d.closed.length, people: d.people },
-    headline: out.headline.trim(),
-    points: out.points.slice(0, 4).map(p => ({ kind: p.kind, text: p.text.trim(), sources: resolveSources(p.source_ids, f) })).filter(p => p.text),
+    weekOf: digestWeekOf(f.today, windowDays),
+    summary: body.summary,
+    highlights: body.highlights,
+    risks: body.risks,
+    checkIn: body.checkIn,
     generatedAt: new Date().toISOString(),
   };
 }

@@ -1555,13 +1555,27 @@ This is session 60. Session 59 is the Grok holdout card on main.
 
 `docs/RAILWAY.md` no longer says to leave the volume out of the file. Sections 1 and 2, and "What stayed out", say the volume must be declared or `railway config apply` detaches it, and to read `railway config plan` before apply. Milestone 4 todo 3 in `docs/PLAN.md` says the same.
 
-Evaluating the file with `railway/iac` produced a volume resource named `maestro-volume` (`volume.maestro-volume`) and a Maestro attachment `volumeAttachments["maestro-volume"].mountPath` of `/data`. The same evaluation still has `startCommand` `npm start`, `healthcheckPath` `/api/health`, `restartPolicyType` `ON_FAILURE`, builder `RAILPACK`, build command `npm run build`, no healthcheck timeout, and `variables.managed` `false`. This session does not run `railway config plan`, `railway config apply`, cutover, or a deploy.
+Evaluating the file with `railway/iac` produced a volume resource named `maestro-volume` (`volume.maestro-volume`) and a Maestro attachment `volumeAttachments["maestro-volume"].mountPath` of `/data`. The same evaluation still has `startCommand` `npm start`, `healthcheckPath` `/api/health`, `restartPolicyType` `ON_FAILURE`, builder `RAILPACK`, build command `npm run build`, no healthcheck timeout, and `variables.managed` `false`.
+
+The volume values came from a read-only `railway config pull`. The volume is adopted by name: `volume("maestro-volume", { alerts: { usage: { "100": {}, "80": {}, "95": {} } }, allowOnlineResize: true, region: "sfo", sizeMB: 500 })`, mounted at `/data`.
+
+A read-only `railway config plan` on branch head `5814cea` at 2:32 PM ET 2026-11-20, against project `lucid-courtesy`, environment production:
+
+```
+Using .railway/railway.ts
+variables: unmanaged · 9 on Railway not managed
+Plan: 0 to add, 1 to change, 0 to destroy
+  ~ Update Maestro deploy.healthcheckPath
+    └ deploy.healthcheckPath (null → "/api/health")
+```
+
+That plan has 0 destroys and no change to the volume. This session does not run `railway config apply` or cutover. `docs/RAILWAY.md` says apply goes ahead only when the plan shows 0 destroys and no change to the volume name, size, region, or mount. Otherwise stop.
 
 | File | Change |
 |---|---|
 | `.railway/railway.ts` | `maestro-volume` mounted at `/data`, and included in project resources. |
-| `docs/RAILWAY.md` | The volume must be declared. Check the plan before apply. |
-| `docs/PLAN.md` | Milestone 4 todo 3 names the declared volume. |
+| `docs/RAILWAY.md` | The volume must be declared. Apply only on 0 destroys and no volume change. |
+| `docs/PLAN.md` | Production is `dfb3172`, deployment `8db3fd91`. Apply is pending after #53. |
 | `BOB_LOG.md` | This entry. |
 
-`npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Same counts as session 59. Not deployed.
+`npm run lint` passed, including `check:railway`. `npm test`: server 29 files, 278 passed (278); client 3 files, 23 passed (23). Same counts as session 59. Production is deployed: `main` `dfb3172` went live on Railway as deployment `8db3fd91` at 2:29 PM ET 2026-11-20, without `railway config apply`, so there is no healthcheck path yet. Smoke tests passed.
